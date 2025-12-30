@@ -1,11 +1,12 @@
 /**
- * Unit tests for OpenAI agent drivers
+ * Unit tests for OpenAI and OpenCode agent drivers
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   OpenAICodexDriver,
   OpenAIAgentsDriver,
+  OpenCodeDriver,
   driverRegistry,
 } from '../src/agent/index.js';
 
@@ -121,6 +122,42 @@ describe('OpenAI Agents Driver', () => {
   });
 });
 
+describe('OpenCode Driver', () => {
+  it('should instantiate with default config', () => {
+    const driver = new OpenCodeDriver();
+    expect(driver.name).toBe('opencode');
+    expect(driver.version).toBe('1.0.0');
+  });
+
+  it('should instantiate with custom config', () => {
+    const driver = new OpenCodeDriver({
+      defaultTimeoutMs: 60000,
+      debugMode: true,
+      hostname: '127.0.0.1',
+      port: 5000,
+    });
+    expect(driver.name).toBe('opencode');
+  });
+
+  it('should report capabilities', () => {
+    const driver = new OpenCodeDriver();
+    const caps = driver.getCapabilities();
+
+    expect(caps.supportsSessionResume).toBe(true);
+    expect(caps.supportsStructuredOutput).toBe(false);
+    expect(caps.supportsToolRestriction).toBe(false);
+    expect(caps.supportsTimeout).toBe(true);
+    expect(caps.maxTurns).toBe(50);
+  });
+
+  it('should be available when SDK can be imported', async () => {
+    const driver = new OpenCodeDriver();
+    const available = await driver.isAvailable();
+    // SDK is installed, so it should be available
+    expect(available).toBe(true);
+  });
+});
+
 describe('Driver Registry', () => {
   it('should have all drivers registered', () => {
     const drivers = driverRegistry.list();
@@ -129,6 +166,7 @@ describe('Driver Registry', () => {
     expect(names).toContain('claude-agent-sdk');
     expect(names).toContain('openai-codex');
     expect(names).toContain('openai-agents');
+    expect(names).toContain('opencode');
   });
 
   it('should get drivers by name', () => {
@@ -139,6 +177,10 @@ describe('Driver Registry', () => {
     const agents = driverRegistry.get('openai-agents');
     expect(agents).not.toBeNull();
     expect(agents?.name).toBe('openai-agents');
+
+    const opencode = driverRegistry.get('opencode');
+    expect(opencode).not.toBeNull();
+    expect(opencode?.name).toBe('opencode');
   });
 
   it('should have claude-agent-sdk as default', () => {
