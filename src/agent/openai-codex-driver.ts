@@ -176,6 +176,7 @@ export class OpenAICodexDriver implements AgentDriver {
       if (this.config.debugEvents) {
         // Use streaming to capture events for debugging
         const { events } = await thread.runStreamed(prompt);
+        const responseItems: string[] = [];
 
         for await (const event of events) {
           if (this.config.debugEvents) {
@@ -184,15 +185,18 @@ export class OpenAICodexDriver implements AgentDriver {
 
           if (event.type === 'item.completed') {
             itemCount++;
+            // Extract agent messages as the final response
+            if (event.item.type === 'agent_message') {
+              responseItems.push(event.item.text);
+            }
           } else if (event.type === 'turn.completed') {
             // Extract usage info if available
             logger.debug({ usage: event.usage }, 'Turn completed');
           }
         }
 
-        // Get final response from last item
-        const turn = await thread.run(''); // Empty run to get final state
-        finalResponse = turn.finalResponse;
+        // Combine all agent messages as the final response
+        finalResponse = responseItems.join('\n');
       } else {
         // Simple run without streaming
         const turn: RunResult = await thread.run(prompt);
