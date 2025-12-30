@@ -1,0 +1,310 @@
+/**
+ * Main Orchestrator.
+ * Coordinates all modules to execute work orders.
+ */
+
+import { randomUUID } from 'node:crypto';
+import {
+  type WorkOrder,
+  type Run,
+  type GatePlan,
+  type Workspace,
+  type VerificationReport,
+  type AgentRequest,
+  type FreshSource,
+  WorkOrderStatus,
+  AgentType,
+  WorkspaceTemplate,
+} from '../types/index.js';
+import { executeRun, type RunExecutorOptions } from './run-executor.js';
+import { loadRun, getRunStatus } from './run-store.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('orchestrator');
+
+/**
+ * Orchestrator configuration.
+ */
+export interface OrchestratorConfig {
+  /**
+   * Maximum concurrent runs.
+   */
+  maxConcurrentRuns?: number;
+
+  /**
+   * Default timeout for runs in seconds.
+   */
+  defaultTimeoutSeconds?: number;
+}
+
+/**
+ * The main Orchestrator class.
+ * Manages work order execution and coordinates all modules.
+ */
+export class Orchestrator {
+  private config: Required<OrchestratorConfig>;
+  private activeRuns: Map<string, Run> = new Map();
+
+  constructor(config: OrchestratorConfig = {}) {
+    this.config = {
+      maxConcurrentRuns: config.maxConcurrentRuns ?? 5,
+      defaultTimeoutSeconds: config.defaultTimeoutSeconds ?? 3600,
+    };
+  }
+
+  /**
+   * Execute a work order.
+   * This is the main entry point for running a task.
+   */
+  async execute(workOrder: WorkOrder): Promise<Run> {
+    log.info(
+      {
+        workOrderId: workOrder.id,
+        taskPrompt: workOrder.taskPrompt.slice(0, 100),
+        maxIterations: workOrder.maxIterations,
+      },
+      'Starting work order execution'
+    );
+
+    // Check concurrent run limit
+    if (this.activeRuns.size >= this.config.maxConcurrentRuns) {
+      throw new Error(
+        `Maximum concurrent runs (${this.config.maxConcurrentRuns}) reached`
+      );
+    }
+
+    // Import modules dynamically to avoid circular dependencies
+    const { create, createFromGit, createFresh } = await import('../workspace/manager.js');
+    const {
+      getDefaultSeedFiles,
+      getMinimalSeedFiles,
+      getTypeScriptSeedFiles,
+      getPythonSeedFiles,
+    } = await import('../workspace/templates.js');
+    const { acquire, release } = await import('../workspace/lease.js');
+    const { resolveGatePlan } = await import('../gate/resolver.js');
+    const { captureBeforeState, captureAfterState } = await import(
+      '../snapshot/snapshotter.js'
+    );
+    const { verify } = await import('../verifier/verifier.js');
+    const { generateFeedback } = await import('../feedback/generator.js');
+    const { formatForAgent } = await import('../feedback/formatter.js');
+    const { ClaudeCodeDriver } = await import('../agent/claude-code-driver.js');
+    const { DEFAULT_AGENT_CONSTRAINTS } = await import('../agent/defaults.js');
+
+    // Create or acquire workspace
+    let workspace: Workspace;
+    try {
+      if (workOrder.workspaceSource.type === 'local') {
+        workspace = await create(workOrder.workspaceSource);
+      } else if (workOrder.workspaceSource.type === 'git') {
+        const gitSource = workOrder.workspaceSource;
+        workspace = await createFromGit(
+          gitSource.url,
+          gitSource.branch ?? 'main'
+        );
+      } else if (workOrder.workspaceSource.type === 'fresh') {
+        const freshSource = workOrder.workspaceSource as FreshSource;
+
+        // Generate seed files with task prompt embedded in CLAUDE.md
+        const templateVars = {
+          projectName: freshSource.projectName ?? 'Project',
+          taskDescription: workOrder.taskPrompt,
+        };
+
+        let seedFiles;
+        switch (freshSource.template) {
+          case WorkspaceTemplate.TYPESCRIPT:
+            seedFiles = getTypeScriptSeedFiles(templateVars);
+            break;
+          case WorkspaceTemplate.PYTHON:
+            seedFiles = getPythonSeedFiles(templateVars);
+            break;
+          case WorkspaceTemplate.MINIMAL:
+            seedFiles = getMinimalSeedFiles(templateVars);
+            break;
+          default:
+            seedFiles = getDefaultSeedFiles(templateVars);
+        }
+
+        workspace = await createFresh(freshSource.destPath, {
+          seedFiles,
+          commitMessage: `Initialize workspace for: ${workOrder.taskPrompt.slice(0, 50)}...`,
+        });
+        log.info({ workspaceId: workspace.id, template: freshSource.template }, 'Fresh workspace created');
+      } else {
+        throw new Error(`Unknown workspace source type: ${(workOrder.workspaceSource as { type: string }).type}`);
+      }
+
+      // Acquire lease
+      await acquire(workspace.id, workOrder.id);
+      log.info({ workspaceId: workspace.id }, 'Workspace acquired');
+    } catch (error) {
+      log.error({ error, workOrderId: workOrder.id }, 'Failed to acquire workspace');
+      throw error;
+    }
+
+    // Resolve gate plan
+    let gatePlan: GatePlan;
+    try {
+      gatePlan = await resolveGatePlan(workspace.rootPath, workOrder.gatePlanSource);
+      log.info({ gatePlanId: gatePlan.id }, 'Gate plan resolved');
+    } catch (error) {
+      log.error({ error, workOrderId: workOrder.id }, 'Failed to resolve gate plan');
+      await release(workspace.id);
+      throw error;
+    }
+
+    // Create agent driver
+    const driver = new ClaudeCodeDriver();
+
+    // Set up run executor options
+    const executorOptions: RunExecutorOptions = {
+      workOrder,
+      workspace,
+      gatePlan,
+
+      onCaptureBeforeState: async (ws) => {
+        return captureBeforeState(ws);
+      },
+
+      onBuild: async (ws, taskPrompt, feedback, iteration, sessionId) => {
+        log.debug(
+          { workspaceId: ws.id, iteration, hasFeedback: !!feedback },
+          'Building'
+        );
+
+        try {
+          const { EMPTY_CONTEXT_POINTERS } = await import('../agent/defaults.js');
+          const { generateGateSummary } = await import('../gate/summary.js');
+
+          const gatePlanSummary = generateGateSummary(executorOptions.gatePlan);
+
+          const request: AgentRequest = {
+            workspacePath: ws.rootPath,
+            taskPrompt,
+            gatePlanSummary,
+            constraints: DEFAULT_AGENT_CONSTRAINTS,
+            priorFeedback: feedback,
+            contextPointers: EMPTY_CONTEXT_POINTERS,
+            timeoutMs: workOrder.maxWallClockSeconds * 1000,
+            sessionId: sessionId,
+          };
+
+          const result = await driver.execute(request);
+
+          const buildResult: { sessionId: string; success: boolean; error?: string } = {
+            sessionId: result.sessionId ?? randomUUID(),
+            success: result.success,
+          };
+          if (!result.success) {
+            buildResult.error = result.stderr || 'Build failed';
+          }
+          return buildResult;
+        } catch (error) {
+          log.error({ error, iteration }, 'Build error');
+          const errorResult: { sessionId: string; success: boolean; error?: string } = {
+            sessionId: sessionId ?? randomUUID(),
+            success: false,
+          };
+          errorResult.error = error instanceof Error ? error.message : String(error);
+          return errorResult;
+        }
+      },
+
+      onSnapshot: async (ws, beforeState, runId, iteration, taskPrompt) => {
+        log.debug({ runId, iteration }, 'Capturing snapshot');
+        return captureAfterState(ws, beforeState, runId, iteration, taskPrompt);
+      },
+
+      onVerify: async (snapshot, plan, runId, iteration) => {
+        log.debug({ snapshotId: snapshot.id, iteration }, 'Verifying');
+        const report = await verify({
+          snapshotPath: workspace.rootPath,
+          gatePlan: plan,
+          snapshotId: snapshot.id,
+          runId,
+          iteration,
+          cleanRoom: false, // TODO: Make configurable
+          timeoutMs: 5 * 60 * 1000, // 5 minute timeout per verification
+        });
+        return report;
+      },
+
+      onFeedback: async (_snapshot, report, _plan) => {
+        log.debug({ passed: report.passed }, 'Generating feedback');
+        const structuredFeedback = generateFeedback(report, report.iteration);
+        // Convert to string for the agent
+        return formatForAgent(structuredFeedback);
+      },
+
+      onStateChange: (run) => {
+        log.debug({ runId: run.id, state: run.state }, 'Run state changed');
+      },
+
+      onIterationComplete: (run, iteration) => {
+        log.info(
+          {
+            runId: run.id,
+            iteration: iteration.iteration,
+            passed: iteration.verificationPassed,
+            durationMs: iteration.durationMs,
+          },
+          'Iteration complete'
+        );
+      },
+    };
+
+    // Track active run
+    const runId = randomUUID();
+
+    try {
+      // Execute the run
+      const run = await executeRun(executorOptions);
+      this.activeRuns.delete(run.id);
+
+      log.info(
+        {
+          runId: run.id,
+          result: run.result,
+          iterations: run.iteration,
+        },
+        'Work order execution complete'
+      );
+
+      return run;
+    } finally {
+      // Always release workspace
+      await release(workspace.id);
+      this.activeRuns.delete(runId);
+    }
+  }
+
+  /**
+   * Get status of a run.
+   */
+  async getStatus(runId: string) {
+    return getRunStatus(runId);
+  }
+
+  /**
+   * Get a run by ID.
+   */
+  async getRun(runId: string) {
+    return loadRun(runId);
+  }
+
+  /**
+   * Get the number of active runs.
+   */
+  getActiveRunCount(): number {
+    return this.activeRuns.size;
+  }
+}
+
+/**
+ * Create an orchestrator instance.
+ */
+export function createOrchestrator(config?: OrchestratorConfig): Orchestrator {
+  return new Orchestrator(config);
+}

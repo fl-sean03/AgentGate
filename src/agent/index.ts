@@ -1,0 +1,131 @@
+/**
+ * Agent Driver Module
+ *
+ * Provides the infrastructure for executing AI coding agents with
+ * configurable constraints, tool restrictions, and output parsing.
+ */
+
+// Re-export types
+export type {
+  AgentDriver,
+  AgentRequest,
+  AgentResult,
+  AgentStructuredOutput,
+  AgentConstraints,
+  ContextPointers,
+  DriverCapabilities,
+  TokenUsage,
+} from './driver.js';
+
+// Registry
+export {
+  driverRegistry,
+  register,
+  get,
+  list,
+  getDefault,
+  setDefault,
+  has,
+  unregister,
+  clear,
+} from './registry.js';
+
+// Constraints
+export {
+  DEFAULT_ALLOWED_TOOLS,
+  DEFAULT_DISALLOWED_TOOLS,
+  DEFAULT_CONSTRAINTS,
+  mergeConstraints,
+  validateConstraints,
+  createMinimalConstraints,
+  createPermissiveConstraints,
+  type ConstraintValidationResult,
+} from './constraints.js';
+
+// Defaults
+export {
+  DEFAULT_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
+  DEFAULT_MAX_TURNS,
+  MAX_TURNS_LIMIT,
+  DEFAULT_AGENT_CONSTRAINTS,
+  EMPTY_CONTEXT_POINTERS,
+  CLAUDE_CODE_CAPABILITIES,
+  createDefaultRequest,
+  buildGatePlanSystemPrompt,
+  buildFeedbackSystemPrompt,
+} from './defaults.js';
+
+// Command builder
+export {
+  buildPrompt,
+  buildSystemPromptAppend,
+  buildClaudeCommand,
+  buildCommandString,
+} from './command-builder.js';
+
+// Output parser
+export {
+  parseOutput,
+  extractSessionId,
+  extractTokenUsage,
+  extractResult,
+  isErrorOutput,
+  extractErrorMessage,
+} from './output-parser.js';
+
+// Claude Code driver (subprocess-based, legacy)
+export {
+  ClaudeCodeDriver,
+  createClaudeCodeDriver,
+  type ClaudeCodeDriverConfig,
+} from './claude-code-driver.js';
+
+// Claude Agent SDK driver (recommended)
+export {
+  ClaudeAgentSDKDriver,
+  createClaudeAgentSDKDriver,
+  type ClaudeAgentSDKDriverConfig,
+  type SDKAgentResult,
+} from './claude-agent-sdk-driver.js';
+
+// SDK message parser
+export {
+  isSystemMessage,
+  isAssistantMessage,
+  isUserMessage,
+  isResultMessage,
+  isSuccessResult,
+  isErrorResult,
+  extractToolUses,
+  MessageCollector,
+  type ToolCallRecord,
+  type ExtractedResult,
+} from './sdk-message-parser.js';
+
+// SDK options builder
+export {
+  buildSDKOptions,
+  createTimeoutController,
+  clearControllerTimeout,
+} from './sdk-options-builder.js';
+
+// SDK hooks utilities
+export {
+  createToolLoggingHook,
+  createFileChangeHook,
+  createBlockingHook,
+  createDefaultBlockingHook,
+  combineHookMatchers,
+  DEFAULT_BLOCKED_PATTERNS,
+  type ToolUseEvent,
+  type ToolEventHandler,
+} from './sdk-hooks.js';
+
+// Initialize the default driver
+import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
+import { register } from './registry.js';
+
+// Auto-register the SDK driver as the default
+const defaultDriver = new ClaudeAgentSDKDriver();
+register(defaultDriver);

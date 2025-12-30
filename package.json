@@ -1,0 +1,64 @@
+{
+  "name": "agentgate",
+  "version": "0.1.0",
+  "description": "Contained builder with verification gate for AI coding agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agentgate": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --dir test/unit",
+    "test:e2e": "vitest run --dir test/e2e",
+    "test:acceptance": "vitest run --dir test/acceptance",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.76",
+    "ajv": "^8.12.0",
+    "commander": "^12.0.0",
+    "dotenv": "^17.2.3",
+    "execa": "^8.0.1",
+    "fast-glob": "^3.3.2",
+    "nanoid": "^5.0.4",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1",
+    "simple-git": "^3.22.0",
+    "yaml": "^2.3.4",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "@vitest/coverage-v8": "^1.2.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "verification",
+    "claude",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT"
+}
