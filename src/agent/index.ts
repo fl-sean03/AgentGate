@@ -138,10 +138,19 @@ export {
   type AgentsSDKResult,
 } from './openai-agents-driver.js';
 
+// OpenCode SDK driver (SST open source)
+export {
+  OpenCodeDriver,
+  createOpenCodeDriver,
+  type OpenCodeDriverConfig,
+  type OpenCodeResult,
+} from './opencode-driver.js';
+
 // Initialize and register drivers
 import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
 import { OpenAICodexDriver } from './openai-codex-driver.js';
 import { OpenAIAgentsDriver } from './openai-agents-driver.js';
+import { OpenCodeDriver } from './opencode-driver.js';
 import { register } from './registry.js';
 
 // Auto-register all drivers
@@ -155,3 +164,7 @@ register(codexDriver);
 
 const agentsDriver = new OpenAIAgentsDriver();
 register(agentsDriver);
+
+// Register OpenCode driver (available when opencode is installed)
+const openCodeDriver = new OpenCodeDriver();
+register(openCodeDriver);

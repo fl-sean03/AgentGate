@@ -136,6 +136,7 @@ export class OpenAICodexDriver implements AgentDriver {
         thread = this.codex.startThread({
           workingDirectory: request.workspacePath,
           skipGitRepoCheck: this.config.skipGitRepoCheck,
+          sandboxMode: 'workspace-write', // Allow writing files in workspace
         });
       }
     } catch (error) {
