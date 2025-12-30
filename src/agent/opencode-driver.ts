@@ -135,6 +135,21 @@ export class OpenCodeDriver implements AgentDriver {
         this.client = client;
         this.server = server;
         logger.debug({ url: server.url }, 'OpenCode server started');
+
+        // Configure authentication if API keys are available
+        if (process.env.ANTHROPIC_API_KEY) {
+          logger.debug('Setting up Anthropic authentication');
+          await this.client.auth.set({
+            path: { id: 'anthropic' },
+            body: { type: 'api', key: process.env.ANTHROPIC_API_KEY },
+          });
+        } else if (process.env.OPENAI_API_KEY) {
+          logger.debug('Setting up OpenAI authentication');
+          await this.client.auth.set({
+            path: { id: 'openai' },
+            body: { type: 'api', key: process.env.OPENAI_API_KEY },
+          });
+        }
       }
 
       // Create a new session
