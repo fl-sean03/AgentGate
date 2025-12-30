@@ -168,6 +168,17 @@ export class OpenCodeDriver implements AgentDriver {
       const sessionId = sessionResponse.data.id;
       logger.debug({ sessionId }, 'OpenCode session created');
 
+      // Initialize the session (analyze the project)
+      try {
+        logger.debug('Initializing session with project analysis...');
+        await this.client.session.init({
+          path: { id: sessionId },
+        });
+        logger.debug('Session initialized');
+      } catch (initError) {
+        logger.debug({ error: initError }, 'Session init failed (may not be required)');
+      }
+
       // Build the prompt
       const prompt = this.buildPrompt(request);
 
@@ -180,31 +191,72 @@ export class OpenCodeDriver implements AgentDriver {
         'OpenCode prompt built'
       );
 
+      // Determine the model to use based on available API keys and env config
+      const model = process.env.ANTHROPIC_API_KEY
+        ? { providerID: 'anthropic', modelID: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514' }
+        : { providerID: 'openai', modelID: process.env.OPENAI_API_MODEL || 'gpt-4o' };
+
+      logger.debug({ model }, 'Using model for OpenCode');
+
       // Send the prompt to the session
       const promptResponse = await this.client.session.prompt({
         path: { id: sessionId },
+        query: { directory: request.workspacePath },
         body: {
+          model,
           parts: [{ type: 'text' as const, text: prompt }],
         },
       });
 
+      logger.debug(
+        {
+          hasData: !!promptResponse.data,
+          response: promptResponse.data ? JSON.stringify(promptResponse.data).slice(0, 500) : null,
+          error: promptResponse.error ? JSON.stringify(promptResponse.error) : null,
+        },
+        'OpenCode prompt response'
+      );
+
       if (!promptResponse.data) {
-        throw new Error('Failed to send prompt to OpenCode: no response');
+        const errorMsg = promptResponse.error
+          ? JSON.stringify(promptResponse.error)
+          : 'no response data';
+        throw new Error(`Failed to send prompt to OpenCode: ${errorMsg}`);
       }
 
       // Wait for the response (polling for completion)
       let finalResponse = '';
       let messageCount = 0;
       const pollStartTime = Date.now();
+      let pollCount = 0;
 
       while (Date.now() - pollStartTime < timeout) {
+        pollCount++;
         // Get session status - returns a map of session statuses
-        const statusResponse = await this.client.session.status();
+        // Need to pass the directory to scope the status request
+        const statusResponse = await this.client.session.status({
+          query: { directory: request.workspacePath },
+        });
 
         // Check if our session is idle
         const sessionStatus = statusResponse.data?.[sessionId];
+
+        // Log status every 5 polls
+        if (pollCount % 5 === 1) {
+          logger.debug(
+            {
+              pollCount,
+              elapsed: Date.now() - pollStartTime,
+              sessionStatus: sessionStatus?.type,
+              allStatuses: statusResponse.data ? Object.keys(statusResponse.data) : [],
+            },
+            'Polling session status'
+          );
+        }
+
         if (sessionStatus?.type === 'idle') {
           // Session is done processing
+          logger.debug({ pollCount }, 'Session is idle, done processing');
           break;
         }
 
@@ -212,9 +264,12 @@ export class OpenCodeDriver implements AgentDriver {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
+      logger.debug({ pollCount, totalTime: Date.now() - pollStartTime }, 'Polling completed');
+
       // Get all messages from the session
       const messagesResponse = await this.client.session.messages({
         path: { id: sessionId },
+        query: { directory: request.workspacePath },
       });
 
       if (messagesResponse.data) {

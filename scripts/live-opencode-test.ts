@@ -73,6 +73,9 @@ async function main() {
   console.log('Task: Create calculator.ts with add and multiply functions');
   console.log('');
 
+  // Use reasonable timeout for OpenCode execution
+  const OPENCODE_TIMEOUT = 180000; // 3 minutes - OpenCode can take longer than Claude
+
   const request: AgentRequest = {
     workspacePath: workspace.rootPath,
     taskPrompt: `Create a file called calculator.ts with two functions:
@@ -87,9 +90,11 @@ Export both functions. Keep it simple, no extra files needed.`,
     },
     priorFeedback: null,
     contextPointers: EMPTY_CONTEXT_POINTERS,
-    timeoutMs: 180000, // 3 minute timeout
+    timeoutMs: OPENCODE_TIMEOUT,
     sessionId: null,
   };
+
+  console.log(`Using timeout: ${OPENCODE_TIMEOUT}ms`);
 
   const startTime = Date.now();
   let result: OpenCodeResult;
