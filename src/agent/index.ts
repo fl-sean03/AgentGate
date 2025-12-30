@@ -122,10 +122,36 @@ export {
   type ToolEventHandler,
 } from './sdk-hooks.js';
 
-// Initialize the default driver
+// OpenAI Codex driver
+export {
+  OpenAICodexDriver,
+  createOpenAICodexDriver,
+  type OpenAICodexDriverConfig,
+  type CodexAgentResult,
+} from './openai-codex-driver.js';
+
+// OpenAI Agents SDK driver
+export {
+  OpenAIAgentsDriver,
+  createOpenAIAgentsDriver,
+  type OpenAIAgentsDriverConfig,
+  type AgentsSDKResult,
+} from './openai-agents-driver.js';
+
+// Initialize and register drivers
 import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
+import { OpenAICodexDriver } from './openai-codex-driver.js';
+import { OpenAIAgentsDriver } from './openai-agents-driver.js';
 import { register } from './registry.js';
 
-// Auto-register the SDK driver as the default
-const defaultDriver = new ClaudeAgentSDKDriver();
-register(defaultDriver);
+// Auto-register all drivers
+// Claude SDK is registered first and becomes the default
+const claudeDriver = new ClaudeAgentSDKDriver();
+register(claudeDriver);
+
+// Register OpenAI drivers (available when OPENAI_API_KEY is set)
+const codexDriver = new OpenAICodexDriver();
+register(codexDriver);
+
+const agentsDriver = new OpenAIAgentsDriver();
+register(agentsDriver);
