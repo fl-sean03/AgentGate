@@ -814,11 +814,19 @@ This is a **downstream failure** - we only discover the gap after code is merged
 
 ### Solution: Local Verification Before Commit
 
-AgentGate's internal verification pipeline already runs L0-L3 checks during work order execution. The key enhancement is:
+**CRITICAL**: AgentGate MUST run the same checks that GitHub CI runs **during** work order execution, **before** creating a PR. This catches errors in the iteration loop where agents can fix them, rather than discovering failures after the PR is created.
 
-1. **AGENTS.md injection** - Tell agents they MUST write tests
-2. **L3 Sanity: Test Coverage Check** - Fail if new source files lack tests
-3. **Local loop** - Run verification locally before pushing to GitHub
+The L1 verification level already mirrors GitHub CI:
+- `pnpm typecheck` - TypeScript compilation
+- `pnpm lint` - ESLint code quality
+- `pnpm test` - Vitest unit/integration tests
+- `pnpm build` - Production build
+
+**Key enhancements to enforce quality:**
+
+1. **AGENTS.md injection** - Tell agents they MUST write tests for new code
+2. **L3 Sanity: Test Coverage Check** - Fail if new source files lack corresponding tests
+3. **Local CI mirror** - L1 runs the EXACT same commands as GitHub CI workflow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -850,8 +858,27 @@ GitHub CI runs **after** the PR is created. Problems:
 - Delayed feedback (agent already finished)
 - No iteration loop to fix issues
 - Manual intervention required
+- CI failures require manual PR updates or new work orders
 
-The local verification loop catches issues **during** agent execution, allowing automatic retry with feedback.
+**The solution: Run GitHub CI checks LOCALLY during L1 verification.**
+
+The local verification loop catches issues **during** agent execution, allowing automatic retry with feedback. When the agent's changes pass L0-L3 locally, they WILL pass GitHub CI because we're running the same commands.
+
+### How L1 Mirrors GitHub CI
+
+AgentGate's L1 verification runs the same commands as `.github/workflows/ci.yml`:
+
+| GitHub CI Step | L1 Verification | Command |
+|----------------|-----------------|---------|
+| Type Check | ✅ | `pnpm typecheck` |
+| Lint | ✅ | `pnpm lint` |
+| Unit Tests | ✅ | `pnpm test` |
+| Build | ✅ | `pnpm build` |
+
+This means:
+- **If L1 passes locally → GitHub CI will pass**
+- **If L1 fails → Agent gets feedback and retries in the iteration loop**
+- **No surprises after PR creation**
 
 ---
 
