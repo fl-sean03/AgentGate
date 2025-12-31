@@ -84,6 +84,26 @@ agentgate submit --prompt "Build internal tool" --github-new owner/new-repo --pr
 
 ## CLI Usage
 
+### Quick Start (Recommended)
+
+For interactive use, the `exec` command is recommended as it submits and executes a work order in one step:
+
+```bash
+# Execute immediately (local path)
+agentgate exec --prompt "Build a REST API" --path ./my-project
+
+# Execute with GitHub (existing repo)
+agentgate exec --prompt "Fix bug" --github owner/repo
+
+# Execute with GitHub (new repo)
+agentgate exec --prompt "Create API" --github-new owner/repo --private
+
+# Execute with custom options
+agentgate exec --prompt "Add feature" --path ./my-project --max-iterations 5 --network
+```
+
+### All Commands
+
 ```bash
 # Submit a work order (local path)
 agentgate submit --prompt "Build a REST API" --path ./my-project
@@ -93,6 +113,12 @@ agentgate submit --prompt "Fix bug" --github owner/repo
 
 # Submit with GitHub (new repo)
 agentgate submit --prompt "Create API" --github-new owner/repo --private
+
+# Execute a queued work order
+agentgate run <work-order-id>
+
+# Submit and execute immediately (recommended)
+agentgate exec --prompt "Build feature" --path ./my-project
 
 # List work orders
 agentgate list
