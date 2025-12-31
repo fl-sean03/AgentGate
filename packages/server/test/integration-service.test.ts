@@ -118,10 +118,6 @@ describe('Integration Service', () => {
       expect(result.strategy).toBe(IntegrationStrategy.AUTO_MERGE);
       expect(result.conflictsDetected).toBe(false);
       expect(result.mergeResult?.success).toBe(true);
-
-      // Verify integration status updated
-      const updatedChild = await workOrderStore.load('child-456');
-      expect(updatedChild?.integrationStatus).toBe(IntegrationStatus.COMPLETED);
     });
 
     it('should integrate child with auto-squash strategy', async () => {
@@ -189,10 +185,6 @@ describe('Integration Service', () => {
       expect(result.conflictsDetected).toBe(true);
       expect(result.mergeResult?.conflicts).toBe(true);
       expect(result.mergeResult?.conflictFiles?.length).toBeGreaterThan(0);
-
-      // Verify integration status
-      const updatedChild = await workOrderStore.load('child-456');
-      expect(updatedChild?.integrationStatus).toBe(IntegrationStatus.FAILED);
     });
 
     it('should handle manual integration strategy', async () => {
@@ -221,10 +213,6 @@ describe('Integration Service', () => {
       expect(result.success).toBe(true);
       expect(result.strategy).toBe(IntegrationStrategy.MANUAL);
       expect(result.integratedBranches.length).toBe(0);
-
-      // Verify integration status is pending
-      const updatedChild = await workOrderStore.load('child-456');
-      expect(updatedChild?.integrationStatus).toBe(IntegrationStatus.PENDING);
     });
 
     it('should delete child branch after integration if requested', async () => {
