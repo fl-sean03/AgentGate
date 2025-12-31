@@ -28,6 +28,14 @@ interface SerializedWorkOrder {
   runId?: string;
   completedAt?: string;
   error?: string;
+  // Tree-related fields (v0.2.10)
+  parentId?: string;
+  childIds?: string[];
+  rootId?: string;
+  depth?: number;
+  siblingIndex?: number;
+  integrationStatus?: WorkOrder['integrationStatus'];
+  integrationWorkOrderId?: string;
 }
 
 /**
@@ -55,6 +63,29 @@ function serialize(order: WorkOrder): SerializedWorkOrder {
   }
   if (order.error !== undefined) {
     result.error = order.error;
+  }
+
+  // Tree-related fields (v0.2.10)
+  if (order.parentId !== undefined) {
+    result.parentId = order.parentId;
+  }
+  if (order.childIds !== undefined) {
+    result.childIds = order.childIds;
+  }
+  if (order.rootId !== undefined) {
+    result.rootId = order.rootId;
+  }
+  if (order.depth !== undefined) {
+    result.depth = order.depth;
+  }
+  if (order.siblingIndex !== undefined) {
+    result.siblingIndex = order.siblingIndex;
+  }
+  if (order.integrationStatus !== undefined) {
+    result.integrationStatus = order.integrationStatus;
+  }
+  if (order.integrationWorkOrderId !== undefined) {
+    result.integrationWorkOrderId = order.integrationWorkOrderId;
   }
 
   return result;
@@ -85,6 +116,29 @@ function deserialize(data: SerializedWorkOrder): WorkOrder {
   }
   if (data.error !== undefined) {
     result.error = data.error;
+  }
+
+  // Tree-related fields (v0.2.10)
+  if (data.parentId !== undefined) {
+    result.parentId = data.parentId;
+  }
+  if (data.childIds !== undefined) {
+    result.childIds = data.childIds;
+  }
+  if (data.rootId !== undefined) {
+    result.rootId = data.rootId;
+  }
+  if (data.depth !== undefined) {
+    result.depth = data.depth;
+  }
+  if (data.siblingIndex !== undefined) {
+    result.siblingIndex = data.siblingIndex;
+  }
+  if (data.integrationStatus !== undefined) {
+    result.integrationStatus = data.integrationStatus;
+  }
+  if (data.integrationWorkOrderId !== undefined) {
+    result.integrationWorkOrderId = data.integrationWorkOrderId;
   }
 
   return result;

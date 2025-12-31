@@ -168,3 +168,10 @@ export {
   type ChildWorkOrderRequest,
   type SpawnRequest,
 } from './spawn.js';
+
+// Tree Metadata Types
+export {
+  TreeStatus,
+  type TreeNode,
+  type TreeMetadata,
+} from './tree-metadata.js';
