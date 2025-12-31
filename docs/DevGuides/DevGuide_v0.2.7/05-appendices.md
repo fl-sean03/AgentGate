@@ -33,9 +33,22 @@ This document contains checklists, file references, and additional resources.
 
 | Work Order | Status | PR | Merged | Description |
 |------------|--------|-----|--------|-------------|
-| WO-STD-001: AGENTS.md Injection | ⏳ Pending | - | ⬜ | Inject engineering standards into agent prompts |
-| WO-STD-002: Missing Tests | ⏳ Pending | - | ⬜ | Add tests for all Phase 1 features |
-| WO-STD-003: Test Coverage Check | ⏳ Pending | - | ⬜ | L3 sanity check for test files |
+| WO-CLI-001: exec command | ✅ | #16 | ✅ | Queue + run in one step |
+| WO-STD-001: AGENTS.md Injection | ✅ | #15 | ✅ | Inject engineering standards into agent prompts |
+| WO-STD-002: Missing Tests | ✅ | #18 | ✅ | Add tests for all Phase 1 features |
+| WO-STD-003: Test Coverage Check | ✅ | #17 | ✅ | L3 sanity check for test files |
+
+### Test Files Added in Standards Enhancement
+
+| Test File | Tests | Purpose |
+|-----------|-------|---------|
+| `test/server-app.test.ts` | 14 | Fastify app creation, CORS, error handling |
+| `test/routes-health.test.ts` | 17 | Health endpoints |
+| `test/routes-work-orders.test.ts` | 21 | Work order CRUD API |
+| `test/middleware-auth.test.ts` | 18 | API key authentication |
+| `test/agent-standards.test.ts` | 19 | AGENTS.md loading and injection |
+| `test/cli-exec.test.ts` | 10 | exec command |
+| `test/l3-sanity-coverage.test.ts` | 8 | L3 test coverage verification |
 
 ### Phase 1 Validation
 
