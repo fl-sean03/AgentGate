@@ -64,15 +64,15 @@
 | 6 | Run Executor Spawn Detection | ✅ Merged | main |
 | 7 | Integration Service | ✅ Merged | main |
 | 8 | Git Merge Operations | ✅ Merged | main |
-| 9 | Configurable Limits | ⚠️ WO Failed (state machine bug) | agentgate/Udam7hzrjZ2r |
-| 10 | Docker Compose | ⚠️ WO Failed | agentgate/Udam7hzrjZ2r |
-| 11 | Concurrency Control Fix | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
-| 12 | Lease Duration Extension | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
-| 13 | Error Handling Improvements | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
-| 14 | API Schema Consistency | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
-| 15 | CLI Unification | ✅ Completed | [PR #29](https://github.com/fl-sean03/AgentGate/pull/29) |
-| 16 | CI-Aware PR Review | ✅ Completed | [PR #30](https://github.com/fl-sean03/AgentGate/pull/30) |
-| 17 | Dynamic AGENTS.md | ✅ Completed | main |
+| 9 | Configurable Limits | ⚠️ Pending (requires Thrusts 11-14) | - |
+| 10 | Docker Compose | ⚠️ Pending (requires Thrust 9) | - |
+| 11 | Concurrency Control Fix | ✅ Merged | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 12 | Lease Duration Extension | ✅ Merged | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 13 | Error Handling Improvements | ✅ Merged | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 14 | API Schema Consistency | ✅ Merged | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 15 | CLI Unification | ✅ Merged | [PR #29](https://github.com/fl-sean03/AgentGate/pull/29) |
+| 16 | CI-Aware PR Review | ✅ Merged | [PR #30](https://github.com/fl-sean03/AgentGate/pull/30) |
+| 17 | Dynamic AGENTS.md | ✅ Merged | main |
 
 ---
 
