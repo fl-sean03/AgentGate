@@ -1,5 +1,6 @@
 import type { AgentRequest } from '../types/index.js';
 import { buildFeedbackSystemPrompt, buildGatePlanSystemPrompt } from './defaults.js';
+import { loadEngineeringStandards } from './standards.js';
 
 /**
  * Builds the full prompt including context and constraints
@@ -53,7 +54,15 @@ function buildContextSection(request: AgentRequest): string | null {
  * Builds the system prompt appendix for constraints and feedback
  */
 export function buildSystemPromptAppend(request: AgentRequest): string | null {
+  // Load engineering standards at the start
+  const standards = loadEngineeringStandards(request.workspacePath);
+
   const parts: string[] = [];
+
+  // Prepend standards to the parts array (before gate plan, feedback)
+  if (standards) {
+    parts.push(standards);
+  }
 
   // Add gate plan requirements
   if (request.gatePlanSummary) {
