@@ -29,7 +29,7 @@ export const DEFAULT_DISALLOWED_TOOLS: readonly string[] = [
 export const DEFAULT_CONSTRAINTS: AgentConstraints = {
   allowedTools: [...DEFAULT_ALLOWED_TOOLS],
   disallowedTools: [...DEFAULT_DISALLOWED_TOOLS],
-  maxTurns: 10,
+  maxTurns: 100,
   permissionMode: 'plan',
   additionalSystemPrompt: null,
 };
