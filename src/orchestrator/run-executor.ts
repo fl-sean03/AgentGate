@@ -68,6 +68,19 @@ export interface RunExecutorOptions {
   // Optional callbacks for status updates
   onStateChange?: (run: Run) => void;
   onIterationComplete?: (run: Run, iteration: IterationData) => void;
+
+  // GitHub integration callbacks (v0.2.4)
+  onPushIteration?: (
+    workspace: Workspace,
+    run: Run,
+    iteration: number,
+    commitMessage: string
+  ) => Promise<void>;
+  onCreatePullRequest?: (
+    workspace: Workspace,
+    run: Run,
+    verificationReport: VerificationReport
+  ) => Promise<{ prUrl: string; prNumber: number } | null>;
 }
 
 /**
@@ -86,6 +99,8 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     onCaptureBeforeState,
     onStateChange,
     onIterationComplete,
+    onPushIteration,
+    onCreatePullRequest,
   } = options;
 
   const runId = randomUUID();
@@ -177,6 +192,19 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       await saveRun(run);
       onStateChange?.(run);
 
+      // PUSH ITERATION (GitHub integration v0.2.4)
+      if (onPushIteration) {
+        try {
+          const taskSummary = workOrder.taskPrompt.slice(0, 50);
+          const commitMessage = `AgentGate iteration ${iteration}: ${taskSummary}...`;
+          await onPushIteration(workspace, run, iteration, commitMessage);
+          log.debug({ runId, iteration }, 'Iteration pushed to GitHub');
+        } catch (pushError) {
+          log.warn({ runId, iteration, error: pushError }, 'Failed to push iteration to GitHub');
+          // Continue even if push fails - we don't want to fail the run due to GitHub issues
+        }
+      }
+
       // SNAPSHOT PHASE
       const snapshot = await onSnapshot(
         workspace,
@@ -203,6 +231,23 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         run = applyTransition(run, RunEvent.VERIFY_PASSED);
         await saveRun(run);
         onStateChange?.(run);
+
+        // CREATE PULL REQUEST (GitHub integration v0.2.4)
+        if (onCreatePullRequest) {
+          try {
+            const prResult = await onCreatePullRequest(workspace, run, verificationReport);
+            if (prResult) {
+              run.gitHubPrUrl = prResult.prUrl;
+              run.gitHubPrNumber = prResult.prNumber;
+              await saveRun(run);
+              log.info({ runId, prUrl: prResult.prUrl, prNumber: prResult.prNumber }, 'Pull request created');
+            }
+          } catch (prError) {
+            log.warn({ runId, error: prError }, 'Failed to create pull request');
+            // Continue even if PR creation fails - the run still succeeded
+          }
+        }
+
         break;
       }
 

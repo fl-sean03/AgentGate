@@ -59,6 +59,10 @@ export interface Run {
   result: RunResult | null;
   error: string | null;
   sessionId: string | null;
+  // GitHub integration (v0.2.4)
+  gitHubBranch: string | null;
+  gitHubPrUrl: string | null;
+  gitHubPrNumber: number | null;
 }
 
 // Iteration Data

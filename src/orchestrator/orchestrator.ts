@@ -70,7 +70,16 @@ export class Orchestrator {
     }
 
     // Import modules dynamically to avoid circular dependencies
-    const { create, createFromGit, createFresh } = await import('../workspace/manager.js');
+    const {
+      create,
+      createFromGit,
+      createFresh,
+      createFromGitHub,
+      createGitHubRepo,
+      pushToGitHub,
+      syncWithGitHub,
+      isGitHubWorkspace,
+    } = await import('../workspace/manager.js');
     const {
       getDefaultSeedFiles,
       getMinimalSeedFiles,
@@ -79,6 +88,8 @@ export class Orchestrator {
     } = await import('../workspace/templates.js');
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
+    const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, buildCloneUrl } = await import('../workspace/github.js');
     const { captureBeforeState, captureAfterState } = await import(
       '../snapshot/snapshotter.js'
     );
@@ -128,6 +139,44 @@ export class Orchestrator {
           commitMessage: `Initialize workspace for: ${workOrder.taskPrompt.slice(0, 50)}...`,
         });
         log.info({ workspaceId: workspace.id, template: freshSource.template }, 'Fresh workspace created');
+      } else if (workOrder.workspaceSource.type === 'github') {
+        // GitHub source - clone existing repository
+        const gitHubSource = workOrder.workspaceSource;
+        workspace = await createFromGitHub(gitHubSource);
+        log.info(
+          { workspaceId: workspace.id, owner: gitHubSource.owner, repo: gitHubSource.repo },
+          'GitHub workspace created from existing repo'
+        );
+      } else if (workOrder.workspaceSource.type === 'github-new') {
+        // GitHub New source - create new repository
+        const gitHubNewSource = workOrder.workspaceSource;
+
+        // Generate seed files with task prompt embedded in CLAUDE.md
+        const templateVars = {
+          projectName: gitHubNewSource.repoName,
+          taskDescription: workOrder.taskPrompt,
+        };
+
+        let seedFiles;
+        switch (gitHubNewSource.template) {
+          case WorkspaceTemplate.TYPESCRIPT:
+            seedFiles = getTypeScriptSeedFiles(templateVars);
+            break;
+          case WorkspaceTemplate.PYTHON:
+            seedFiles = getPythonSeedFiles(templateVars);
+            break;
+          case WorkspaceTemplate.MINIMAL:
+            seedFiles = getMinimalSeedFiles(templateVars);
+            break;
+          default:
+            seedFiles = getDefaultSeedFiles(templateVars);
+        }
+
+        workspace = await createGitHubRepo(gitHubNewSource, { seedFiles });
+        log.info(
+          { workspaceId: workspace.id, owner: gitHubNewSource.owner, repo: gitHubNewSource.repoName },
+          'GitHub workspace created with new repo'
+        );
       } else {
         throw new Error(`Unknown workspace source type: ${(workOrder.workspaceSource as { type: string }).type}`);
       }
@@ -138,6 +187,35 @@ export class Orchestrator {
     } catch (error) {
       log.error({ error, workOrderId: workOrder.id }, 'Failed to acquire workspace');
       throw error;
+    }
+
+    // Set up GitHub branch for GitHub-backed workspaces
+    let gitHubBranch: string | null = null;
+    const isGitHub = isGitHubWorkspace(workspace);
+
+    if (isGitHub) {
+      try {
+        // Pull latest from main
+        await syncWithGitHub(workspace);
+        log.debug({ workspaceId: workspace.id }, 'Synced with GitHub');
+
+        // Create run branch
+        const runBranchName = `agentgate/${workOrder.id}`;
+        gitHubBranch = runBranchName;
+
+        // Create and checkout the branch
+        await createBranch(workspace.rootPath, runBranchName);
+        await checkout(workspace.rootPath, runBranchName);
+        log.info({ workspaceId: workspace.id, branch: runBranchName }, 'Created GitHub run branch');
+
+        // Push the branch to establish tracking
+        await push(workspace.rootPath, 'origin', runBranchName, { setUpstream: true });
+        log.debug({ workspaceId: workspace.id, branch: runBranchName }, 'Pushed run branch to GitHub');
+      } catch (error) {
+        log.error({ error, workOrderId: workOrder.id }, 'Failed to set up GitHub branch');
+        await release(workspace.id);
+        throw error;
+      }
     }
 
     // Resolve gate plan
@@ -250,7 +328,100 @@ export class Orchestrator {
           'Iteration complete'
         );
       },
+
     };
+
+    // Add GitHub integration callbacks (v0.2.4)
+    if (isGitHub) {
+      executorOptions.onPushIteration = async (ws, run, iteration, commitMessage) => {
+        // Set the branch name on the run if not already set
+        if (!run.gitHubBranch && gitHubBranch) {
+          run.gitHubBranch = gitHubBranch;
+        }
+
+        // Stage all changes
+        await stageAll(ws.rootPath);
+
+        // Commit with the provided message
+        await commit(ws.rootPath, commitMessage);
+
+        // Push to the run branch
+        if (gitHubBranch) {
+          await push(ws.rootPath, 'origin', gitHubBranch);
+          log.debug({ runId: run.id, iteration, branch: gitHubBranch }, 'Pushed iteration to GitHub');
+        }
+      };
+
+      executorOptions.onCreatePullRequest = async (_ws, run, verificationReport) => {
+        if (!gitHubBranch) {
+          log.warn({ runId: run.id }, 'No GitHub branch set, skipping PR creation');
+          return null;
+        }
+
+        // Get GitHub config and create client
+        const config = getGitHubConfigFromEnv();
+        const client = createGitHubClient(config);
+
+        // Get owner and repo from workspace source
+        let owner: string;
+        let repo: string;
+
+        if (workOrder.workspaceSource.type === 'github') {
+          owner = workOrder.workspaceSource.owner;
+          repo = workOrder.workspaceSource.repo;
+        } else if (workOrder.workspaceSource.type === 'github-new') {
+          owner = workOrder.workspaceSource.owner;
+          repo = workOrder.workspaceSource.repoName;
+        } else {
+          log.warn({ runId: run.id }, 'Workspace is not GitHub-backed, skipping PR creation');
+          return null;
+        }
+
+        // Determine highest verification level passed
+        const getHighestLevel = () => {
+          if (verificationReport.l3Result.passed) return 'L3';
+          if (verificationReport.l2Result.passed) return 'L2';
+          if (verificationReport.l1Result.passed) return 'L1';
+          if (verificationReport.l0Result.passed) return 'L0';
+          return 'None';
+        };
+
+        // Create the PR
+        const taskSummary = workOrder.taskPrompt.slice(0, 50);
+        const prTitle = `[AgentGate] ${taskSummary}...`;
+        const prBody = `## AgentGate Run Summary
+
+**Run ID:** ${run.id}
+**Work Order:** ${workOrder.id}
+**Iterations:** ${run.iteration}
+**Status:** Verification Passed
+
+### Task
+${workOrder.taskPrompt}
+
+### Verification Report
+- Passed: ${verificationReport.passed}
+- Highest Level: ${getHighestLevel()}
+
+---
+*This PR was automatically created by AgentGate.*`;
+
+        const pr = await createPullRequest(client, {
+          owner,
+          repo,
+          title: prTitle,
+          body: prBody,
+          head: gitHubBranch,
+          base: 'main',
+          draft: false,
+        });
+
+        return {
+          prUrl: pr.url,
+          prNumber: pr.number,
+        };
+      };
+    }
 
     // Track active run
     const runId = randomUUID();

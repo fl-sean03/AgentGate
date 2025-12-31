@@ -49,6 +49,10 @@ export async function loadRun(runId: string): Promise<Run | null> {
       result: (data['result'] as Run['result']) ?? null,
       error: (data['error'] as string) ?? null,
       sessionId: (data['sessionId'] as string) ?? null,
+      // GitHub integration (v0.2.4)
+      gitHubBranch: (data['gitHubBranch'] as string) ?? null,
+      gitHubPrUrl: (data['gitHubPrUrl'] as string) ?? null,
+      gitHubPrNumber: (data['gitHubPrNumber'] as number) ?? null,
     };
 
     return run;
@@ -211,5 +215,9 @@ export function createRun(
     result: null,
     error: null,
     sessionId: null,
+    // GitHub integration (v0.2.4)
+    gitHubBranch: null,
+    gitHubPrUrl: null,
+    gitHubPrNumber: null,
   };
 }

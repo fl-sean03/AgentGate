@@ -394,7 +394,6 @@ import {
   buildCloneUrl,
 } from './github.js';
 import {
-  hasRemote,
   addRemote,
   setRemoteUrl,
   pull,
