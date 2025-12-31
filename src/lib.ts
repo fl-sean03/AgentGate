@@ -38,6 +38,9 @@ export * as agent from './agent/index.js';
 // Control Plane
 export * as controlPlane from './control-plane/index.js';
 
+// HTTP Server
+export * as server from './server/index.js';
+
 // Utilities
 export { createLogger, logger } from './utils/logger.js';
 export { createTempDir, removeTempDir } from './utils/temp.js';
