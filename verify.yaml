@@ -1,0 +1,84 @@
+# AgentGate Verification Gate Plan
+# This defines what MUST pass for any code change to be accepted
+
+version: "1"
+
+environment:
+  runtime: node
+  runtimeVersion: "20"
+  setupCommands:
+    - name: install
+      command: pnpm install
+
+# Level 0: Contract validation (automatic)
+contracts:
+  forbiddenPatterns:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/secrets/**"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/credentials.json"
+    - "**/service-account*.json"
+
+# Level 1: Test commands (MUST ALL PASS)
+tests:
+  - name: typecheck
+    command: pnpm typecheck
+    description: TypeScript compilation with strict mode
+
+  - name: lint
+    command: pnpm lint
+    description: ESLint code quality checks
+
+  - name: unit-tests
+    command: pnpm test
+    description: All unit and integration tests
+    timeout: 300  # 5 minutes
+
+  - name: build
+    command: pnpm build
+    description: Production build
+
+# Level 2: Blackbox tests (functional verification)
+blackbox:
+  - name: cli-help
+    command: node dist/index.js --help
+    expectExitCode: 0
+    description: CLI starts and shows help
+
+  - name: health-endpoint
+    setup: |
+      node dist/index.js serve --port 13001 &
+      sleep 2
+    command: curl -s http://localhost:13001/health
+    expectContains: '"status":"ok"'
+    teardown: pkill -f "serve --port 13001" || true
+    description: HTTP server health check works
+
+# Level 3: Sanity checks (structural validation)
+sanity:
+  requiredFiles:
+    - path: "src/**/*.ts"
+      description: Source files exist
+    - path: "test/**/*.test.ts"
+      description: Test files exist
+
+  # NEW: Require tests for new source files
+  testCoverage:
+    enabled: true
+    rules:
+      - pattern: "src/server/websocket/*.ts"
+        requiresTest: "test/websocket*.test.ts"
+      - pattern: "src/server/routes/*.ts"
+        requiresTest: "test/routes*.test.ts OR test/integration/*.test.ts"
+      - pattern: "src/orchestrator/*.ts"
+        requiresTest: "test/orchestrator*.test.ts OR test/*.test.ts"
+
+# Execution policy
+execution:
+  networkAllowed: false
+  maxRuntimeSeconds: 600
+  disallowedCommands:
+    - "rm -rf /"
+    - "sudo rm -rf"
