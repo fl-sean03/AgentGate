@@ -169,6 +169,9 @@ importers:
       vitest:
         specifier: ^1.2.0
         version: 1.6.1(@types/node@20.19.27)
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.3
 
   packages/shared:
     dependencies:
