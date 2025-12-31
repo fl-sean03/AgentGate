@@ -11,6 +11,7 @@
 | [05-integration.md](./05-integration.md) | Thrusts 7-8: Branch merging, conflict resolution |
 | [06-deployment.md](./06-deployment.md) | Thrusts 9-10: Docker Compose, configurable limits |
 | [07-appendices.md](./07-appendices.md) | Work order prompts, checklists, file reference |
+| [08-robustness.md](./08-robustness.md) | Thrusts 11-14: Critical bug fixes, error handling |
 
 ---
 
@@ -41,6 +42,10 @@
 | 8 | Git Merge Operations | - | `workspace/git-ops.ts` |
 | 9 | Configurable Limits | - | `orchestrator/orchestrator.ts`, `commands/serve.ts` |
 | 10 | Docker Compose | `docker/*`, `docker-compose.yml`, `.env.example` | - |
+| 11 | Concurrency Control Fix | - | `orchestrator/orchestrator.ts` |
+| 12 | Lease Duration Extension | - | `workspace/lease.ts`, `orchestrator/run-executor.ts` |
+| 13 | Error Handling Improvements | - | `run-executor.ts`, `work-order-store.ts` |
+| 14 | API Schema Consistency | - | `server/routes/*.ts` |
 
 ---
 
@@ -74,5 +79,6 @@ Thrusts should be implemented in order, as later thrusts depend on earlier ones:
 3. **Thrusts 5-6**: Tree execution
 4. **Thrusts 7-8**: Branch integration
 5. **Thrusts 9-10**: Deployment hardening
+6. **Thrusts 11-14**: Robustness fixes (critical bugs)
 
 Each thrust pair can be implemented as a single AgentGate work order.
