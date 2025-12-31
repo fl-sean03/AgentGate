@@ -18,6 +18,7 @@ const logger = createLogger('routes:runs');
 
 /**
  * Map RunState to API status
+ * Provides safe default for unknown states (v0.2.10 - Thrust 14)
  */
 function mapRunStatus(state: RunState): RunSummary['status'] {
   const statusMap: Record<RunState, RunSummary['status']> = {
@@ -31,7 +32,8 @@ function mapRunStatus(state: RunState): RunSummary['status'] {
     [RunState.FAILED]: 'failed',
     [RunState.CANCELED]: 'canceled',
   };
-  return statusMap[state];
+  // Safe default for unknown states
+  return statusMap[state] ?? 'running';
 }
 
 /**

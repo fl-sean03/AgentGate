@@ -44,6 +44,7 @@ export interface RunExecutorOptions {
   workOrder: WorkOrder;
   workspace: Workspace;
   gatePlan: GatePlan;
+  leaseId?: string; // Lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
   // Callbacks for each phase
   onBuild: (
@@ -112,6 +113,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     workOrder,
     workspace,
     gatePlan,
+    leaseId,
     onBuild,
     onSnapshot,
     onVerify,
@@ -141,6 +143,21 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     },
     'Starting run execution'
   );
+
+  // Set up periodic lease renewal to prevent expiry during long-running operations (v0.2.10 - Thrust 12)
+  let renewalInterval: NodeJS.Timeout | null = null;
+  if (leaseId) {
+    const { renewLease } = await import('../workspace/lease.js');
+    // Renew lease every 10 minutes
+    renewalInterval = setInterval(async () => {
+      try {
+        await renewLease(leaseId);
+        log.debug({ runId, leaseId }, 'Lease renewed');
+      } catch (error) {
+        log.warn({ runId, leaseId, error }, 'Failed to renew lease');
+      }
+    }, 10 * 60 * 1000);
+  }
 
   // Save initial state
   await saveRun(run);
@@ -238,6 +255,14 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
           log.debug({ runId, iteration }, 'Iteration pushed to GitHub');
         } catch (pushError) {
           log.warn({ runId, iteration, error: pushError }, 'Failed to push iteration to GitHub');
+          // Record warning for visibility (v0.2.10 - Thrust 13)
+          run.warnings.push({
+            type: 'github_push_failed',
+            message: pushError instanceof Error ? pushError.message : String(pushError),
+            iteration,
+            timestamp: new Date(),
+          });
+          await saveRun(run);
           // Continue even if push fails - we don't want to fail the run due to GitHub issues
         }
       }
@@ -287,6 +312,14 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
             }
           } catch (prError) {
             log.warn({ runId, error: prError }, 'Failed to create pull request');
+            // Record warning for visibility (v0.2.10 - Thrust 13)
+            run.warnings.push({
+              type: 'github_pr_creation_failed',
+              message: prError instanceof Error ? prError.message : String(prError),
+              iteration,
+              timestamp: new Date(),
+            });
+            await saveRun(run);
             // Continue even if PR creation fails - the run still succeeded
           }
         }
@@ -349,6 +382,12 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       await saveIterationData(runId, iteration, iterationData);
       break;
     }
+  }
+
+  // Clean up lease renewal interval (v0.2.10 - Thrust 12)
+  if (renewalInterval) {
+    clearInterval(renewalInterval);
+    log.debug({ runId }, 'Lease renewal interval cleared');
   }
 
   log.info(
