@@ -256,6 +256,78 @@ Add integration test that:
 
 ---
 
+## Thrust 5: Driver Simplification
+
+### 5.1 Objective
+
+Simplify agent driver architecture to focus on the core drivers needed:
+1. Claude Code API Driver (renamed from ClaudeCodeDriver)
+2. Claude Code Subscription Driver (new)
+3. OpenAI Codex Driver
+4. OpenCode Driver
+
+### 5.2 Background
+
+The original implementation included several drivers that are not needed:
+- `ClaudeAgentSDKDriver` - Uses Anthropic SDK directly, not Claude Code
+- `OpenAIAgentsDriver` - Uses OpenAI Agents API, not Codex CLI
+
+These add complexity without value since AgentGate is focused on CLI-based coding agents.
+
+### 5.3 Subtasks
+
+#### 5.3.1 Remove Claude Agent SDK Driver
+
+Delete `src/agent/claude-agent-sdk-driver.ts` and related files:
+- Remove from exports in `src/agent/index.ts`
+- Remove registration
+- Remove related types/utilities
+
+#### 5.3.2 Remove OpenAI Agents Driver
+
+Delete `src/agent/openai-agents-driver.ts` and related files:
+- Remove from exports in `src/agent/index.ts`
+- Remove registration
+
+#### 5.3.3 Rename Claude Code Driver
+
+Rename for clarity:
+- `ClaudeCodeDriver` → `ClaudeCodeAPIDriver`
+- Update all imports and references
+- Update driver name property
+
+#### 5.3.4 Update Exports
+
+Clean up `src/agent/index.ts`:
+- Export only 4 drivers
+- Update default driver to ClaudeCodeAPIDriver
+
+#### 5.3.5 Update Documentation
+
+Update driver list in README and DevGuide.
+
+### 5.4 Verification Steps
+
+1. Run `pnpm typecheck` - no type errors
+2. Run `pnpm lint` - no lint errors
+3. Run `pnpm test` - all tests pass
+4. Verify only 4 drivers are registered
+
+### 5.5 Files Created/Modified
+
+| File | Action |
+|------|--------|
+| `src/agent/claude-agent-sdk-driver.ts` | Delete |
+| `src/agent/sdk-message-parser.ts` | Delete |
+| `src/agent/sdk-options-builder.ts` | Delete |
+| `src/agent/sdk-hooks.ts` | Delete |
+| `src/agent/openai-agents-driver.ts` | Delete |
+| `src/agent/claude-code-driver.ts` | Rename driver name |
+| `src/agent/index.ts` | Modify - remove deleted drivers |
+| `src/orchestrator/orchestrator.ts` | Modify - update driver references |
+
+---
+
 ## Implementation Order
 
 Execute thrusts in order:
@@ -263,5 +335,6 @@ Execute thrusts in order:
 2. **Thrust 2** - Driver implementation
 3. **Thrust 3** - Integration with CLI/orchestrator
 4. **Thrust 4** - Testing and validation
+5. **Thrust 5** - Driver simplification
 
 Each thrust should be verified before proceeding to the next.

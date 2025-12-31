@@ -3,6 +3,12 @@
  *
  * Provides the infrastructure for executing AI coding agents with
  * configurable constraints, tool restrictions, and output parsing.
+ *
+ * Available Drivers:
+ * - ClaudeCodeDriver - Uses Claude Code CLI with API key
+ * - ClaudeCodeSubscriptionDriver - Uses Claude Code CLI with Pro/Max subscription
+ * - OpenAICodexDriver - Uses OpenAI Codex CLI
+ * - OpenCodeDriver - Uses SST OpenCode CLI
  */
 
 // Re-export types
@@ -74,53 +80,22 @@ export {
   extractErrorMessage,
 } from './output-parser.js';
 
-// Claude Code driver (subprocess-based, legacy)
+// Claude Code driver (uses API key)
 export {
   ClaudeCodeDriver,
   createClaudeCodeDriver,
   type ClaudeCodeDriverConfig,
 } from './claude-code-driver.js';
 
-// Claude Agent SDK driver (recommended)
+// Claude Code Subscription driver (uses Pro/Max subscription)
 export {
-  ClaudeAgentSDKDriver,
-  createClaudeAgentSDKDriver,
-  type ClaudeAgentSDKDriverConfig,
-  type SDKAgentResult,
-} from './claude-agent-sdk-driver.js';
-
-// SDK message parser
-export {
-  isSystemMessage,
-  isAssistantMessage,
-  isUserMessage,
-  isResultMessage,
-  isSuccessResult,
-  isErrorResult,
-  extractToolUses,
-  MessageCollector,
-  type ToolCallRecord,
-  type ExtractedResult,
-} from './sdk-message-parser.js';
-
-// SDK options builder
-export {
-  buildSDKOptions,
-  createTimeoutController,
-  clearControllerTimeout,
-} from './sdk-options-builder.js';
-
-// SDK hooks utilities
-export {
-  createToolLoggingHook,
-  createFileChangeHook,
-  createBlockingHook,
-  createDefaultBlockingHook,
-  combineHookMatchers,
-  DEFAULT_BLOCKED_PATTERNS,
-  type ToolUseEvent,
-  type ToolEventHandler,
-} from './sdk-hooks.js';
+  ClaudeCodeSubscriptionDriver,
+  createClaudeCodeSubscriptionDriver,
+  tryCreateSubscriptionDriver,
+  SUBSCRIPTION_CAPABILITIES,
+  type ClaudeCodeSubscriptionDriverConfig,
+  type SubscriptionCapabilities,
+} from './claude-code-subscription-driver.js';
 
 // OpenAI Codex driver
 export {
@@ -130,15 +105,7 @@ export {
   type CodexAgentResult,
 } from './openai-codex-driver.js';
 
-// OpenAI Agents SDK driver
-export {
-  OpenAIAgentsDriver,
-  createOpenAIAgentsDriver,
-  type OpenAIAgentsDriverConfig,
-  type AgentsSDKResult,
-} from './openai-agents-driver.js';
-
-// OpenCode SDK driver (SST open source)
+// OpenCode driver (SST open source)
 export {
   OpenCodeDriver,
   createOpenCodeDriver,
@@ -158,45 +125,27 @@ export {
   getSubscriptionCredentials,
 } from './subscription-detector.js';
 
-// Claude Code Subscription driver (uses Pro/Max subscription)
-export {
-  ClaudeCodeSubscriptionDriver,
-  createClaudeCodeSubscriptionDriver,
-  tryCreateSubscriptionDriver,
-  SUBSCRIPTION_CAPABILITIES,
-  type ClaudeCodeSubscriptionDriverConfig,
-  type SubscriptionCapabilities,
-} from './claude-code-subscription-driver.js';
-
 // Initialize and register drivers
-import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
 import { ClaudeCodeDriver } from './claude-code-driver.js';
 import { ClaudeCodeSubscriptionDriver } from './claude-code-subscription-driver.js';
 import { OpenAICodexDriver } from './openai-codex-driver.js';
-import { OpenAIAgentsDriver } from './openai-agents-driver.js';
 import { OpenCodeDriver } from './opencode-driver.js';
-import { register } from './registry.js';
+import { register, setDefault } from './registry.js';
 
 // Auto-register all drivers
-// Claude SDK is registered first and becomes the default
-const claudeDriver = new ClaudeAgentSDKDriver();
-register(claudeDriver);
-
-// Register Claude Code CLI driver (API-based)
+// Claude Code API driver is registered first and becomes the default
 const claudeCodeDriver = new ClaudeCodeDriver();
 register(claudeCodeDriver);
+setDefault('claude-code');
 
 // Register Claude Code Subscription driver (subscription-based)
 // Note: This driver requires subscription validation at runtime
 const subscriptionDriver = new ClaudeCodeSubscriptionDriver();
 register(subscriptionDriver);
 
-// Register OpenAI drivers (available when OPENAI_API_KEY is set)
+// Register OpenAI Codex driver (available when OPENAI_API_KEY is set)
 const codexDriver = new OpenAICodexDriver();
 register(codexDriver);
-
-const agentsDriver = new OpenAIAgentsDriver();
-register(agentsDriver);
 
 // Register OpenCode driver (available when opencode is installed)
 const openCodeDriver = new OpenCodeDriver();
