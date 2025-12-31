@@ -130,3 +130,20 @@ export {
   type PushResult,
   type PullResult,
 } from './github.js';
+
+// Metrics Types
+export {
+  Phase,
+  MetricsResult,
+  phaseSchema,
+  phaseMetricsSchema,
+  levelMetricsSchema,
+  iterationMetricsSchema,
+  metricsResultSchema,
+  runMetricsSchema,
+  type PhaseMetrics,
+  type LevelMetrics,
+  type IterationMetrics,
+  type RunMetrics,
+  type MetricsDisplayOptions,
+} from './metrics.js';
