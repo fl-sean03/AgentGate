@@ -402,7 +402,7 @@ Before executing work orders with GitHub mode, ensure:
 |--------|------------|--------|-------|
 | 1 | WO-P1-001 | ✅ Completed | Server foundation merged to main |
 | 2 | WO-P1-002 | ✅ Completed | Work Order API endpoints (PR #8 merged) |
-| 3 | WO-P1-003 | ⏳ Pending | WebSocket support |
+| 3 | WO-P1-003 | ✅ Completed | WebSocket support (PR #13 merged) |
 
 **Hotfixes Applied:**
 - `run` command added to CLI (enables `agentgate run <id>`)
@@ -445,12 +445,12 @@ To accelerate development, the following hotfixes are submitted in parallel. Aft
 
 ### Hotfix Details
 
-| ID | Issue/Feature | Description | Status |
-|----|---------------|-------------|--------|
-| WO-HF-001 | Issue #7 | Work order status not updating from QUEUED to RUNNING | ⏳ Pending |
-| WO-HF-002 | Enhancement | Auto-load `.env` file using dotenv package | ⏳ Pending |
-| WO-HF-003 | Thrust 3 | WebSocket real-time updates (same as WO-P1-003) | ⏳ Pending |
-| WO-HF-INT | Integration | Merge/resolve any conflicts from parallel PRs | ⏳ Pending |
+| ID | Work Order ID | Issue/Feature | Description | Status | PR |
+|----|---------------|---------------|-------------|--------|-----|
+| WO-HF-001 | sA0AUommVBLX | Issue #7 | Work order status not updating from QUEUED to RUNNING | ✅ Merged | #12 |
+| WO-HF-002 | y66JkVmevn-4 | Enhancement | Auto-load `.env` file using dotenv package | ✅ Merged | #11 |
+| WO-HF-003 | _9yl2weIDNWL | Thrust 3 | WebSocket real-time updates (same as WO-P1-003) | ✅ Merged | #13 |
+| WO-HF-INT | - | Integration | No conflicts - all merged successfully | ✅ N/A | - |
 
 ### Execution Commands
 
