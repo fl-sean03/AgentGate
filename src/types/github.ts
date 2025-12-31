@@ -108,7 +108,7 @@ export const createRepositoryOptionsSchema = z.object({
   /** Repository description */
   description: z.string().optional(),
   /** Whether the repository should be private */
-  private: z.boolean().default(false),
+  private: z.boolean().default(true), // Default to private for security
   /** Initialize with a README */
   autoInit: z.boolean().default(false),
   /** Create in an organization (if not specified, creates in user's account) */

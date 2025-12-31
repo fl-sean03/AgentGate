@@ -119,7 +119,7 @@ export const submitCommandOptionsSchema = z.object({
   // GitHub options (v0.2.4)
   github: z.string().optional(), // owner/repo for existing repo
   githubNew: z.string().optional(), // owner/repo for new repo
-  private: z.boolean().default(false), // For github-new
+  public: z.boolean().default(false), // For github-new - repos are private by default
   agent: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE),
   maxIterations: z.coerce.number().int().min(1).max(10).default(3),
   maxTime: z.coerce.number().int().min(60).max(86400).default(3600),
@@ -181,7 +181,7 @@ export interface WorkspaceSourceOptions {
   // GitHub options (v0.2.4)
   github?: string | undefined; // owner/repo for existing repo
   githubNew?: string | undefined; // owner/repo for new repo
-  private?: boolean | undefined; // For github-new
+  public?: boolean | undefined; // For github-new - make repo public (default is private)
 }
 
 /**
@@ -216,7 +216,7 @@ export function parseWorkspaceSource(
       type: 'github-new',
       owner: parsed.owner,
       repoName: parsed.repo,
-      private: options.private,
+      private: !options.public, // Default to private, --public makes it public
       template: options.template,
     };
   }
@@ -342,14 +342,14 @@ export function validateWorkspaceSourceOptions(
     };
   }
 
-  // private only works with github-new
-  if (options.private && !options.githubNew) {
+  // --public only works with github-new
+  if (options.public && !options.githubNew) {
     return {
       success: false,
       errors: [
         {
-          path: 'private',
-          message: '--private requires --github-new',
+          path: 'public',
+          message: '--public requires --github-new',
           code: 'custom',
         },
       ],

@@ -529,7 +529,7 @@ export async function createGitHubRepo(
   const repoInfo = await createGitHubRepository(client, {
     name: source.repoName,
     description: options.description,
-    private: source.private ?? false,
+    private: source.private ?? true, // Default to private for security
     autoInit: false, // We'll do our own initialization
   });
 

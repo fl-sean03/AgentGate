@@ -38,7 +38,7 @@ export function createSubmitCommand(): Command {
     // GitHub options (v0.2.4)
     .option('--github <owner/repo>', 'Use an existing GitHub repository')
     .option('--github-new <owner/repo>', 'Create a new GitHub repository')
-    .option('--private', 'Make the new GitHub repository private (requires --github-new)', false)
+    .option('--public', 'Make the new GitHub repository public (default is private, requires --github-new)', false)
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
