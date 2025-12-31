@@ -47,6 +47,7 @@
 | 13 | Error Handling Improvements | - | `run-executor.ts`, `work-order-store.ts` |
 | 14 | API Schema Consistency | - | `server/routes/*.ts` |
 | 15 | CLI Unification | - | `commands/run.ts`, `cli.ts` |
+| 16 | CI-Aware PR Review | `types/github.ts` | `workspace/github.ts`, `orchestrator/*.ts` |
 
 ---
 
