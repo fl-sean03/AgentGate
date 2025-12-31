@@ -50,17 +50,6 @@ describe('Agent Standards', () => {
       expect(result).toBe(testContent);
     });
 
-    it('should find AGENTS.md in docs/ directory', async () => {
-      const docsDir = join(testDir, 'docs');
-      await mkdir(docsDir, { recursive: true });
-      const testContent = '# Test Standards\nTest content from docs';
-      await writeFile(join(docsDir, 'AGENTS.md'), testContent, 'utf-8');
-
-      const result = loadEngineeringStandards(testDir);
-
-      expect(result).toBe(testContent);
-    });
-
     it('should find AGENTS.md in workspace root', async () => {
       const testContent = '# Test Standards\nTest content from root';
       await writeFile(join(testDir, 'AGENTS.md'), testContent, 'utf-8');
@@ -70,54 +59,31 @@ describe('Agent Standards', () => {
       expect(result).toBe(testContent);
     });
 
-    it('should prioritize .agentgate/AGENTS.md over docs/AGENTS.md', async () => {
-      // Create both files
+    it('should prioritize .agentgate/AGENTS.md over root', async () => {
       const agentgateDir = join(testDir, '.agentgate');
-      const docsDir = join(testDir, 'docs');
       await mkdir(agentgateDir, { recursive: true });
-      await mkdir(docsDir, { recursive: true });
-
-      const agentgateContent = '# Priority Test\nFrom .agentgate';
-      const docsContent = '# Priority Test\nFrom docs';
-
+      const agentgateContent = '# Test Standards\nTest content from .agentgate';
+      const rootContent = '# Test Standards\nTest content from root';
       await writeFile(join(agentgateDir, 'AGENTS.md'), agentgateContent, 'utf-8');
-      await writeFile(join(docsDir, 'AGENTS.md'), docsContent, 'utf-8');
+      await writeFile(join(testDir, 'AGENTS.md'), rootContent, 'utf-8');
 
       const result = loadEngineeringStandards(testDir);
 
       expect(result).toBe(agentgateContent);
     });
 
-    it('should prioritize docs/AGENTS.md over root AGENTS.md', async () => {
-      // Create both files
-      const docsDir = join(testDir, 'docs');
-      await mkdir(docsDir, { recursive: true });
-
-      const docsContent = '# Priority Test\nFrom docs';
-      const rootContent = '# Priority Test\nFrom root';
-
-      await writeFile(join(docsDir, 'AGENTS.md'), docsContent, 'utf-8');
-      await writeFile(join(testDir, 'AGENTS.md'), rootContent, 'utf-8');
-
+    it('should return null when AGENTS.md not found', () => {
       const result = loadEngineeringStandards(testDir);
 
-      expect(result).toBe(docsContent);
+      // No embedded fallback - respects workspace's own configuration
+      expect(result).toBeNull();
     });
 
-    it('should return embedded standards when AGENTS.md not found', () => {
-      const result = loadEngineeringStandards(testDir);
-
-      expect(result).toBeTruthy();
-      expect(result).toContain('Engineering Standards');
-      expect(result).toContain('Test As You Build');
-      expect(result).toContain('pnpm typecheck');
-    });
-
-    it('should return embedded standards when workspacePath is undefined', () => {
+    it('should return null when workspacePath is undefined', () => {
       const result = loadEngineeringStandards();
 
-      expect(result).toBeTruthy();
-      expect(result).toContain('Engineering Standards');
+      // No embedded fallback
+      expect(result).toBeNull();
     });
 
     it('should cache standards after first load', async () => {
@@ -137,8 +103,6 @@ describe('Agent Standards', () => {
     });
 
     it('should handle unreadable AGENTS.md gracefully', async () => {
-      const docsDir = join(testDir, 'docs');
-      await mkdir(docsDir, { recursive: true });
       const testContent = '# Fallback\nRoot content';
       await writeFile(join(testDir, 'AGENTS.md'), testContent, 'utf-8');
 
@@ -154,8 +118,8 @@ describe('Agent Standards', () => {
 
         const result = loadEngineeringStandards(testDir);
 
-        // Should fall back to next available file
-        expect(result).toBeTruthy();
+        // Should fall back to next available file (root AGENTS.md)
+        expect(result).toBe(testContent);
 
         // Restore permissions for cleanup
         await chmod(join(agentgateDir, 'AGENTS.md'), 0o644);
@@ -181,10 +145,9 @@ describe('Agent Standards', () => {
       // Delete file
       await rm(join(testDir, 'AGENTS.md'));
 
-      // Should now load embedded defaults (not cached value)
+      // Should now return null (file not found, no cached value)
       const result2 = loadEngineeringStandards(testDir);
-      expect(result2).not.toBe(testContent);
-      expect(result2).toContain('Engineering Standards');
+      expect(result2).toBeNull();
     });
   });
 
@@ -201,14 +164,30 @@ describe('Agent Standards', () => {
       expect(systemPrompt).toContain(testContent);
     });
 
-    it('should inject embedded standards when file not found', () => {
+    it('should return null when no standards and no other components', () => {
       const request: AgentRequest = createDefaultRequest(testDir, 'Test task');
 
       const systemPrompt = buildSystemPromptAppend(request);
 
+      // No AGENTS.md found and no other components = null
+      expect(systemPrompt).toBeNull();
+    });
+
+    it('should still include other components when no AGENTS.md exists', () => {
+      // No AGENTS.md in testDir
+      const request: AgentRequest = createDefaultRequest(testDir, 'Test task');
+      request.gatePlanSummary = 'Gate plan requirements';
+      request.priorFeedback = 'Fix these issues';
+
+      const systemPrompt = buildSystemPromptAppend(request);
+
+      // Should have gate plan and feedback but NOT embedded standards
       expect(systemPrompt).toBeTruthy();
-      expect(systemPrompt).toContain('Engineering Standards');
-      expect(systemPrompt).toContain('Test As You Build');
+      expect(systemPrompt).toContain('Gate Plan Requirements');
+      expect(systemPrompt).toContain('Prior Feedback');
+      // Crucially: no embedded standards were injected
+      expect(systemPrompt).not.toContain('# Engineering Standards');
+      expect(systemPrompt).not.toContain('Test As You Build');
     });
 
     it('should inject standards before gate plan', async () => {
@@ -223,8 +202,8 @@ describe('Agent Standards', () => {
       expect(systemPrompt).toBeTruthy();
 
       // Standards should appear before gate plan
-      const standardsIndex = systemPrompt.indexOf(testContent);
-      const gatePlanIndex = systemPrompt.indexOf('Gate Plan Requirements');
+      const standardsIndex = systemPrompt!.indexOf(testContent);
+      const gatePlanIndex = systemPrompt!.indexOf('Gate Plan Requirements');
 
       expect(standardsIndex).toBeGreaterThan(-1);
       expect(gatePlanIndex).toBeGreaterThan(-1);
@@ -243,8 +222,8 @@ describe('Agent Standards', () => {
       expect(systemPrompt).toBeTruthy();
 
       // Standards should appear before feedback
-      const standardsIndex = systemPrompt.indexOf(testContent);
-      const feedbackIndex = systemPrompt.indexOf('Prior Feedback');
+      const standardsIndex = systemPrompt!.indexOf(testContent);
+      const feedbackIndex = systemPrompt!.indexOf('Prior Feedback');
 
       expect(standardsIndex).toBeGreaterThan(-1);
       expect(feedbackIndex).toBeGreaterThan(-1);
@@ -271,10 +250,10 @@ describe('Agent Standards', () => {
       expect(systemPrompt).toContain('Custom instructions');
 
       // Verify order: standards -> gate plan -> feedback -> custom
-      const standardsIndex = systemPrompt.indexOf(testContent);
-      const gatePlanIndex = systemPrompt.indexOf('Gate Plan Requirements');
-      const feedbackIndex = systemPrompt.indexOf('Prior Feedback');
-      const customIndex = systemPrompt.indexOf('Custom instructions');
+      const standardsIndex = systemPrompt!.indexOf(testContent);
+      const gatePlanIndex = systemPrompt!.indexOf('Gate Plan Requirements');
+      const feedbackIndex = systemPrompt!.indexOf('Prior Feedback');
+      const customIndex = systemPrompt!.indexOf('Custom instructions');
 
       expect(standardsIndex).toBeLessThan(gatePlanIndex);
       expect(gatePlanIndex).toBeLessThan(feedbackIndex);
