@@ -392,6 +392,7 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
 
 /**
  * Map API workspace source to internal format
+ * Uses exhaustive switch for type safety (v0.2.10 - Thrust 14)
  */
 function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): WorkOrder['workspaceSource'] {
   switch (source.type) {
@@ -411,21 +412,25 @@ function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): Wor
         repoName: source.repo.split('/')[1] ?? source.repo,
         template: source.template as 'minimal' | 'typescript' | 'python' | undefined,
       };
+    default:
+      // Exhaustive check - TypeScript will error if we miss a case
+      const _exhaustive: never = source;
+      throw new Error(`Unknown workspace source type: ${(_exhaustive as { type: string }).type}`);
   }
 }
 
 /**
  * Map API agent type to internal format
+ * Rejects unknown agent types (v0.2.10 - Thrust 14)
  */
 function mapAgentType(apiType: CreateWorkOrderBody['agentType']): WorkOrder['agentType'] {
-  switch (apiType) {
-    case 'claude-code-subscription':
-      return 'claude-code-subscription';
-    case 'openai-codex':
-    case 'opencode':
-      // Map to default for now
-      return 'claude-code-subscription';
-    default:
-      return 'claude-code-subscription';
+  const validTypes: Record<string, WorkOrder['agentType']> = {
+    'claude-code-subscription': 'claude-code-subscription',
+  };
+
+  const mapped = validTypes[apiType];
+  if (!mapped) {
+    throw new Error(`Unknown agent type: ${apiType}`);
   }
+  return mapped;
 }
