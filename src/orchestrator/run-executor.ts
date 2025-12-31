@@ -78,6 +78,7 @@ export interface RunExecutorOptions {
   onCaptureBeforeState: (workspace: Workspace) => Promise<BeforeState>;
 
   // Optional callbacks for status updates
+  onRunStarted?: (run: Run) => Promise<void>;
   onStateChange?: (run: Run) => void;
   onIterationComplete?: (run: Run, iteration: IterationData) => void;
 
@@ -116,6 +117,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     onVerify,
     onFeedback,
     onCaptureBeforeState,
+    onRunStarted,
     onStateChange,
     onIterationComplete,
     onPhaseStart,
@@ -143,6 +145,9 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   // Save initial state
   await saveRun(run);
   onStateChange?.(run);
+
+  // Notify that run has started (allows caller to update work order status)
+  await onRunStarted?.(run);
 
   // Transition to LEASED
   run = applyTransition(run, RunEvent.WORKSPACE_ACQUIRED);
