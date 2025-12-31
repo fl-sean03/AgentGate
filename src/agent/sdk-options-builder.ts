@@ -12,7 +12,7 @@ import { buildGatePlanSystemPrompt, buildFeedbackSystemPrompt } from './defaults
  * Build SDK Options from AgentRequest
  */
 export function buildSDKOptions(request: AgentRequest): Options {
-  const { constraints, contextPointers } = request;
+  const { constraints } = request;
 
   // Build system prompt additions
   const promptParts: string[] = [];
