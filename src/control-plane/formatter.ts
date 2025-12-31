@@ -198,6 +198,15 @@ export function formatWorkspaceSource(source: WorkOrder['workspaceSource']): str
       const template = source.template ? ` [${source.template}]` : '';
       return `fresh: ${source.destPath}${template}`;
     }
+    case 'github': {
+      const branch = source.branch ? ` (${source.branch})` : '';
+      return `github: ${source.owner}/${source.repo}${branch}`;
+    }
+    case 'github-new': {
+      const visibility = source.private ? ' [private]' : '';
+      const template = source.template ? ` [${source.template}]` : '';
+      return `github-new: ${source.owner}/${source.repoName}${visibility}${template}`;
+    }
   }
 }
 

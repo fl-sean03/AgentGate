@@ -78,6 +78,13 @@ export {
   create,
   createFresh,
   createFromGit,
+  // GitHub workspace operations (v0.2.4)
+  createFromGitHub,
+  createGitHubRepo,
+  syncWithGitHub,
+  pushToGitHub,
+  isGitHubWorkspace,
+  getGitHubInfo,
   initialize,
   get,
   deleteById,
@@ -89,6 +96,8 @@ export {
   refresh as refreshWorkspace,
   type SeedFile,
   type CreateFreshOptions,
+  type CreateFromGitHubOptions,
+  type CreateGitHubRepoOptions,
 } from './manager.js';
 
 // Templates for seeding workspaces

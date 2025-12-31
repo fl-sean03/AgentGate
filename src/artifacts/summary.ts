@@ -29,6 +29,12 @@ export function generateRunSummary(
     case 'fresh':
       workspacePath = workOrder.workspaceSource.destPath;
       break;
+    case 'github':
+      workspacePath = `github:${workOrder.workspaceSource.owner}/${workOrder.workspaceSource.repo}`;
+      break;
+    case 'github-new':
+      workspacePath = `github:${workOrder.workspaceSource.owner}/${workOrder.workspaceSource.repoName}`;
+      break;
   }
 
   return {

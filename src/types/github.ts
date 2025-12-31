@@ -144,44 +144,11 @@ export const createPullRequestOptionsSchema = z.object({
 export type CreatePullRequestOptions = z.infer<typeof createPullRequestOptionsSchema>;
 
 // ============================================================================
-// GitHub Workspace Source Types
-// ============================================================================
-
-/**
- * Workspace source for existing GitHub repository
- */
-export const gitHubSourceSchema = z.object({
-  type: z.literal('github'),
-  /** Repository owner (user or organization) */
-  owner: z.string(),
-  /** Repository name */
-  repo: z.string(),
-  /** Branch to use (defaults to default branch) */
-  branch: z.string().optional(),
-});
-
-export type GitHubSource = z.infer<typeof gitHubSourceSchema>;
-
-/**
- * Workspace source for creating a new GitHub repository
- */
-export const gitHubNewSourceSchema = z.object({
-  type: z.literal('github-new'),
-  /** Repository owner (user or organization) */
-  owner: z.string(),
-  /** New repository name */
-  repoName: z.string(),
-  /** Whether to create as private repository */
-  private: z.boolean().optional().default(false),
-  /** Template to use for initial files */
-  template: z.enum(['minimal', 'typescript', 'python']).optional(),
-});
-
-export type GitHubNewSource = z.infer<typeof gitHubNewSourceSchema>;
-
-// ============================================================================
 // GitHub Error Types
 // ============================================================================
+
+// Note: GitHubSource and GitHubNewSource are defined in work-order.ts
+// to keep all WorkspaceSource types together
 
 /**
  * GitHub API error codes

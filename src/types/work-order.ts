@@ -39,20 +39,38 @@ export type WorkspaceTemplate = (typeof WorkspaceTemplate)[keyof typeof Workspac
 
 // Workspace Source
 export const workspaceSourceSchema = z.discriminatedUnion('type', [
+  // Local source - existing directory
   z.object({
     type: z.literal('local'),
     path: z.string().min(1),
   }),
+  // Git source - clone from URL (deprecated, use 'github' instead)
   z.object({
     type: z.literal('git'),
     url: z.string().url(),
     branch: z.string().optional(),
   }),
+  // Fresh source - create new workspace (deprecated, use 'github-new' instead)
   z.object({
     type: z.literal('fresh'),
     destPath: z.string().min(1),
     template: z.nativeEnum(WorkspaceTemplate).optional(),
     projectName: z.string().optional(),
+  }),
+  // GitHub source - existing GitHub repository (v0.2.4)
+  z.object({
+    type: z.literal('github'),
+    owner: z.string().min(1),
+    repo: z.string().min(1),
+    branch: z.string().optional(),
+  }),
+  // GitHub New source - create new GitHub repository (v0.2.4)
+  z.object({
+    type: z.literal('github-new'),
+    owner: z.string().min(1),
+    repoName: z.string().min(1),
+    private: z.boolean().optional(),
+    template: z.nativeEnum(WorkspaceTemplate).optional(),
   }),
 ]);
 
@@ -62,6 +80,8 @@ export type WorkspaceSource = z.infer<typeof workspaceSourceSchema>;
 export type LocalSource = Extract<WorkspaceSource, { type: 'local' }>;
 export type GitSource = Extract<WorkspaceSource, { type: 'git' }>;
 export type FreshSource = Extract<WorkspaceSource, { type: 'fresh' }>;
+export type GitHubSource = Extract<WorkspaceSource, { type: 'github' }>;
+export type GitHubNewSource = Extract<WorkspaceSource, { type: 'github-new' }>;
 
 // Execution Policies
 export const executionPoliciesSchema = z.object({
