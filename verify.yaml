@@ -22,7 +22,15 @@ contracts:
     - "**/service-account*.json"
 
 # Level 1: Test commands (MUST ALL PASS)
+# CI-aware: extract additional test commands from GitHub Actions workflows
 tests:
+  useGitHubCI: true
+  workflowPath: .github/workflows/ci.yml
+  extractJobs:
+    - lint
+    - typecheck
+    - test
+    - build
   - name: shared-typecheck
     command: pnpm --filter @agentgate/shared typecheck
     description: Shared types compilation
