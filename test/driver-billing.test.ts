@@ -153,9 +153,12 @@ describe('Driver Billing Method Verification', () => {
         expect(status?.available).toBe(true);
         expect(['pro', 'max']).toContain(status?.subscriptionType);
       } else {
-        // If not available, status explains why
-        expect(status).not.toBeNull();
-        // Either no credentials or invalid subscription
+        // If not available, status may be null (CLI not installed) or explain why
+        if (status !== null) {
+          // Status exists but subscription not available
+          expect(status.available).toBe(false);
+        }
+        // If status is null, Claude CLI is not installed - this is valid in CI
       }
     });
   });
