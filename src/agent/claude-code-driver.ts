@@ -44,6 +44,7 @@ export class ClaudeCodeDriver implements AgentDriver {
   /**
    * Checks if the Claude CLI is available
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Interface requires Promise, execSync is sync
   async isAvailable(): Promise<boolean> {
     try {
       const output = execSync(`${this.config.binaryPath} --version`, {
@@ -114,7 +115,6 @@ export class ClaudeCodeDriver implements AgentDriver {
       let stdout = '';
       let stderr = '';
       let timedOut = false;
-      let killed = false;
 
       // Set up timeout handler
       const timeoutId = setTimeout(() => {
@@ -179,7 +179,6 @@ export class ClaudeCodeDriver implements AgentDriver {
         }
 
         if (signal) {
-          killed = true;
           logger.warn({ signal }, 'Claude Code process was killed');
 
           resolve({

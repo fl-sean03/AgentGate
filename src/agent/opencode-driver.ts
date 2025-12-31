@@ -139,7 +139,7 @@ export class OpenCodeDriver implements AgentDriver {
         // Configure authentication based on OPENCODE_PROVIDER
         // Note: OpenCode has internal model routing bugs with OpenAI (tries to use gpt-5-nano)
         // Anthropic works correctly with OpenCode's internal agents
-        const provider = process.env.OPENCODE_PROVIDER || 'anthropic';
+        const provider = process.env.OPENCODE_PROVIDER ?? 'anthropic';
         if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
           logger.debug('Setting up Anthropic authentication for OpenCode');
           await this.client.auth.set({
@@ -202,14 +202,14 @@ export class OpenCodeDriver implements AgentDriver {
       );
 
       // Determine the model to use from OPENCODE_* env vars, falling back to provider defaults
-      const providerID = process.env.OPENCODE_PROVIDER || 'openai';
+      const providerID = process.env.OPENCODE_PROVIDER ?? 'openai';
       let modelID: string;
       if (process.env.OPENCODE_MODEL) {
         modelID = process.env.OPENCODE_MODEL;
       } else if (providerID === 'openai') {
-        modelID = process.env.OPENAI_API_MODEL || 'gpt-4o';
+        modelID = process.env.OPENAI_API_MODEL ?? 'gpt-4o';
       } else {
-        modelID = process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
+        modelID = process.env.CLAUDE_MODEL ?? 'claude-sonnet-4-20250514';
       }
       const model = { providerID, modelID };
 
@@ -259,15 +259,15 @@ export class OpenCodeDriver implements AgentDriver {
           query: { directory: request.workspacePath },
         });
 
-        const messages = messagesCheck.data || [];
+        const messages = messagesCheck.data ?? [];
         const lastMessage = messages[messages.length - 1];
 
         // Session is complete if:
         // 1. Last message is from assistant
         // 2. Last message has a completion timestamp (info.time.completed)
-        const isComplete =
-          lastMessage?.info?.role === 'assistant' &&
-          lastMessage?.info?.time?.completed != null;
+        const timeInfo = lastMessage?.info?.time;
+        const hasCompleted = timeInfo != null && 'completed' in timeInfo && timeInfo.completed != null;
+        const isComplete = lastMessage?.info?.role === 'assistant' && hasCompleted;
 
         // Log status every 5 polls
         if (pollCount % 5 === 1) {
@@ -277,7 +277,7 @@ export class OpenCodeDriver implements AgentDriver {
               elapsed: Date.now() - pollStartTime,
               messageCount: messages.length,
               lastRole: lastMessage?.info?.role,
-              hasCompleted: lastMessage?.info?.time?.completed != null,
+              hasCompleted,
               isComplete,
             },
             'Polling session completion'
@@ -397,6 +397,7 @@ export class OpenCodeDriver implements AgentDriver {
   /**
    * Cleanup method to close the server
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Implements async interface, server.close() is sync
   async dispose(): Promise<void> {
     if (this.server) {
       logger.debug('Closing OpenCode server');

@@ -9,7 +9,6 @@ import type {
   HookCallbackMatcher,
   PreToolUseHookInput,
   PostToolUseHookInput,
-  HookJSONOutput,
 } from '@anthropic-ai/claude-agent-sdk';
 
 /**
@@ -36,6 +35,7 @@ export function createToolLoggingHook(handler: ToolEventHandler): {
   preHook: HookCallback;
   postHook: HookCallback;
 } {
+  // eslint-disable-next-line @typescript-eslint/require-await -- SDK callback signature requires async
   const preHook: HookCallback = async (input, _toolUseId) => {
     const preInput = input as PreToolUseHookInput;
     handler({
@@ -47,6 +47,7 @@ export function createToolLoggingHook(handler: ToolEventHandler): {
     return {};
   };
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- SDK callback signature requires async
   const postHook: HookCallback = async (input, _toolUseId) => {
     const postInput = input as PostToolUseHookInput;
     handler({
@@ -68,6 +69,7 @@ export function createToolLoggingHook(handler: ToolEventHandler): {
 export function createFileChangeHook(
   onFileChange: (filePath: string, action: 'edit' | 'write') => void
 ): HookCallbackMatcher {
+  // eslint-disable-next-line @typescript-eslint/require-await -- SDK callback signature requires async
   const hook: HookCallback = async (input, _toolUseId) => {
     const postInput = input as PostToolUseHookInput;
     const filePath = (postInput.tool_input as { file_path?: string })?.file_path;
@@ -92,6 +94,7 @@ export function createFileChangeHook(
 export function createBlockingHook(
   patterns: Array<{ tool: string; pattern: RegExp; reason: string }>
 ): HookCallbackMatcher {
+  // eslint-disable-next-line @typescript-eslint/require-await -- SDK callback signature requires async
   const hook: HookCallback = async (input, _toolUseId) => {
     const preInput = input as PreToolUseHookInput;
     const toolName = preInput.tool_name;

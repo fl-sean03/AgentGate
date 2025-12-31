@@ -5,7 +5,7 @@
  * Codex is OpenAI's coding agent that can read, change, and run code.
  */
 
-import { Codex, type ThreadEvent, type RunResult, type Usage } from '@openai/codex-sdk';
+import { Codex, type RunResult } from '@openai/codex-sdk';
 import type {
   AgentDriver,
   AgentRequest,
@@ -71,6 +71,7 @@ export class OpenAICodexDriver implements AgentDriver {
   /**
    * Checks if the Codex SDK is available
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Interface requires Promise, check is sync
   async isAvailable(): Promise<boolean> {
     // Check for API key
     if (!process.env.OPENAI_API_KEY) {

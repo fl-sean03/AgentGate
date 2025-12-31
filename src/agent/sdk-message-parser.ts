@@ -13,6 +13,44 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 
 /**
+ * Content block types from the SDK (not fully typed in SDK)
+ */
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: unknown;
+  is_error?: boolean;
+}
+
+interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+type ContentBlock = ToolUseBlock | ToolResultBlock | TextBlock | { type: string };
+
+/**
+ * Type guard for tool_use block
+ */
+function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
+  return block.type === 'tool_use' && 'id' in block && 'name' in block;
+}
+
+/**
+ * Type guard for tool_result block
+ */
+function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
+  return block.type === 'tool_result' && 'tool_use_id' in block;
+}
+
+/**
  * Type guard for system init message
  */
 export function isSystemMessage(msg: SDKMessage): msg is SDKSystemMessage {
@@ -103,9 +141,12 @@ export function extractToolUses(
 ): Array<{ id: string; name: string; input: unknown }> {
   const toolUses: Array<{ id: string; name: string; input: unknown }> = [];
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- SDK type is not fully typed
   if (msg.message?.content) {
-    for (const block of msg.message.content) {
-      if (block.type === 'tool_use') {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- SDK type is not fully typed
+    const content = msg.message.content as ContentBlock[];
+    for (const block of content) {
+      if (isToolUseBlock(block)) {
         toolUses.push({
           id: block.id,
           name: block.name,
@@ -148,13 +189,16 @@ export class MessageCollector {
       }
     } else if (isUserMessage(msg)) {
       // Match tool results to tool uses
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- SDK type is not fully typed
       if (msg.message?.content) {
-        for (const block of msg.message.content) {
-          if (block.type === 'tool_result' && 'tool_use_id' in block) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- SDK type is not fully typed
+        const content = msg.message.content as ContentBlock[];
+        for (const block of content) {
+          if (isToolResultBlock(block)) {
             const existing = this.toolCalls.get(block.tool_use_id);
             if (existing) {
               existing.output = block.content;
-              if ('is_error' in block && block.is_error) {
+              if (block.is_error) {
                 existing.error = String(block.content);
               }
             }
@@ -202,6 +246,7 @@ export class MessageCollector {
       numTurns: result.num_turns,
       durationMs: result.duration_ms,
       durationApiMs: result.duration_api_ms,
+      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- SDK usage type is not fully typed */
       tokensUsed: result.usage
         ? {
             input: result.usage.input_tokens ?? 0,
@@ -210,6 +255,7 @@ export class MessageCollector {
             cacheRead: result.usage.cache_read_input_tokens ?? 0,
           }
         : null,
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
       totalCostUsd: result.total_cost_usd ?? 0,
       toolCalls: Array.from(this.toolCalls.values()),
       errors: 'errors' in result ? result.errors : [],

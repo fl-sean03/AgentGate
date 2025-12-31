@@ -57,7 +57,7 @@ const AGENTS_SDK_CAPABILITIES: DriverCapabilities = {
 /**
  * Creates workspace-scoped file tools for the agent
  */
-function createFileTools(workspacePath: string) {
+function createFileTools(workspacePath: string): ReturnType<typeof tool>[] {
   const readFileTool = tool({
     name: 'read_file',
     description: 'Read the contents of a file',
@@ -166,6 +166,7 @@ export class OpenAIAgentsDriver implements AgentDriver {
   /**
    * Checks if the Agents SDK is available
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Interface requires Promise, check is sync
   async isAvailable(): Promise<boolean> {
     // Check for API key
     if (!process.env.OPENAI_API_KEY) {
@@ -258,6 +259,7 @@ export class OpenAIAgentsDriver implements AgentDriver {
     const durationMs = Date.now() - startTime;
 
     // Build result
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment -- SDK return type is not fully typed
     const finalOutput = result?.finalOutput ?? '';
     const agentResult: AgentsSDKResult = {
       success: !lastError && !!finalOutput,

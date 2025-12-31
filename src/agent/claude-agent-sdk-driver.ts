@@ -4,7 +4,7 @@
  * Agent driver implementation using the official Claude Agent SDK.
  */
 
-import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import type {
   AgentDriver,
   AgentRequest,
@@ -68,6 +68,7 @@ export class ClaudeAgentSDKDriver implements AgentDriver {
   /**
    * Checks if the SDK is available
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- Interface requires Promise, check is sync
   async isAvailable(): Promise<boolean> {
     try {
       // Try a simple query to check availability
