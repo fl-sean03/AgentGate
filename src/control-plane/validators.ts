@@ -116,6 +116,10 @@ export const submitCommandOptionsSchema = z.object({
   fresh: z.string().optional(), // Path for fresh workspace
   template: z.nativeEnum(WorkspaceTemplate).optional(),
   projectName: z.string().optional(),
+  // GitHub options (v0.2.4)
+  github: z.string().optional(), // owner/repo for existing repo
+  githubNew: z.string().optional(), // owner/repo for new repo
+  private: z.boolean().default(false), // For github-new
   agent: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE),
   maxIterations: z.coerce.number().int().min(1).max(10).default(3),
   maxTime: z.coerce.number().int().min(60).max(86400).default(3600),
@@ -174,6 +178,21 @@ export interface WorkspaceSourceOptions {
   fresh?: string | undefined;
   template?: WorkspaceTemplate | undefined;
   projectName?: string | undefined;
+  // GitHub options (v0.2.4)
+  github?: string | undefined; // owner/repo for existing repo
+  githubNew?: string | undefined; // owner/repo for new repo
+  private?: boolean | undefined; // For github-new
+}
+
+/**
+ * Parse owner/repo string into owner and repo parts
+ */
+function parseOwnerRepo(input: string): { owner: string; repo: string } | null {
+  const parts = input.split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return null;
+  }
+  return { owner: parts[0], repo: parts[1] };
 }
 
 /**
@@ -182,7 +201,46 @@ export interface WorkspaceSourceOptions {
 export function parseWorkspaceSource(
   options: WorkspaceSourceOptions
 ): z.infer<typeof workspaceSourceSchema> {
-  // Fresh workspace takes priority
+  // GitHub-new takes priority (v0.2.4)
+  if (options.githubNew) {
+    const parsed = parseOwnerRepo(options.githubNew);
+    if (!parsed) {
+      // Will be caught by validation
+      return {
+        type: 'github-new',
+        owner: '',
+        repoName: '',
+      };
+    }
+    return {
+      type: 'github-new',
+      owner: parsed.owner,
+      repoName: parsed.repo,
+      private: options.private,
+      template: options.template,
+    };
+  }
+
+  // GitHub existing repo (v0.2.4)
+  if (options.github) {
+    const parsed = parseOwnerRepo(options.github);
+    if (!parsed) {
+      // Will be caught by validation
+      return {
+        type: 'github',
+        owner: '',
+        repo: '',
+      };
+    }
+    return {
+      type: 'github',
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch: options.gitBranch,
+    };
+  }
+
+  // Fresh workspace
   if (options.fresh) {
     return {
       type: 'fresh',
@@ -220,8 +278,14 @@ export function parseWorkspaceSource(
 export function validateWorkspaceSourceOptions(
   options: WorkspaceSourceOptions
 ): ValidationResult<z.infer<typeof workspaceSourceSchema>> {
-  // Count how many source types are specified
-  const sourceCount = [options.path, options.gitUrl, options.fresh].filter(Boolean).length;
+  // Count how many source types are specified (v0.2.4: added github options)
+  const sourceCount = [
+    options.path,
+    options.gitUrl,
+    options.fresh,
+    options.github,
+    options.githubNew,
+  ].filter(Boolean).length;
 
   if (sourceCount > 1) {
     return {
@@ -229,39 +293,101 @@ export function validateWorkspaceSourceOptions(
       errors: [
         {
           path: '',
-          message: 'Cannot specify more than one of --path, --git-url, or --fresh',
+          message: 'Cannot specify more than one of --path, --git-url, --fresh, --github, or --github-new',
           code: 'custom',
         },
       ],
     };
   }
 
-  // gitBranch without gitUrl
-  if (options.gitBranch && !options.gitUrl) {
+  // gitBranch requires gitUrl or github
+  if (options.gitBranch && !options.gitUrl && !options.github) {
     return {
       success: false,
       errors: [
         {
           path: 'gitBranch',
-          message: '--git-branch requires --git-url',
+          message: '--git-branch requires --git-url or --github',
           code: 'custom',
         },
       ],
     };
   }
 
-  // template or projectName without fresh
-  if ((options.template ?? options.projectName) && !options.fresh) {
+  // template requires fresh or github-new
+  if (options.template && !options.fresh && !options.githubNew) {
     return {
       success: false,
       errors: [
         {
           path: 'template',
-          message: '--template and --project-name require --fresh',
+          message: '--template requires --fresh or --github-new',
           code: 'custom',
         },
       ],
     };
+  }
+
+  // projectName only works with fresh
+  if (options.projectName && !options.fresh) {
+    return {
+      success: false,
+      errors: [
+        {
+          path: 'projectName',
+          message: '--project-name requires --fresh',
+          code: 'custom',
+        },
+      ],
+    };
+  }
+
+  // private only works with github-new
+  if (options.private && !options.githubNew) {
+    return {
+      success: false,
+      errors: [
+        {
+          path: 'private',
+          message: '--private requires --github-new',
+          code: 'custom',
+        },
+      ],
+    };
+  }
+
+  // Validate github format (owner/repo)
+  if (options.github) {
+    const parsed = parseOwnerRepo(options.github);
+    if (!parsed) {
+      return {
+        success: false,
+        errors: [
+          {
+            path: 'github',
+            message: 'Invalid format. Expected: owner/repo',
+            code: 'custom',
+          },
+        ],
+      };
+    }
+  }
+
+  // Validate github-new format (owner/repo)
+  if (options.githubNew) {
+    const parsed = parseOwnerRepo(options.githubNew);
+    if (!parsed) {
+      return {
+        success: false,
+        errors: [
+          {
+            path: 'githubNew',
+            message: 'Invalid format. Expected: owner/repo',
+            code: 'custom',
+          },
+        ],
+      };
+    }
   }
 
   const source = parseWorkspaceSource(options);

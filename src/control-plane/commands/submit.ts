@@ -28,13 +28,17 @@ export function createSubmitCommand(): Command {
     .requiredOption('-p, --prompt <prompt>', 'Task prompt describing what the agent should do')
     .option('--path <path>', 'Local path to the workspace (default: current directory)')
     .option('--git-url <url>', 'Git repository URL to clone')
-    .option('--git-branch <branch>', 'Git branch to checkout (requires --git-url)')
+    .option('--git-branch <branch>', 'Git branch to checkout (requires --git-url or --github)')
     .option('--fresh <path>', 'Create a fresh workspace at the specified path')
     .option(
       '--template <type>',
       `Template for fresh workspace (${Object.values(WorkspaceTemplate).join(', ')})`,
     )
     .option('--project-name <name>', 'Project name for fresh workspace')
+    // GitHub options (v0.2.4)
+    .option('--github <owner/repo>', 'Use an existing GitHub repository')
+    .option('--github-new <owner/repo>', 'Create a new GitHub repository')
+    .option('--private', 'Make the new GitHub repository private (requires --github-new)', false)
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
