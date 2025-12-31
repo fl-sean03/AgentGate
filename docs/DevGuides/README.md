@@ -261,6 +261,8 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
+| [v0.2.4](./DevGuide_v0.2.4/00-index.md) | **GitHub-Backed Workspaces** | In Progress | Connect workspaces to GitHub repos, branch-per-run, auto PR creation |
+| [v0.2.3](./DevGuide_v0.2.3/00-index.md) | **Complete Lint Cleanup** | Complete | Zero lint errors across entire codebase |
 | [v0.2.2](./DevGuide_v0.2.2/00-index.md) | **Technical Debt Cleanup** | Complete | Fixed TypeScript/ESLint errors in agent module, updated package version |
 | [v0.2.1](./DevGuide_v0.2.1/00-index.md) | **Multi-Agent Driver Support** | Complete | Added OpenAI Codex, OpenAI Agents, OpenCode SDK drivers |
 | [v0.2.0](./DevGuide_v0.2.0/00-index.md) | **Claude Agent SDK Integration** | Complete | Added Claude Agent SDK driver as primary agent backend |

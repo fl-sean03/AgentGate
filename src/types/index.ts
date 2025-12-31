@@ -107,3 +107,28 @@ export {
   type RetentionPolicy,
   type DaemonStatus,
 } from './summary.js';
+
+// GitHub Types
+export {
+  gitHubConfigSchema,
+  gitHubRepositorySchema,
+  gitHubAuthResultSchema,
+  gitHubPullRequestSchema,
+  gitHubSourceSchema,
+  gitHubNewSourceSchema,
+  createRepositoryOptionsSchema,
+  createPullRequestOptionsSchema,
+  PullRequestState,
+  GitHubError,
+  GitHubErrorCode,
+  type GitHubConfig,
+  type GitHubRepository,
+  type GitHubAuthResult,
+  type GitHubPullRequest,
+  type GitHubSource,
+  type GitHubNewSource,
+  type CreateRepositoryOptions,
+  type CreatePullRequestOptions,
+  type PushResult,
+  type PullResult,
+} from './github.js';

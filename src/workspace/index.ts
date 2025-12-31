@@ -13,6 +13,25 @@ export {
   checkout,
   getChangedFiles,
   exportArchive,
+  // Remote operations (v0.2.4)
+  hasRemote,
+  addRemote,
+  setRemoteUrl,
+  getRemoteUrl,
+  removeRemote,
+  // Push/Pull operations (v0.2.4)
+  push,
+  pull,
+  fetch,
+  // Branch operations (v0.2.4)
+  branchExists,
+  createAndPushBranch,
+  getRemoteBranches,
+  getCurrentBranch,
+  hasUpstream,
+  type PushOptions,
+  type PushResult,
+  type PullResult,
 } from './git-ops.js';
 
 // Workspace store
@@ -83,6 +102,23 @@ export {
   type TemplateVars,
 } from './templates.js';
 
+// GitHub operations (v0.2.4)
+export {
+  createGitHubClient,
+  getGitHubConfigFromEnv,
+  validateAuth,
+  repositoryExists,
+  getRepository,
+  createRepository,
+  createPullRequest,
+  getPullRequest,
+  getAuthenticatedRemoteUrl,
+  stripTokenFromUrl,
+  parseGitHubUrl,
+  buildGitHubUrl,
+  buildCloneUrl,
+} from './github.js';
+
 // Convenience namespace for manager operations
 export * as workspaceManager from './manager.js';
 export * as leaseManager from './lease.js';
@@ -90,3 +126,4 @@ export * as gitOps from './git-ops.js';
 export * as pathPolicy from './path-policy.js';
 export * as checkoutOps from './checkout.js';
 export * as templates from './templates.js';
+export * as gitHub from './github.js';

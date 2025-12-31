@@ -156,3 +156,238 @@ export async function exportArchive(
   await git.raw(['archive', '--format=tar', sha, '--output', `${dest}.tar`]);
   log.debug({ path, sha, dest }, 'Exported archive');
 }
+
+// ============================================================================
+// Remote Operations (Added in v0.2.4)
+// ============================================================================
+
+/**
+ * Check if a remote exists
+ */
+export async function hasRemote(path: string, name: string): Promise<boolean> {
+  const git = getGit(path);
+  const remotes = await git.getRemotes();
+  return remotes.some((r) => r.name === name);
+}
+
+/**
+ * Add a remote to the repository
+ */
+export async function addRemote(
+  path: string,
+  name: string,
+  url: string
+): Promise<void> {
+  const git = getGit(path);
+  await git.addRemote(name, url);
+  log.debug({ path, name }, 'Added remote');
+}
+
+/**
+ * Set (update) the URL of an existing remote
+ */
+export async function setRemoteUrl(
+  path: string,
+  name: string,
+  url: string
+): Promise<void> {
+  const git = getGit(path);
+  await git.remote(['set-url', name, url]);
+  log.debug({ path, name }, 'Updated remote URL');
+}
+
+/**
+ * Get the URL of a remote
+ */
+export async function getRemoteUrl(
+  path: string,
+  name: string
+): Promise<string | null> {
+  const git = getGit(path);
+  const remotes = await git.getRemotes(true);
+  const remote = remotes.find((r) => r.name === name);
+  return remote?.refs.fetch ?? null;
+}
+
+/**
+ * Remove a remote
+ */
+export async function removeRemote(path: string, name: string): Promise<void> {
+  const git = getGit(path);
+  await git.removeRemote(name);
+  log.debug({ path, name }, 'Removed remote');
+}
+
+// ============================================================================
+// Push/Pull Operations (Added in v0.2.4)
+// ============================================================================
+
+export interface PushOptions {
+  /** Force push (use with caution) */
+  force?: boolean;
+  /** Set upstream tracking */
+  setUpstream?: boolean;
+}
+
+export interface PushResult {
+  success: boolean;
+  remoteRef: string;
+  localBranch: string;
+}
+
+/**
+ * Push a branch to a remote
+ */
+export async function push(
+  path: string,
+  remote: string,
+  branch: string,
+  options: PushOptions = {}
+): Promise<PushResult> {
+  const git = getGit(path);
+  const args: string[] = [];
+
+  if (options.force) {
+    args.push('--force');
+  }
+  if (options.setUpstream) {
+    args.push('-u');
+  }
+
+  await git.push(remote, branch, args);
+
+  log.info({ path, remote, branch, force: options.force }, 'Pushed to remote');
+
+  return {
+    success: true,
+    remoteRef: `${remote}/${branch}`,
+    localBranch: branch,
+  };
+}
+
+export interface PullResult {
+  success: boolean;
+  commits: number;
+  filesChanged: number;
+}
+
+/**
+ * Pull from a remote
+ */
+export async function pull(
+  path: string,
+  remote: string,
+  branch: string
+): Promise<PullResult> {
+  const git = getGit(path);
+  const result = await git.pull(remote, branch);
+
+  log.info({ path, remote, branch, files: result.files?.length ?? 0 }, 'Pulled from remote');
+
+  return {
+    success: true,
+    commits: result.summary?.changes ?? 0,
+    filesChanged: result.files?.length ?? 0,
+  };
+}
+
+/**
+ * Fetch from a remote
+ */
+export async function fetch(
+  path: string,
+  remote: string,
+  branch?: string
+): Promise<void> {
+  const git = getGit(path);
+
+  if (branch) {
+    await git.fetch(remote, branch);
+  } else {
+    await git.fetch(remote);
+  }
+
+  log.debug({ path, remote, branch }, 'Fetched from remote');
+}
+
+// ============================================================================
+// Branch Operations (Added in v0.2.4)
+// ============================================================================
+
+/**
+ * Check if a branch exists (locally or remotely)
+ */
+export async function branchExists(
+  path: string,
+  branchName: string,
+  checkRemote?: string
+): Promise<boolean> {
+  const git = getGit(path);
+
+  if (checkRemote) {
+    // Check remote branch
+    const branches = await git.branch(['-r']);
+    const remoteBranch = `${checkRemote}/${branchName}`;
+    return branches.all.includes(remoteBranch);
+  } else {
+    // Check local branch
+    const branches = await git.branchLocal();
+    return branches.all.includes(branchName);
+  }
+}
+
+/**
+ * Create a branch and push it to remote
+ */
+export async function createAndPushBranch(
+  path: string,
+  branchName: string,
+  remote: string
+): Promise<void> {
+  const git = getGit(path);
+
+  // Create and checkout the branch
+  await git.checkoutLocalBranch(branchName);
+
+  // Push with upstream tracking
+  await push(path, remote, branchName, { setUpstream: true });
+
+  log.info({ path, branchName, remote }, 'Created and pushed branch');
+}
+
+/**
+ * Get list of remote branches
+ */
+export async function getRemoteBranches(
+  path: string,
+  remote: string
+): Promise<string[]> {
+  const git = getGit(path);
+  const branches = await git.branch(['-r']);
+
+  return branches.all
+    .filter((b) => b.startsWith(`${remote}/`))
+    .map((b) => b.replace(`${remote}/`, ''));
+}
+
+/**
+ * Get the current branch name
+ */
+export async function getCurrentBranch(path: string): Promise<string> {
+  const git = getGit(path);
+  const branch = await git.revparse(['--abbrev-ref', 'HEAD']);
+  return branch.trim();
+}
+
+/**
+ * Check if the current branch has an upstream set
+ */
+export async function hasUpstream(path: string): Promise<boolean> {
+  const git = getGit(path);
+  try {
+    await git.revparse(['--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    return true;
+  } catch {
+    return false;
+  }
+}
