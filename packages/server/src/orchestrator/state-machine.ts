@@ -39,11 +39,24 @@ const transitions: Record<RunState, Partial<Record<RunEvent, RunState>>> = {
     [RunEvent.VERIFY_PASSED]: RunState.SUCCEEDED,
     [RunEvent.VERIFY_FAILED_RETRYABLE]: RunState.FEEDBACK,
     [RunEvent.VERIFY_FAILED_TERMINAL]: RunState.FAILED,
+    [RunEvent.PR_CREATED]: RunState.PR_CREATED,
     [RunEvent.USER_CANCELED]: RunState.CANCELED,
     [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
   },
   [RunState.FEEDBACK]: {
     [RunEvent.FEEDBACK_GENERATED]: RunState.BUILDING,
+    [RunEvent.USER_CANCELED]: RunState.CANCELED,
+    [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
+  },
+  [RunState.PR_CREATED]: {
+    [RunEvent.CI_POLLING_STARTED]: RunState.CI_POLLING,
+    [RunEvent.USER_CANCELED]: RunState.CANCELED,
+    [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
+  },
+  [RunState.CI_POLLING]: {
+    [RunEvent.CI_PASSED]: RunState.SUCCEEDED,
+    [RunEvent.CI_FAILED]: RunState.FEEDBACK,
+    [RunEvent.CI_TIMEOUT]: RunState.FAILED,
     [RunEvent.USER_CANCELED]: RunState.CANCELED,
     [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
   },
@@ -165,6 +178,10 @@ export function getProgressDescription(run: Run): string {
       return `Verifying (iteration ${run.iteration}/${run.maxIterations})`;
     case RunState.FEEDBACK:
       return `Generating feedback (iteration ${run.iteration}/${run.maxIterations})`;
+    case RunState.PR_CREATED:
+      return 'Pull request created';
+    case RunState.CI_POLLING:
+      return 'Waiting for CI checks to complete';
     case RunState.SUCCEEDED:
       return 'Completed successfully';
     case RunState.FAILED:

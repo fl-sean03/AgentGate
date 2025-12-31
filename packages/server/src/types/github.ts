@@ -215,3 +215,78 @@ export interface PullResult {
   /** Whether there were merge conflicts */
   hasConflicts: boolean;
 }
+
+// ============================================================================
+// CI Status Types
+// ============================================================================
+
+/**
+ * CI check status
+ */
+export const CIStatus = {
+  PENDING: 'pending',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+} as const;
+
+export type CIStatus = (typeof CIStatus)[keyof typeof CIStatus];
+
+/**
+ * CI check conclusion
+ */
+export const CIConclusion = {
+  SUCCESS: 'success',
+  FAILURE: 'failure',
+  CANCELLED: 'cancelled',
+  SKIPPED: 'skipped',
+  NEUTRAL: 'neutral',
+  TIMED_OUT: 'timed_out',
+  ACTION_REQUIRED: 'action_required',
+} as const;
+
+export type CIConclusion = (typeof CIConclusion)[keyof typeof CIConclusion];
+
+/**
+ * Individual check run result
+ */
+export interface CheckRunResult {
+  /** Check run ID */
+  id: number;
+  /** Check run name */
+  name: string;
+  /** Check status */
+  status: CIStatus;
+  /** Check conclusion (only present when status is 'completed') */
+  conclusion: CIConclusion | null;
+  /** URL to the check run details */
+  detailsUrl: string | null;
+  /** Error message or output summary */
+  output: {
+    title: string | null;
+    summary: string | null;
+  } | null;
+}
+
+/**
+ * Aggregated CI status result
+ */
+export interface CIStatusResult {
+  /** Overall status */
+  status: CIStatus;
+  /** Overall conclusion (only present when all checks completed) */
+  conclusion: CIConclusion | null;
+  /** Individual check runs */
+  checkRuns: CheckRunResult[];
+  /** Total number of checks */
+  totalCount: number;
+  /** Number of pending checks */
+  pendingCount: number;
+  /** Number of running checks */
+  runningCount: number;
+  /** Number of completed checks */
+  completedCount: number;
+  /** Whether all checks passed */
+  allPassed: boolean;
+  /** Whether any checks failed */
+  anyFailed: boolean;
+}

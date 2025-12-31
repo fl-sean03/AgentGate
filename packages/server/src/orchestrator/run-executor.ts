@@ -102,6 +102,12 @@ export interface RunExecutorOptions {
     run: Run,
     verificationReport: VerificationReport
   ) => Promise<{ prUrl: string; prNumber: number } | null>;
+  onPollCI?: (
+    workspace: Workspace,
+    run: Run,
+    prUrl: string,
+    branchRef: string
+  ) => Promise<{ success: boolean; feedback?: string }>;
 }
 
 /**
@@ -129,6 +135,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     onVerificationComplete,
     onPushIteration,
     onCreatePullRequest,
+    onPollCI,
   } = options;
 
   const runId = randomUUID();
@@ -296,9 +303,6 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
 
       if (verificationReport.passed) {
         log.info({ runId, iteration }, 'Verification passed');
-        run = applyTransition(run, RunEvent.VERIFY_PASSED);
-        await saveRun(run);
-        onStateChange?.(run);
 
         // CREATE PULL REQUEST (GitHub integration v0.2.4)
         if (onCreatePullRequest) {
@@ -307,8 +311,75 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
             if (prResult) {
               run.gitHubPrUrl = prResult.prUrl;
               run.gitHubPrNumber = prResult.prNumber;
+              run = applyTransition(run, RunEvent.PR_CREATED);
               await saveRun(run);
+              onStateChange?.(run);
               log.info({ runId, prUrl: prResult.prUrl, prNumber: prResult.prNumber }, 'Pull request created');
+
+              // CI POLLING (Thrust 16)
+              if (onPollCI && run.gitHubBranch) {
+                const gitHubBranch = run.gitHubBranch; // Store to ensure non-null
+                log.info({ runId, branch: gitHubBranch }, 'Starting CI polling');
+                run = applyTransition(run, RunEvent.CI_POLLING_STARTED);
+                await saveRun(run);
+                onStateChange?.(run);
+
+                try {
+                  const ciResult = await onPollCI(workspace, run, prResult.prUrl, gitHubBranch);
+
+                  if (ciResult.success) {
+                    log.info({ runId }, 'CI checks passed');
+                    run = applyTransition(run, RunEvent.CI_PASSED);
+                    await saveRun(run);
+                    onStateChange?.(run);
+                    break;
+                  } else {
+                    log.warn({ runId }, 'CI checks failed, generating feedback');
+                    run = applyTransition(run, RunEvent.CI_FAILED);
+                    await saveRun(run);
+                    onStateChange?.(run);
+
+                    // Set feedback for next iteration
+                    feedback = ciResult.feedback ?? 'CI checks failed. Please review and fix the issues.';
+
+                    // Check if we have more iterations
+                    if (iteration >= run.maxIterations) {
+                      log.warn({ runId, iteration }, 'Max iterations reached after CI failure');
+                      run = applyTransition(run, RunEvent.VERIFY_FAILED_TERMINAL);
+                      run.result = RunResult.FAILED_VERIFICATION;
+                      run.error = 'Max iterations reached - CI checks did not pass';
+                      await saveRun(run);
+                      onStateChange?.(run);
+                      break;
+                    }
+
+                    // Continue to next iteration with feedback
+                    run.iteration++;
+                    await saveRun(run);
+                    continue;
+                  }
+                } catch (ciError) {
+                  log.error({ runId, error: ciError }, 'CI polling error');
+                  run = applyTransition(run, RunEvent.CI_TIMEOUT);
+                  run.result = RunResult.FAILED_ERROR;
+                  run.error = ciError instanceof Error ? ciError.message : String(ciError);
+                  await saveRun(run);
+                  onStateChange?.(run);
+                  break;
+                }
+              } else {
+                // No CI polling configured, mark as succeeded
+                run = applyTransition(run, RunEvent.VERIFY_PASSED);
+                await saveRun(run);
+                onStateChange?.(run);
+                break;
+              }
+            } else {
+              // PR creation returned null, mark as succeeded without PR
+              run = applyTransition(run, RunEvent.VERIFY_PASSED);
+              await saveRun(run);
+              onStateChange?.(run);
+              break;
             }
           } catch (prError) {
             log.warn({ runId, error: prError }, 'Failed to create pull request');
@@ -321,10 +392,18 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
             });
             await saveRun(run);
             // Continue even if PR creation fails - the run still succeeded
+            run = applyTransition(run, RunEvent.VERIFY_PASSED);
+            await saveRun(run);
+            onStateChange?.(run);
+            break;
           }
+        } else {
+          // No PR creation configured, mark as succeeded
+          run = applyTransition(run, RunEvent.VERIFY_PASSED);
+          await saveRun(run);
+          onStateChange?.(run);
+          break;
         }
-
-        break;
       }
 
       // Check if we have more iterations
