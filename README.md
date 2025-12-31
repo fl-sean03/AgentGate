@@ -31,11 +31,68 @@ npm install agentgate
 yarn add agentgate
 ```
 
+## GitHub Integration (v0.2.4)
+
+AgentGate supports GitHub-backed workspaces, where every workspace is connected to a GitHub repository. This enables:
+
+- **Branch-per-run workflow**: Agent changes are isolated on `agentgate/<run-id>` branches
+- **Automatic PR creation**: PRs are created automatically when verification passes
+- **Full audit trail**: Every iteration is committed and pushed to GitHub
+- **User collaboration**: Users can work locally on the same repo
+
+### GitHub Setup
+
+1. **Create a Personal Access Token (PAT)**:
+   - Go to GitHub Settings > Developer settings > Personal access tokens
+   - Generate new token (classic)
+   - Select scope: `repo` (full repository access)
+   - Copy the token
+
+2. **Configure AgentGate**:
+   ```bash
+   # Set via environment variable (recommended)
+   export AGENTGATE_GITHUB_TOKEN=ghp_your_token_here
+
+   # Or use the auth command
+   agentgate auth github --token ghp_your_token_here
+
+   # Verify authentication
+   agentgate auth github --status
+   ```
+
+### GitHub CLI Usage
+
+```bash
+# Use an existing GitHub repository
+agentgate submit --prompt "Fix the login bug" --github owner/repo
+
+# Create a new public repository
+agentgate submit --prompt "Create a REST API" --github-new owner/new-repo
+
+# Create a new private repository with TypeScript template
+agentgate submit --prompt "Build internal tool" --github-new owner/new-repo --private --template typescript
+```
+
+### GitHub Workflow
+
+1. AgentGate clones or creates the repository
+2. Creates branch `agentgate/<run-id>`
+3. Agent makes changes, each iteration is committed and pushed
+4. Verification runs after each iteration
+5. When verification passes, a PR is automatically created
+6. User reviews and merges the PR
+
 ## CLI Usage
 
 ```bash
-# Submit a work order
+# Submit a work order (local path)
 agentgate submit --prompt "Build a REST API" --path ./my-project
+
+# Submit with GitHub (existing repo)
+agentgate submit --prompt "Fix bug" --github owner/repo
+
+# Submit with GitHub (new repo)
+agentgate submit --prompt "Create API" --github-new owner/repo --private
 
 # List work orders
 agentgate list
@@ -45,6 +102,11 @@ agentgate status <work-order-id>
 
 # Cancel a work order
 agentgate cancel <work-order-id>
+
+# Manage GitHub authentication
+agentgate auth github --status
+agentgate auth github --token <token>
+agentgate auth github --clear
 ```
 
 ## Programmatic Usage
@@ -147,6 +209,25 @@ src/
 ├── verifier/        # L0-L3 verification levels
 └── workspace/       # Workspace lifecycle management
 ```
+
+## Troubleshooting
+
+### GitHub Issues
+
+| Error | Solution |
+|-------|----------|
+| `GitHub token not configured` | Run `agentgate auth github --token <token>` or set `AGENTGATE_GITHUB_TOKEN` |
+| `Invalid GitHub token` | Token may be expired - create a new one at GitHub Settings |
+| `Repository not found` | Check owner/repo spelling and token permissions |
+| `Permission denied` | Ensure token has `repo` scope |
+| `Push rejected` | Pull latest changes first, resolve any conflicts |
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `AGENTGATE_GITHUB_TOKEN` | GitHub Personal Access Token (required for GitHub features) |
+| `ANTHROPIC_API_KEY` | API key for Claude Code agent |
 
 ## License
 
