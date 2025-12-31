@@ -407,7 +407,134 @@ Before executing work orders with GitHub mode, ensure:
 **Hotfixes Applied:**
 - `run` command added to CLI (enables `agentgate run <id>`)
 - `--github` option fix (was not being passed to validator)
-- CI test fix for subscription driver (handles missing Claude CLI in CI)
+- CI test fix for subscription driver (handles missing Claude CLI in CI, PR #10)
+
+---
+
+## Parallel Hotfix Batch (WO-HF-001 to WO-HF-003)
+
+To accelerate development, the following hotfixes are submitted in parallel. After all complete, an integration work order merges them cleanly.
+
+### Strategy
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Parallel Hotfix Execution                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Submit hotfixes in parallel:                                            │
+│     ├── WO-HF-001: Fix issue #7 (status remains QUEUED)                     │
+│     ├── WO-HF-002: Add dotenv for auto-loading .env                         │
+│     └── WO-HF-003: WO-P1-003 WebSocket support                              │
+│                                                                              │
+│  2. Monitor all three work orders                                           │
+│     └── agentgate status <id> for each                                      │
+│                                                                              │
+│  3. Each creates its own PR:                                                 │
+│     ├── PR for WO-HF-001                                                    │
+│     ├── PR for WO-HF-002                                                    │
+│     └── PR for WO-HF-003                                                    │
+│                                                                              │
+│  4. Sequential merge OR integration work order if conflicts                  │
+│     └── WO-HF-INT: Integrate all changes if needed                          │
+│                                                                              │
+│  5. Final: All hotfixes merged to main                                       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Hotfix Details
+
+| ID | Issue/Feature | Description | Status |
+|----|---------------|-------------|--------|
+| WO-HF-001 | Issue #7 | Work order status not updating from QUEUED to RUNNING | ⏳ Pending |
+| WO-HF-002 | Enhancement | Auto-load `.env` file using dotenv package | ⏳ Pending |
+| WO-HF-003 | Thrust 3 | WebSocket real-time updates (same as WO-P1-003) | ⏳ Pending |
+| WO-HF-INT | Integration | Merge/resolve any conflicts from parallel PRs | ⏳ Pending |
+
+### Execution Commands
+
+**WO-HF-001: Fix Status Bug (Issue #7)**
+```bash
+agentgate submit \
+  --prompt "Fix issue #7: Work order status remains QUEUED while executing.
+
+PROBLEM:
+When a work order is executed via orchestrator, status stays QUEUED instead of RUNNING.
+The status transition QUEUED → RUNNING is missing.
+
+FIX REQUIRED:
+1. Update work order status to RUNNING when orchestrator.execute() starts
+2. Update status in the work-order-service or orchestrator before first iteration
+3. Ensure status is RUNNING during agent execution, not just after completion
+
+Files likely affected:
+- src/orchestrator/orchestrator.ts
+- src/control-plane/work-order-service.ts
+- src/types/work-order.ts (if status enum needs update)
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes
+- pnpm build succeeds" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+**WO-HF-002: Add dotenv Support**
+```bash
+agentgate submit \
+  --prompt "Add dotenv support to auto-load .env file at CLI startup.
+
+REQUIREMENTS:
+1. Add 'dotenv' as a dependency in package.json
+2. Call dotenv.config() at the very start of the CLI entry point
+3. This allows AGENTGATE_GITHUB_TOKEN and other env vars to be loaded from .env automatically
+4. Users won't need to 'source .env' or 'export' manually
+
+Files to modify:
+- package.json (add dotenv dependency)
+- src/control-plane/cli.ts (or src/index.ts - wherever CLI starts)
+
+VERIFICATION:
+- pnpm install succeeds
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes
+- pnpm build succeeds
+- CLI loads .env automatically when run" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+**WO-HF-003: WebSocket Support**
+```bash
+# Same as WO-P1-003 command - see Work Order Execution Commands section below
+```
+
+### Post-Hotfix Validation
+
+After all hotfixes are merged:
+
+```bash
+# Rebuild
+git pull origin main && pnpm install && pnpm build
+
+# Test 1: Status update works
+agentgate submit --prompt "Test task" --path /tmp/test-ws
+agentgate status <id>  # Should show RUNNING during execution, not QUEUED
+
+# Test 2: dotenv works
+echo "AGENTGATE_GITHUB_TOKEN=test" > .env
+agentgate auth github --status  # Should detect token without export
+
+# Test 3: WebSocket works
+agentgate serve --port 3001
+wscat -c ws://localhost:3001/ws
+# Send: {"type":"ping"}
+# Expect: {"type":"pong"}
+```
 
 ---
 
