@@ -48,6 +48,31 @@
 | 14 | API Schema Consistency | - | `server/routes/*.ts` |
 | 15 | CLI Unification | - | `commands/run.ts`, `cli.ts` |
 | 16 | CI-Aware PR Review | `types/github.ts` | `workspace/github.ts`, `orchestrator/*.ts` |
+| 17 | Dynamic AGENTS.md | - | `agent/standards.ts`, moved `AGENTS.md` to root |
+
+---
+
+## Thrust Status
+
+| # | Thrust | Status | Branch/PR |
+|---|--------|--------|-----------|
+| 1 | WorkOrder Tree Fields | ✅ Merged | main |
+| 2 | Spawn Types | ✅ Merged | main |
+| 3 | Spawn Processor | ✅ Merged | main |
+| 4 | CLAUDE.md Injection | ✅ Merged | main |
+| 5 | Tree Coordinator | ✅ Merged | main |
+| 6 | Run Executor Spawn Detection | ✅ Merged | main |
+| 7 | Integration Service | ✅ Merged | main |
+| 8 | Git Merge Operations | ✅ Merged | main |
+| 9 | Configurable Limits | ⚠️ WO Failed (state machine bug) | agentgate/Udam7hzrjZ2r |
+| 10 | Docker Compose | ⚠️ WO Failed | agentgate/Udam7hzrjZ2r |
+| 11 | Concurrency Control Fix | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 12 | Lease Duration Extension | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 13 | Error Handling Improvements | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 14 | API Schema Consistency | ✅ Completed | [PR #28](https://github.com/fl-sean03/AgentGate/pull/28) |
+| 15 | CLI Unification | ✅ Completed | [PR #29](https://github.com/fl-sean03/AgentGate/pull/29) |
+| 16 | CI-Aware PR Review | ✅ Completed | [PR #30](https://github.com/fl-sean03/AgentGate/pull/30) |
+| 17 | Dynamic AGENTS.md | ✅ Completed | main |
 
 ---
 
