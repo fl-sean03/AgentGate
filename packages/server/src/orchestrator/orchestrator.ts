@@ -122,6 +122,7 @@ export class Orchestrator {
 
     // Create or acquire workspace
     let workspace: Workspace;
+    let lease: Awaited<ReturnType<typeof acquire>>;
     try {
       if (workOrder.workspaceSource.type === 'local') {
         workspace = await create(workOrder.workspaceSource);
@@ -202,9 +203,16 @@ export class Orchestrator {
         throw new Error(`Unknown workspace source type: ${(workOrder.workspaceSource as { type: string }).type}`);
       }
 
-      // Acquire lease
-      await acquire(workspace.id, workOrder.id);
-      log.info({ workspaceId: workspace.id }, 'Workspace acquired');
+      // Acquire lease with duration matching work order's max wall clock time
+      const leaseDuration = Math.min(
+        workOrder.maxWallClockSeconds * 1000,
+        24 * 60 * 60 * 1000  // Cap at 24 hours
+      );
+      lease = await acquire(workspace.id, workOrder.id, leaseDuration);
+      if (!lease) {
+        throw new Error(`Failed to acquire lease for workspace ${workspace.id}`);
+      }
+      log.info({ workspaceId: workspace.id, leaseId: lease.id, expiresAt: lease.expiresAt }, 'Workspace acquired');
     } catch (error) {
       log.error({ error, workOrderId: workOrder.id }, 'Failed to acquire workspace');
       throw error;
@@ -290,6 +298,7 @@ export class Orchestrator {
       workOrder,
       workspace,
       gatePlan,
+      leaseId: lease.id, // Pass lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
       onCaptureBeforeState: async (ws) => {
         return captureBeforeState(ws);
@@ -483,13 +492,14 @@ ${workOrder.taskPrompt}
       };
     }
 
-    // Track active run
-    const runId = randomUUID();
-
+    // Execute the run and track it
+    let run: Run | undefined;
     try {
       // Execute the run
-      const run = await executeRun(executorOptions);
-      this.activeRuns.delete(run.id);
+      run = await executeRun(executorOptions);
+
+      // Add to active runs tracking AFTER we have the run ID
+      this.activeRuns.set(run.id, run);
 
       log.info(
         {
@@ -504,7 +514,11 @@ ${workOrder.taskPrompt}
     } finally {
       // Always release workspace
       await release(workspace.id);
-      this.activeRuns.delete(runId);
+
+      // Remove from active runs tracking using the correct ID
+      if (run) {
+        this.activeRuns.delete(run.id);
+      }
     }
   }
 

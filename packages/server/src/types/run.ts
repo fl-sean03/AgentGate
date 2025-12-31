@@ -43,6 +43,14 @@ export const RunResult = {
 
 export type RunResult = (typeof RunResult)[keyof typeof RunResult];
 
+// Run Warning (v0.2.10 - Thrust 13)
+export interface RunWarning {
+  type: string;
+  message: string;
+  iteration: number;
+  timestamp: Date;
+}
+
 // Run
 export interface Run {
   id: string;
@@ -63,6 +71,8 @@ export interface Run {
   gitHubBranch: string | null;
   gitHubPrUrl: string | null;
   gitHubPrNumber: number | null;
+  // Warnings for non-fatal issues (v0.2.10 - Thrust 13)
+  warnings: RunWarning[];
 }
 
 // Iteration Data

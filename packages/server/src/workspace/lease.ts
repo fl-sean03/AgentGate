@@ -190,6 +190,18 @@ export async function refresh(
 }
 
 /**
+ * Renew a lease to extend its expiration time.
+ * This is an alias for refresh() for better API clarity.
+ * Use this during long-running operations to prevent lease expiry.
+ */
+export async function renewLease(
+  leaseId: string,
+  extensionMs?: number
+): Promise<void> {
+  await refresh(leaseId, extensionMs);
+}
+
+/**
  * Check if a workspace is currently leased
  */
 export async function isLeased(workspaceId: string): Promise<boolean> {
