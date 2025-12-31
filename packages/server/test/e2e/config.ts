@@ -20,5 +20,5 @@ export const E2E_CONFIG = {
 };
 
 export function skipIfNoGitHub(): boolean {
-  return !process.env.GITHUB_TOKEN;
+  return !process.env.AGENTGATE_GITHUB_TOKEN && !process.env.GITHUB_TOKEN;
 }
