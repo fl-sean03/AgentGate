@@ -46,6 +46,7 @@
 | 12 | Lease Duration Extension | - | `workspace/lease.ts`, `orchestrator/run-executor.ts` |
 | 13 | Error Handling Improvements | - | `run-executor.ts`, `work-order-store.ts` |
 | 14 | API Schema Consistency | - | `server/routes/*.ts` |
+| 15 | CLI Unification | - | `commands/run.ts`, `cli.ts` |
 
 ---
 

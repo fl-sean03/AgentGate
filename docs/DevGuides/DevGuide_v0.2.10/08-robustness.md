@@ -309,6 +309,96 @@ function mapRunStatus(state: RunState): RunSummary['status'] {
 
 ---
 
+---
+
+## Thrust 15: CLI Unification
+
+### 15.1 Objective
+
+Simplify CLI by unifying `submit`, `run`, and `exec` commands into a single `run` command.
+
+### 15.2 Background
+
+Current CLI has three overlapping commands:
+- `submit`: Creates work order only (queued for later)
+- `run`: Executes a queued work order by ID
+- `exec`: Submit + execute combined
+
+This is confusing. Users just want to run tasks.
+
+### 15.3 Proposed Design
+
+**Smart Detection Mode:**
+```bash
+# Mode 1: Execute existing work order (keeps backward compat)
+agentgate run <work-order-id>
+
+# Mode 2: Submit + execute (most common use)
+agentgate run --prompt "Fix the bug" --github owner/repo
+
+# Mode 3: Submit only (advanced use)
+agentgate run --prompt "Fix the bug" --github owner/repo --no-execute
+```
+
+### 15.4 Subtasks
+
+#### 15.4.1 Refactor run.ts
+
+Merge logic from submit.ts and exec.ts:
+1. Add optional `work-order-id` argument
+2. Add all workspace options from submit
+3. Add `--no-execute` flag for submit-only mode
+4. Implement mode detection in `executeRun()`
+
+#### 15.4.2 Update CLI Registration
+
+Modify `packages/server/src/control-plane/cli.ts`:
+```typescript
+// Remove these:
+program.addCommand(createSubmitCommand());
+program.addCommand(createExecCommand());
+
+// Keep this (with new unified logic):
+program.addCommand(createRunCommand());
+```
+
+#### 15.4.3 Remove Deprecated Commands
+
+Delete after functionality merged:
+- `packages/server/src/control-plane/commands/submit.ts`
+- `packages/server/src/control-plane/commands/exec.ts`
+
+Update `commands/index.ts` exports.
+
+#### 15.4.4 Update Tests
+
+Consolidate tests into unified `run` command tests:
+- Mode 1: Execute by ID
+- Mode 2: Submit + execute
+- Mode 3: Submit only with --no-execute
+- Edge cases: both ID and prompt, neither provided
+
+### 15.5 Verification Steps
+
+1. `agentgate run <id>` works (backward compat)
+2. `agentgate run --prompt "task" --path .` submits and executes
+3. `agentgate run --prompt "task" --no-execute` submits only
+4. Old commands removed from help
+5. All tests pass
+
+### 15.6 Files Modified
+
+| File | Action |
+|------|--------|
+| `packages/server/src/control-plane/commands/run.ts` | Major refactor |
+| `packages/server/src/control-plane/commands/submit.ts` | Delete |
+| `packages/server/src/control-plane/commands/exec.ts` | Delete |
+| `packages/server/src/control-plane/commands/index.ts` | Update exports |
+| `packages/server/src/control-plane/cli.ts` | Remove command registrations |
+| `packages/server/test/cli-exec.test.ts` | Update for unified run |
+
+---
+
 ## Summary
 
 | Thrust | Issue | Severity | Priority |
@@ -317,3 +407,4 @@ function mapRunStatus(state: RunState): RunSummary['status'] {
 | 12 | Lease expires mid-execution | High | P0 |
 | 13 | Silent error swallowing | High | P1 |
 | 14 | API schema mismatches | Medium | P1 |
+| 15 | CLI command confusion | Medium | P1 |
