@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { createApp } from './app.js';
-import { type ServerConfig } from './types.js';
+import { createApp, type AppConfig } from './app.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('server');
@@ -9,7 +8,7 @@ const logger = createLogger('server');
  * Start the HTTP server
  */
 export async function startServer(
-  config: Partial<ServerConfig> = {}
+  config: AppConfig = {}
 ): Promise<FastifyInstance> {
   const app = await createApp(config);
 
@@ -40,7 +39,7 @@ export async function stopServer(server: FastifyInstance): Promise<void> {
 }
 
 // Re-export types and utilities
-export { createApp } from './app.js';
+export { createApp, type AppConfig } from './app.js';
 export {
   serverConfigSchema,
   apiResponseSchema,
