@@ -136,6 +136,15 @@ export function getRunMetricsPath(runId: string): string {
   return join(getMetricsDir(runId), 'run-metrics.json');
 }
 
+// Tree paths (v0.2.10)
+export function getTreesDir(): string {
+  return join(getAgentGateRoot(), 'trees');
+}
+
+export function getTreePath(rootId: string): string {
+  return join(getTreesDir(), `${rootId}.json`);
+}
+
 // Ensure directories exist
 export async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
@@ -161,5 +170,6 @@ export async function ensureAllDirs(): Promise<void> {
     ensureDir(getLeasesDir()),
     ensureDir(getSnapshotsDir()),
     ensureDir(getTmpDir()),
+    ensureDir(getTreesDir()),
   ]);
 }

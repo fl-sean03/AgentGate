@@ -201,8 +201,16 @@ export class Orchestrator {
         await syncWithGitHub(workspace);
         log.debug({ workspaceId: workspace.id }, 'Synced with GitHub');
 
-        // Create run branch
-        const runBranchName = `agentgate/${workOrder.id}`;
+        // Create run branch with hierarchical naming for tree structures (v0.2.10)
+        let runBranchName: string;
+        if (workOrder.parentId) {
+          // Child work order - use hierarchical naming: agentgate/<rootId>/<workOrderId>
+          const rootId = workOrder.rootId ?? workOrder.id;
+          runBranchName = `agentgate/${rootId}/${workOrder.id}`;
+        } else {
+          // Root work order - use simple naming: agentgate/<workOrderId>
+          runBranchName = `agentgate/${workOrder.id}`;
+        }
         gitHubBranch = runBranchName;
 
         // Create and checkout the branch
