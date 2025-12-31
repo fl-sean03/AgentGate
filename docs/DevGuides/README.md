@@ -261,7 +261,8 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
-| [v0.2.5](./DevGuide_v0.2.5/00-index.md) | **Run Analytics & Metrics** | In Progress | Observability with per-phase timing, token usage, code change stats |
+| [v0.2.6](./DevGuide_v0.2.6/00-index.md) | **Subscription-Based Agent Driver** | Complete | Claude Code Max/Pro subscription billing, driver simplification (4 drivers) |
+| [v0.2.5](./DevGuide_v0.2.5/00-index.md) | **Run Analytics & Metrics** | Complete | Observability with per-phase timing, token usage, code change stats |
 | [v0.2.4](./DevGuide_v0.2.4/00-index.md) | **GitHub-Backed Workspaces** | Complete | Connect workspaces to GitHub repos, branch-per-run, auto PR creation |
 | [v0.2.3](./DevGuide_v0.2.3/00-index.md) | **Complete Lint Cleanup** | Complete | Zero lint errors across entire codebase |
 | [v0.2.2](./DevGuide_v0.2.2/00-index.md) | **Technical Debt Cleanup** | Complete | Fixed TypeScript/ESLint errors in agent module, updated package version |
