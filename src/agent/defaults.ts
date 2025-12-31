@@ -18,8 +18,9 @@ export const MAX_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Default max turns for agent execution
+ * Set high to allow complex implementation tasks
  */
-export const DEFAULT_MAX_TURNS = 10;
+export const DEFAULT_MAX_TURNS = 100;
 
 /**
  * Maximum max turns allowed
