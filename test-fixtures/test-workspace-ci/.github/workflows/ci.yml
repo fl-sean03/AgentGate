@@ -6,10 +6,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-      - run: npm install
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
+      - run: pnpm install
+      - run: pnpm lint
+      - run: pnpm test
