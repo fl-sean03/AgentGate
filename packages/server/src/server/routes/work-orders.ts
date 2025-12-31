@@ -70,6 +70,8 @@ function toRunSummary(run: Run): RunSummary {
     [RunState.SNAPSHOTTING]: 'running',
     [RunState.VERIFYING]: 'running',
     [RunState.FEEDBACK]: 'running',
+    [RunState.PR_CREATED]: 'running',
+    [RunState.CI_POLLING]: 'running',
     [RunState.SUCCEEDED]: 'succeeded',
     [RunState.FAILED]: 'failed',
     [RunState.CANCELED]: 'canceled',
@@ -273,6 +275,7 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           maxIterations: body.maxIterations,
           maxWallClockSeconds: body.maxTime ?? 3600,
           gatePlanSource: 'auto',
+          waitForCI: false,
         };
         const order = await workOrderService.submit(submitRequest);
 

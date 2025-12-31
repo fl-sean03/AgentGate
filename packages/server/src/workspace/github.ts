@@ -16,6 +16,10 @@ import {
   type GitHubPullRequest,
   type CreateRepositoryOptions,
   type CreatePullRequestOptions,
+  type CIStatusResult,
+  type CheckRunResult,
+  CIStatus,
+  CIConclusion,
   GitHubError,
   GitHubErrorCode,
   gitHubConfigSchema,
@@ -457,4 +461,250 @@ export function buildGitHubUrl(owner: string, repo: string): string {
  */
 export function buildCloneUrl(owner: string, repo: string): string {
   return `https://github.com/${owner}/${repo}.git`;
+}
+
+// ============================================================================
+// CI Status Operations
+// ============================================================================
+
+/**
+ * Get CI status for a specific commit ref
+ *
+ * @param client - Authenticated Octokit client
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param ref - Git ref (branch name, tag, or commit SHA)
+ * @returns Aggregated CI status result
+ */
+export async function getCIStatus(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  ref: string
+): Promise<CIStatusResult> {
+  try {
+    // Get check runs for the ref
+    const { data } = await client.rest.checks.listForRef({
+      owner,
+      repo,
+      ref,
+    });
+
+    const checkRuns: CheckRunResult[] = data.check_runs.map((check) => {
+      // Map GitHub check status to our CIStatus type
+      let status: CIStatus;
+      switch (check.status) {
+        case 'queued':
+        case 'pending':
+          status = CIStatus.PENDING;
+          break;
+        case 'in_progress':
+          status = CIStatus.RUNNING;
+          break;
+        case 'completed':
+          status = CIStatus.COMPLETED;
+          break;
+        default:
+          status = CIStatus.PENDING;
+      }
+
+      // Map GitHub conclusion to our CIConclusion type
+      let conclusion: CIConclusion | null = null;
+      if (check.conclusion) {
+        switch (check.conclusion) {
+          case 'success':
+            conclusion = CIConclusion.SUCCESS;
+            break;
+          case 'failure':
+            conclusion = CIConclusion.FAILURE;
+            break;
+          case 'cancelled':
+            conclusion = CIConclusion.CANCELLED;
+            break;
+          case 'skipped':
+            conclusion = CIConclusion.SKIPPED;
+            break;
+          case 'neutral':
+            conclusion = CIConclusion.NEUTRAL;
+            break;
+          case 'timed_out':
+            conclusion = CIConclusion.TIMED_OUT;
+            break;
+          case 'action_required':
+            conclusion = CIConclusion.ACTION_REQUIRED;
+            break;
+          default:
+            conclusion = null;
+        }
+      }
+
+      return {
+        id: check.id,
+        name: check.name,
+        status,
+        conclusion,
+        detailsUrl: check.details_url ?? null,
+        output: check.output
+          ? {
+              title: check.output.title ?? null,
+              summary: check.output.summary ?? null,
+            }
+          : null,
+      };
+    });
+
+    // Calculate aggregated status
+    const totalCount = checkRuns.length;
+    const pendingCount = checkRuns.filter((c) => c.status === CIStatus.PENDING).length;
+    const runningCount = checkRuns.filter((c) => c.status === CIStatus.RUNNING).length;
+    const completedCount = checkRuns.filter((c) => c.status === CIStatus.COMPLETED).length;
+
+    // Determine overall status
+    let overallStatus: CIStatus;
+    if (totalCount === 0) {
+      // No checks configured - consider as success
+      overallStatus = CIStatus.COMPLETED;
+    } else if (completedCount === totalCount) {
+      overallStatus = CIStatus.COMPLETED;
+    } else if (runningCount > 0) {
+      overallStatus = CIStatus.RUNNING;
+    } else {
+      overallStatus = CIStatus.PENDING;
+    }
+
+    // Determine overall conclusion (only if all completed)
+    let overallConclusion: CIConclusion | null = null;
+    const allPassed = checkRuns.every(
+      (c) => c.status === CIStatus.COMPLETED && c.conclusion === CIConclusion.SUCCESS
+    );
+    const anyFailed = checkRuns.some(
+      (c) => c.status === CIStatus.COMPLETED && c.conclusion === CIConclusion.FAILURE
+    );
+
+    if (overallStatus === CIStatus.COMPLETED) {
+      if (totalCount === 0) {
+        // No checks - consider as success
+        overallConclusion = CIConclusion.SUCCESS;
+      } else if (anyFailed) {
+        overallConclusion = CIConclusion.FAILURE;
+      } else if (allPassed) {
+        overallConclusion = CIConclusion.SUCCESS;
+      } else {
+        // Some checks skipped/cancelled but none failed
+        overallConclusion = CIConclusion.NEUTRAL;
+      }
+    }
+
+    return {
+      status: overallStatus,
+      conclusion: overallConclusion,
+      checkRuns,
+      totalCount,
+      pendingCount,
+      runningCount,
+      completedCount,
+      allPassed,
+      anyFailed,
+    };
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      const status = (error as { status: number }).status;
+      if (status === 404) {
+        throw new GitHubError(
+          `Ref ${ref} not found in ${owner}/${repo}`,
+          GitHubErrorCode.NOT_FOUND,
+          404
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Poll CI status until all checks complete or timeout
+ *
+ * @param client - Authenticated Octokit client
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param ref - Git ref (branch name, tag, or commit SHA)
+ * @param options - Polling options
+ * @returns Final CI status result
+ * @throws Error if polling times out
+ */
+export async function pollCIStatus(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  options?: {
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+  }
+): Promise<CIStatusResult> {
+  const pollIntervalMs = options?.pollIntervalMs ?? 30_000; // 30 seconds default
+  const timeoutMs = options?.timeoutMs ?? 30 * 60 * 1000; // 30 minutes default
+  const startTime = Date.now();
+
+  while (true) {
+    const status = await getCIStatus(client, owner, repo, ref);
+
+    // Check if completed
+    if (status.status === CIStatus.COMPLETED) {
+      return status;
+    }
+
+    // Check timeout
+    const elapsed = Date.now() - startTime;
+    if (elapsed >= timeoutMs) {
+      throw new Error(
+        `CI polling timed out after ${timeoutMs}ms. Status: ${status.status}, ` +
+          `Completed: ${status.completedCount}/${status.totalCount}`
+      );
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
+
+/**
+ * Parse CI failures into human-readable feedback for the agent
+ *
+ * @param status - CI status result
+ * @returns Formatted feedback message
+ */
+export function parseCIFailures(status: CIStatusResult): string {
+  if (status.allPassed) {
+    return 'All CI checks passed successfully.';
+  }
+
+  const failedChecks = status.checkRuns.filter(
+    (check) => check.status === CIStatus.COMPLETED && check.conclusion === CIConclusion.FAILURE
+  );
+
+  if (failedChecks.length === 0) {
+    return 'CI checks did not complete successfully.';
+  }
+
+  const lines: string[] = [
+    'CI checks failed. Please fix the following issues:',
+    '',
+  ];
+
+  for (const check of failedChecks) {
+    lines.push(`## ${check.name}`);
+    if (check.detailsUrl) {
+      lines.push(`Details: ${check.detailsUrl}`);
+    }
+    if (check.output?.title) {
+      lines.push(`Title: ${check.output.title}`);
+    }
+    if (check.output?.summary) {
+      lines.push(`Summary: ${check.output.summary}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }

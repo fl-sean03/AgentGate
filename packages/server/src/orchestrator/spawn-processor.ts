@@ -166,6 +166,7 @@ export class SpawnProcessor {
         maxIterations: childRequest.maxIterations ?? parent.maxIterations,
         maxWallClockSeconds: childRequest.maxWallClockSeconds ?? parent.maxWallClockSeconds,
         gatePlanSource: parent.gatePlanSource,
+        waitForCI: parent.waitForCI ?? false,
         policies: parent.policies,
         // Set recursive agent fields
         parentId: parent.id,
