@@ -12,6 +12,7 @@ import {
   type AgentRequest,
   WorkspaceTemplate,
 } from '../types/index.js';
+import { type SpawnLimits } from '../types/spawn.js';
 import { executeRun, type RunExecutorOptions } from './run-executor.js';
 import { loadRun, getRunStatus } from './run-store.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
@@ -32,6 +33,18 @@ export interface OrchestratorConfig {
    * Default timeout for runs in seconds.
    */
   defaultTimeoutSeconds?: number;
+
+  /**
+   * Spawn limits for recursive agent spawning.
+   * If not provided, defaults will be used.
+   */
+  spawnLimits?: SpawnLimits;
+
+  /**
+   * Enable agent spawning.
+   * Default: true
+   */
+  enableSpawning?: boolean;
 }
 
 /**
@@ -46,6 +59,12 @@ export class Orchestrator {
     this.config = {
       maxConcurrentRuns: config.maxConcurrentRuns ?? 5,
       defaultTimeoutSeconds: config.defaultTimeoutSeconds ?? 3600,
+      spawnLimits: config.spawnLimits ?? {
+        maxDepth: 3,
+        maxChildren: 10,
+        maxTotalDescendants: 100,
+      },
+      enableSpawning: config.enableSpawning ?? true,
     };
   }
 
@@ -289,6 +308,8 @@ export class Orchestrator {
             contextPointers: EMPTY_CONTEXT_POINTERS,
             timeoutMs: workOrder.maxWallClockSeconds * 1000,
             sessionId: sessionId,
+            spawnLimits: this.config.enableSpawning ? this.config.spawnLimits : null,
+            workOrderId: workOrder.id,
           };
 
           const result = await driver.execute(request);
