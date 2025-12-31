@@ -202,10 +202,8 @@ async function executeRun(
 
   let run: Run;
   try {
-    // Mark work order as running
-    await workOrderService.updateStatus(id, WorkOrderStatus.RUNNING);
-
     // Execute the work order
+    // Note: The orchestrator's onRunStarted callback updates the work order status to RUNNING
     run = await orchestrator.execute(order);
 
     // Update work order status based on result

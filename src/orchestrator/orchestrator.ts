@@ -14,6 +14,7 @@ import {
 } from '../types/index.js';
 import { executeRun, type RunExecutorOptions } from './run-executor.js';
 import { loadRun, getRunStatus } from './run-store.js';
+import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('orchestrator');
@@ -336,6 +337,11 @@ export class Orchestrator {
         const structuredFeedback = generateFeedback(report, report.iteration);
         // Convert to string for the agent
         return formatForAgent(structuredFeedback);
+      },
+
+      onRunStarted: async (run) => {
+        log.info({ runId: run.id, workOrderId: workOrder.id }, 'Run started, updating work order status to RUNNING');
+        await workOrderService.markRunning(workOrder.id, run.id);
       },
 
       onStateChange: (run) => {
