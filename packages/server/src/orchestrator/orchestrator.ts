@@ -108,7 +108,7 @@ export class Orchestrator {
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
     const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
-    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest } = await import('../workspace/github.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, parseCIFailures } = await import('../workspace/github.js');
     const { captureBeforeState, captureAfterState } = await import(
       '../snapshot/snapshotter.js'
     );
@@ -490,6 +490,62 @@ ${workOrder.taskPrompt}
           prNumber: pr.number,
         };
       };
+
+      // Only enable CI polling if waitForCI is true
+      if (workOrder.waitForCI) {
+        executorOptions.onPollCI = async (_ws, run, _prUrl, branchRef): Promise<{ success: boolean; feedback?: string }> => {
+          // Get GitHub config and create client
+          const config = getGitHubConfigFromEnv();
+          const client = createGitHubClient(config);
+
+          // Get owner and repo from workspace source
+          let owner: string;
+          let repo: string;
+
+          if (workOrder.workspaceSource.type === 'github') {
+            owner = workOrder.workspaceSource.owner;
+            repo = workOrder.workspaceSource.repo;
+          } else if (workOrder.workspaceSource.type === 'github-new') {
+            owner = workOrder.workspaceSource.owner;
+            repo = workOrder.workspaceSource.repoName;
+          } else {
+            log.warn({ runId: run.id }, 'Workspace is not GitHub-backed, skipping CI polling');
+            return { success: true };
+          }
+
+          try {
+            log.info({ runId: run.id, owner, repo, ref: branchRef }, 'Polling CI status');
+
+            // Poll for CI completion (30 min timeout)
+            const ciStatus = await pollCIStatus(client, owner, repo, branchRef, {
+              pollIntervalMs: 30_000, // 30 seconds
+              timeoutMs: 30 * 60 * 1000, // 30 minutes
+            });
+
+            log.info(
+              {
+                runId: run.id,
+                status: ciStatus.status,
+                conclusion: ciStatus.conclusion,
+                totalChecks: ciStatus.totalCount,
+                passed: ciStatus.allPassed,
+              },
+              'CI polling completed'
+            );
+
+            if (ciStatus.allPassed) {
+              return { success: true };
+            } else {
+              // Generate feedback from CI failures
+              const feedback = parseCIFailures(ciStatus);
+              return { success: false, feedback };
+            }
+          } catch (error) {
+            log.error({ runId: run.id, error }, 'CI polling failed');
+            throw error;
+          }
+        };
+      }
     }
 
     // Execute the run and track it

@@ -39,6 +39,7 @@ export function createSubmitCommand(): Command {
     .option('--github <owner/repo>', 'Use an existing GitHub repository')
     .option('--github-new <owner/repo>', 'Create a new GitHub repository')
     .option('--public', 'Make the new GitHub repository public (default is private, requires --github-new)', false)
+    .option('--wait-for-ci', 'Wait for CI checks to pass after PR creation (Thrust 16)', false)
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
@@ -143,6 +144,7 @@ async function executeSubmit(rawOptions: Record<string, unknown>): Promise<void>
     maxIterations: options.maxIterations,
     maxWallClockSeconds: options.maxTime,
     gatePlanSource: options.gatePlan,
+    waitForCI: options.waitForCi ?? false,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],

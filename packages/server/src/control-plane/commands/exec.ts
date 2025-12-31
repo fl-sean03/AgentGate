@@ -43,6 +43,7 @@ export function createExecCommand(): Command {
     .option('--github <owner/repo>', 'Use an existing GitHub repository')
     .option('--github-new <owner/repo>', 'Create a new GitHub repository')
     .option('--public', 'Make the new GitHub repository public (default is private, requires --github-new)', false)
+    .option('--wait-for-ci', 'Wait for CI checks to pass after PR creation (Thrust 16)', false)
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
@@ -88,6 +89,8 @@ function formatRunState(state: RunState): string {
     [RunState.SNAPSHOTTING]: cyan,
     [RunState.VERIFYING]: cyan,
     [RunState.FEEDBACK]: yellow,
+    [RunState.PR_CREATED]: cyan,
+    [RunState.CI_POLLING]: cyan,
     [RunState.SUCCEEDED]: green,
     [RunState.FAILED]: red,
     [RunState.CANCELED]: dim,
@@ -251,6 +254,7 @@ export async function executeExec(rawOptions: Record<string, unknown>): Promise<
     maxIterations: options.maxIterations,
     maxWallClockSeconds: options.maxTime,
     gatePlanSource: options.gatePlan,
+    waitForCI: options.waitForCi ?? false,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],
