@@ -6,16 +6,49 @@ This document contains detailed thrust specifications for implementing the Agent
 
 ## Execution Strategy
 
-Phase 1 uses AgentGate to modify its own codebase:
+Phase 1 uses AgentGate to modify its own codebase. **This is a rigorous stress test of AgentGate's self-modification capabilities** - the system must successfully extend itself through its own work order mechanism.
 
-1. Work orders target the existing AgentGate GitHub repository
-2. Each work order creates a branch `agentgate/<run-id>`
-3. Agent implements the thrust, verification runs
-4. PR is created automatically on success
-5. Human reviews, merges
-6. Rebuild AgentGate before next work order
+### Sequential Workflow (Critical)
 
-This is a rigorous test of AgentGate's self-modification capabilities.
+Work orders MUST be executed sequentially with full merge cycles:
+
+1. **Ensure clean state** - `main` branch must be up-to-date with all prior changes
+2. **Submit work order** - Target the AgentGate GitHub repository
+3. **Monitor execution** - Check progress per monitoring protocol below
+4. **Review PR** - Agent creates PR automatically on success
+5. **Merge to main** - Human reviews code, runs tests, merges PR
+6. **Rebuild AgentGate** - `git pull && pnpm install && pnpm build`
+7. **Verify** - Test the new functionality works
+8. **Repeat** - Only then submit the next work order
+
+**Why sequential?** Each thrust builds on prior work. WO-P1-002 needs the server from WO-P1-001. WO-P1-003 needs the routes from WO-P1-002. Submitting work orders in parallel or before merging will cause failures.
+
+### Monitoring Protocol
+
+Work orders run as background tasks. Monitor them on this schedule:
+
+| Check | Time After Submit | Action |
+|-------|-------------------|--------|
+| Initial | 2 minutes | Verify work order started, check for early failures |
+| Progress | Every 10 minutes | Check iteration progress, review agent output |
+| Completion | On notification | Review PR, run verification, decide to merge |
+
+**Monitoring commands:**
+```bash
+# Check work order status
+agentgate status <work-order-id>
+
+# List recent work orders
+agentgate list --limit 5
+
+# View run details
+agentgate status <work-order-id> --verbose
+```
+
+**Signs of trouble:**
+- Stuck on same iteration for >15 minutes
+- Repeated verification failures (agent may be in a loop)
+- No PR created after all iterations complete
 
 ---
 
