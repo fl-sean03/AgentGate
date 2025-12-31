@@ -45,8 +45,8 @@ describe('MetricsCollector', () => {
       collector.startIteration(1);
       collector.startPhase(Phase.BUILD);
 
-      // Wait a bit
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Wait a bit - use 20ms and expect >= 5ms to allow for timer resolution differences
+      await new Promise(resolve => setTimeout(resolve, 20));
 
       collector.endPhase(Phase.BUILD);
       collector.endIteration(1);
@@ -56,7 +56,8 @@ describe('MetricsCollector', () => {
 
       const buildPhase = metrics?.phases.find(p => p.phase === Phase.BUILD);
       expect(buildPhase).toBeDefined();
-      expect(buildPhase?.durationMs).toBeGreaterThanOrEqual(10);
+      // Use a lower threshold to account for timer resolution on Windows (~15ms)
+      expect(buildPhase?.durationMs).toBeGreaterThanOrEqual(5);
     });
 
     it('should track multiple phases', () => {
