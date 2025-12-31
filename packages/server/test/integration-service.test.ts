@@ -42,7 +42,6 @@ describe('Integration Service', () => {
 
     // Create work order store instance
     workOrderStore = new WorkOrderStore();
-    await workOrderStore.init();
 
     // Create integration service
     integrationService = new IntegrationService(workOrderStore, testDir);
