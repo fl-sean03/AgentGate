@@ -261,7 +261,9 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
-| [v0.2.8](./DevGuide_v0.2.8/00-index.md) | **Monorepo Restructuring** | In Progress | pnpm workspaces, shared types package, integration tests |
+| [v0.2.10](./DevGuide_v0.2.10/00-index.md) | **Recursive Agent Spawning & Deployment** | In Progress | Recursive agent spawning, auto-integration, Docker Compose, configurable limits |
+| [v0.2.9](./DevGuide_v0.2.9/00-index.md) | **Integration & E2E Tests** | Complete | Comprehensive integration tests, API contract tests, WebSocket tests, E2E workflow tests |
+| [v0.2.8](./DevGuide_v0.2.8/00-index.md) | **Monorepo Restructuring** | Complete | pnpm workspaces, shared types package, integration tests |
 | [v0.2.7](./DevGuide_v0.2.7/00-index.md) | **AgentGate Dashboard** | Complete | HTTP server + React dashboard, fully self-built via AgentGate work orders |
 | [v0.2.6](./DevGuide_v0.2.6/00-index.md) | **Subscription-Based Agent Driver** | Complete | Claude Code Max/Pro subscription billing, driver simplification (4 drivers) |
 | [v0.2.5](./DevGuide_v0.2.5/00-index.md) | **Run Analytics & Metrics** | Complete | Observability with per-phase timing, token usage, code change stats |
