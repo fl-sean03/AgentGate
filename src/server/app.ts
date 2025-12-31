@@ -9,18 +9,31 @@ import {
   type ServerConfig,
 } from './types.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerWorkOrderRoutes } from './routes/work-orders.js';
+import { registerRunRoutes } from './routes/runs.js';
+import { registerAuthPlugin } from './middleware/auth.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('server');
 
 /**
+ * Extended server configuration with API key
+ */
+export interface AppConfig extends Partial<ServerConfig> {
+  apiKey?: string;
+}
+
+/**
  * Create and configure a Fastify application instance
  */
 export async function createApp(
-  config: Partial<ServerConfig> = {}
+  config: AppConfig = {}
 ): Promise<FastifyInstance> {
+  // Extract apiKey before validation (not part of ServerConfig schema)
+  const { apiKey, ...serverConfig } = config;
+
   // Validate and apply defaults
-  const validatedConfig = serverConfigSchema.parse(config);
+  const validatedConfig = serverConfigSchema.parse(serverConfig);
 
   // Create Fastify instance with logging
   const app = Fastify({
@@ -103,8 +116,15 @@ export async function createApp(
     );
   });
 
+  // Register auth plugin with API key
+  registerAuthPlugin(app, apiKey);
+
   // Register health routes
   registerHealthRoutes(app);
+
+  // Register API routes
+  registerWorkOrderRoutes(app);
+  registerRunRoutes(app);
 
   return app;
 }
