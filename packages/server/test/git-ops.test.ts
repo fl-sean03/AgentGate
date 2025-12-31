@@ -158,6 +158,9 @@ describe('Git Operations', () => {
     });
 
     it('should perform a successful merge without conflicts', async () => {
+      // Get the initial branch name
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create and checkout feature branch
       await createBranch(testDir, 'feature');
 
@@ -166,9 +169,8 @@ describe('Git Operations', () => {
       await stageAll(testDir);
       await commit(testDir, 'Add feature file');
 
-      // Switch back to main
-      const mainBranch = await getCurrentBranch(testDir);
-      await checkout(testDir, mainBranch === 'main' ? 'main' : 'master');
+      // Switch back to initial branch
+      await checkout(testDir, initialBranch);
 
       // Merge feature into main
       const result = await merge(testDir, 'feature');
