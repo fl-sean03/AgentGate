@@ -151,8 +151,8 @@ describe('Driver Registry', () => {
     expect(opencode?.name).toBe('opencode');
   });
 
-  it('should have claude-code as default', () => {
+  it('should have claude-code-subscription as default', () => {
     const defaultDriver = driverRegistry.getDefault();
-    expect(defaultDriver.name).toBe('claude-code');
+    expect(defaultDriver.name).toBe('claude-code-subscription');
   });
 });

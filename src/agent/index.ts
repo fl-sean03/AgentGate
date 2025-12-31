@@ -133,15 +133,15 @@ import { OpenCodeDriver } from './opencode-driver.js';
 import { register, setDefault } from './registry.js';
 
 // Auto-register all drivers
-// Claude Code API driver is registered first and becomes the default
+// Claude Code API driver (uses ANTHROPIC_API_KEY for billing)
 const claudeCodeDriver = new ClaudeCodeDriver();
 register(claudeCodeDriver);
-setDefault('claude-code');
 
-// Register Claude Code Subscription driver (subscription-based)
-// Note: This driver requires subscription validation at runtime
+// Claude Code Subscription driver is the default (uses Max/Pro subscription)
+// This saves API credits by using the user's subscription quota
 const subscriptionDriver = new ClaudeCodeSubscriptionDriver();
 register(subscriptionDriver);
+setDefault('claude-code-subscription');
 
 // Register OpenAI Codex driver (available when OPENAI_API_KEY is set)
 const codexDriver = new OpenAICodexDriver();
