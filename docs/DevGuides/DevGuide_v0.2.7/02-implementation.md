@@ -604,3 +604,194 @@ wscat -c ws://localhost:3001/ws
 ```
 
 When all validations pass, Phase 1 is complete. Proceed to Phase 2 (Frontend).
+
+---
+
+## Critical Enhancement: Agent Engineering Standards (WO-STD-001)
+
+### Problem Identified
+
+After Phase 1 completion, analysis revealed that agents are NOT following best practices:
+- ❌ No unit tests written for new code
+- ❌ No integration tests for features
+- ❌ Minimal validation beyond "it compiles"
+- ❌ No verify.yaml defining test requirements
+
+### Solution: Multi-Layer Agent Guidance System
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Agent Guidance Architecture                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Layer 1: AGENTS.md (Global Engineering Standards)                          │
+│     └── Location: docs/AGENTS.md (or .agentgate/AGENTS.md)                  │
+│     └── Injected into EVERY agent's system prompt                           │
+│     └── Contains: Testing requirements, code patterns, validation checklist │
+│                                                                              │
+│  Layer 2: verify.yaml (Project-Specific Gates)                              │
+│     └── Location: project root                                              │
+│     └── Defines: What tests MUST pass, coverage requirements                │
+│     └── Enforced by: Verification pipeline (L0-L3)                          │
+│                                                                              │
+│  Layer 3: Task Prompt (Specific Requirements)                               │
+│     └── The actual work order task description                              │
+│                                                                              │
+│  FINAL = AGENTS.md + verify.yaml context + task prompt + prior feedback     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Requirements
+
+**1. Create AGENTS.md** (docs/AGENTS.md)
+- Software engineering best practices
+- Testing requirements (unit tests MANDATORY)
+- Code quality standards
+- Validation checklist
+- Common patterns (testing async, mocking, etc.)
+
+**2. Modify Agent Command Builder** (src/agent/command-builder.ts)
+```typescript
+// Add to buildSystemPromptAppend():
+export function buildSystemPromptAppend(request: AgentRequest): string | null {
+  const parts: string[] = [];
+
+  // NEW: Always include engineering standards
+  const standards = loadEngineeringStandards();
+  if (standards) {
+    parts.push(standards);
+  }
+
+  // Existing: gate plan, feedback, custom prompt
+  // ...
+}
+```
+
+**3. Add Engineering Standards Loader** (src/agent/standards.ts)
+```typescript
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+const STANDARDS_PATHS = [
+  '.agentgate/AGENTS.md',
+  'docs/AGENTS.md',
+  'AGENTS.md',
+];
+
+let cachedStandards: string | null = null;
+
+export function loadEngineeringStandards(workspacePath?: string): string | null {
+  if (cachedStandards) return cachedStandards;
+
+  for (const relPath of STANDARDS_PATHS) {
+    const fullPath = workspacePath
+      ? join(workspacePath, relPath)
+      : relPath;
+
+    if (existsSync(fullPath)) {
+      cachedStandards = readFileSync(fullPath, 'utf-8');
+      return cachedStandards;
+    }
+  }
+
+  // Fall back to embedded defaults
+  return getEmbeddedStandards();
+}
+```
+
+**4. Update verify.yaml Schema** (src/gate/schemas.ts)
+- Add `testCoverage` section to require tests for new files
+- Add `requiredTestPatterns` validation
+
+**5. Verification Pipeline Updates** (src/verification/)
+- Check that new source files have corresponding tests
+- Fail verification if tests are missing
+
+### Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `docs/AGENTS.md` | Create | Engineering standards document |
+| `verify.yaml` | Create | Project gate plan with test requirements |
+| `src/agent/standards.ts` | Create | Standards loader utility |
+| `src/agent/command-builder.ts` | Modify | Inject standards into prompts |
+| `src/agent/defaults.ts` | Modify | Add embedded fallback standards |
+| `src/gate/schemas.ts` | Modify | Add testCoverage schema |
+| `src/verification/sanity.ts` | Modify | Verify test coverage |
+
+### WO-STD-001: Implement Agent Standards
+
+```bash
+agentgate submit \
+  --prompt "Implement the Agent Engineering Standards system.
+
+REQUIREMENTS:
+1. Move docs/drafts/AGENTS.md to docs/AGENTS.md
+2. Create src/agent/standards.ts with loadEngineeringStandards() function
+3. Modify src/agent/command-builder.ts to inject AGENTS.md into system prompts
+4. Update src/agent/defaults.ts with embedded fallback standards
+5. Ensure verify.yaml is read and enforced properly
+
+The goal: Every agent spawned by AgentGate receives engineering standards
+that require them to write tests, follow best practices, and validate properly.
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes
+- pnpm build succeeds
+- NEW TESTS: Add tests for standards loading
+- Manual verify: Submit a test work order and confirm AGENTS.md content appears in logs" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+### WO-STD-002: Add Missing Tests for Phase 1 Features
+
+```bash
+agentgate submit \
+  --prompt "Add comprehensive tests for Phase 1 features that are currently untested.
+
+REQUIRED TESTS:
+
+1. WebSocket Tests (test/websocket.test.ts):
+   - EventBroadcaster: addConnection, removeConnection, broadcast, broadcastToAll
+   - WebSocket handler: ping/pong, subscribe/unsubscribe, error handling
+   - Integration: Connect via WebSocket, receive events
+
+2. Server API Tests (test/server-api.test.ts):
+   - Work order routes: GET list, GET by ID, POST create, DELETE cancel
+   - Run routes: GET list, GET by ID
+   - Auth middleware: Valid key, invalid key, missing key
+   - Error responses: 404, 401, 409
+
+3. Status Transition Tests (test/status-transitions.test.ts):
+   - Work order status: QUEUED → RUNNING → SUCCEEDED
+   - Work order status: QUEUED → RUNNING → FAILED
+   - Verify status updates during execution
+
+4. dotenv Integration Tests (test/dotenv.test.ts):
+   - .env file loaded on CLI start
+   - Environment variables available
+   - Missing .env file handled gracefully
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes (ALL new tests pass)
+- pnpm build succeeds
+- Test coverage for new features > 80%" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 5
+```
+
+### Expected Outcome
+
+After implementing:
+1. **Every agent receives** AGENTS.md engineering standards
+2. **verify.yaml enforces** test requirements
+3. **Verification fails** if tests are missing
+4. **Agents write tests** because they're instructed to
+
+This creates a self-reinforcing quality loop where AgentGate improves its own quality standards.
