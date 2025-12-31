@@ -15,11 +15,27 @@ This document contains checklists, file references, and additional resources.
 
 ### Phase 1: HTTP Server
 
-| Work Order | Status | PR | Merged | Validated |
-|------------|--------|-----|--------|-----------|
-| WO-P1-001: Server Foundation | ✅ | - | ✅ | ✅ |
-| WO-P1-002: Work Order API | ✅ | #8 | ✅ | ✅ |
-| WO-P1-003: WebSocket Support | ⏳ | - | ⬜ | ⬜ |
+| Work Order | Status | PR | Merged | Validated | Tests |
+|------------|--------|-----|--------|-----------|-------|
+| WO-P1-001: Server Foundation | ✅ | - | ✅ | ✅ | ❌ |
+| WO-P1-002: Work Order API | ✅ | #8 | ✅ | ✅ | ❌ |
+| WO-P1-003: WebSocket Support | ✅ | #13 | ✅ | ✅ | ❌ |
+
+### Phase 1 Hotfixes
+
+| Work Order | Status | PR | Merged | Description |
+|------------|--------|-----|--------|-------------|
+| WO-HF-001: Status Bug Fix | ✅ | #12 | ✅ | Fix QUEUED → RUNNING transition |
+| WO-HF-002: dotenv Support | ✅ | #11 | ✅ | Auto-load .env file |
+| WO-HF-003: WebSocket | ✅ | #13 | ✅ | Real-time updates |
+
+### Standards Enhancement (Pre-Phase 2)
+
+| Work Order | Status | PR | Merged | Description |
+|------------|--------|-----|--------|-------------|
+| WO-STD-001: AGENTS.md Injection | ⏳ Pending | - | ⬜ | Inject engineering standards into agent prompts |
+| WO-STD-002: Missing Tests | ⏳ Pending | - | ⬜ | Add tests for all Phase 1 features |
+| WO-STD-003: Test Coverage Check | ⏳ Pending | - | ⬜ | L3 sanity check for test files |
 
 ### Phase 1 Validation
 
