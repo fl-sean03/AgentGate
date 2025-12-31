@@ -6,7 +6,7 @@
  */
 
 import { createLogger } from '../utils/logger.js';
-import { WorkOrder, IntegrationStatus, WorkOrderStatus } from '../types/work-order.js';
+import { WorkOrder, IntegrationStatus } from '../types/work-order.js';
 import { IntegrationStrategy } from '../types/spawn.js';
 import {
   getCurrentBranch,

@@ -460,7 +460,7 @@ export async function merge(
     // If squash merge, we need to commit manually
     let mergeCommitSha: string | undefined = undefined;
     if (options.squash) {
-      const message = options.message || `Squash merge of ${branchToMerge}`;
+      const message = options.message ?? `Squash merge of ${branchToMerge}`;
       mergeCommitSha = await commit(repoPath, message);
     } else {
       // Get the current HEAD SHA after merge
