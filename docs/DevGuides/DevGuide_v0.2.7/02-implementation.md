@@ -1007,16 +1007,100 @@ VERIFICATION:
 
 ---
 
+## CLI Command Enhancement: `exec` Command
+
+### Problem
+The current workflow requires two commands:
+1. `agentgate submit` - Queues the work order
+2. `agentgate run <id>` - Executes the queued work order
+
+This is error-prone - users forget to run after submitting.
+
+### Solution
+Add a unified `exec` command that queues AND runs in one step:
+
+```bash
+# New unified command (recommended)
+agentgate exec --prompt "..." --github owner/repo
+
+# Equivalent to:
+agentgate submit --prompt "..." --github owner/repo  # Returns ID
+agentgate run <id>                                    # Runs immediately
+```
+
+### CLI Command Structure (Post-Enhancement)
+
+| Command | Purpose | Usage |
+|---------|---------|-------|
+| `submit` | Queue only (returns ID) | For batch processing, delayed execution |
+| `run <id>` | Execute queued work order | For running previously queued orders |
+| `exec` | Queue AND run immediately | **Default for interactive use** |
+
+### Implementation Work Order: WO-CLI-001
+
+```bash
+agentgate exec \
+  --prompt "Add 'exec' CLI command that combines submit and run.
+
+REQUIREMENTS:
+1. Create src/control-plane/commands/exec.ts:
+   - Accept same options as 'submit' command
+   - Call submit logic to create work order
+   - Immediately call run logic with returned ID
+   - Show combined output (submission + execution progress)
+
+2. Update src/control-plane/cli.ts:
+   - Register 'exec' command
+   - Make it the recommended command in help text
+
+3. Update all documentation:
+   - README.md: Update quick start to use 'exec'
+   - docs/AGENTS.md: If applicable
+
+4. Write tests in test/cli-exec.test.ts:
+   - Test exec creates and runs work order
+   - Test error handling if submit fails
+   - Test error handling if run fails
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes
+- pnpm build succeeds
+- Manual: agentgate exec --help shows options" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+---
+
 ## Work Order Submission Queue
 
-Execute these in order, waiting for each to merge before the next:
+### Parallel Batch 1: Standards & CLI (Can Run Simultaneously)
 
-| Order | Work Order | Description | Depends On |
-|-------|------------|-------------|------------|
-| 1 | WO-STD-001 | AGENTS.md injection into agent prompts | None |
-| 2 | WO-STD-002 | Add missing Phase 1 tests | WO-STD-001 |
-| 3 | WO-STD-003 | L3 test coverage verification | WO-STD-002 |
-| 4 | WO-P2-001 | Frontend project bootstrap | All STD complete |
+| Work Order | Description | Can Parallel |
+|------------|-------------|--------------|
+| WO-CLI-001 | Add 'exec' command to CLI | ✅ Yes |
+| WO-STD-001 | AGENTS.md injection into agent prompts | ✅ Yes |
+
+### Parallel Batch 2: Testing (After Batch 1 Merged)
+
+| Work Order | Description | Can Parallel |
+|------------|-------------|--------------|
+| WO-STD-002 | Add missing Phase 1 tests | ✅ Yes |
+| WO-STD-003 | L3 test coverage verification | ✅ Yes |
+
+### Integration Work Order
+
+After parallel batches complete:
+- WO-INT-001: Integrate all changes, resolve any conflicts, ensure all tests pass
+
+### Sequential (After All Standards Complete)
+
+| Order | Work Order | Description |
+|-------|------------|-------------|
+| 1 | WO-P2-001 | Frontend project bootstrap |
+| 2 | WO-P2-002+ | Frontend components |
 
 ### Execution Commands
 
