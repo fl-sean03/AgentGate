@@ -186,8 +186,12 @@ export function computeInProgressMetrics(
   // Same logic as aggregateRunMetrics but handles incomplete data
   const metrics = aggregateRunMetrics(iterations, run);
 
-  // For in-progress runs, use current time for completed
-  if (!run.completedAt) {
+  // For completed runs, use the run's completedAt
+  // For in-progress runs, use current time
+  if (run.completedAt) {
+    metrics.completedAt = run.completedAt;
+    metrics.totalDurationMs = run.completedAt.getTime() - run.startedAt.getTime();
+  } else {
     const now = new Date();
     metrics.completedAt = now;
     metrics.totalDurationMs = now.getTime() - run.startedAt.getTime();
