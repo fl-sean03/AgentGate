@@ -60,3 +60,22 @@ export {
   type LivenessResponse,
 } from './types.js';
 export { registerHealthRoutes } from './routes/health.js';
+export {
+  EventBroadcaster,
+  registerWebSocketRoutes,
+  WebSocketErrorCode,
+  type SubscribeMessage,
+  type UnsubscribeMessage,
+  type PingMessage,
+  type ClientMessage,
+  type WorkOrderCreatedEvent,
+  type WorkOrderUpdatedEvent,
+  type RunStartedEvent,
+  type RunIterationEvent,
+  type RunCompletedEvent,
+  type RunFailedEvent,
+  type PongMessage,
+  type ErrorMessage,
+  type ServerMessage,
+  type WebSocketConnection,
+} from './websocket/index.js';

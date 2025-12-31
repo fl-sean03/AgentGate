@@ -12,15 +12,18 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkOrderRoutes } from './routes/work-orders.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerAuthPlugin } from './middleware/auth.js';
+import { registerWebSocketRoutes } from './websocket/handler.js';
+import { EventBroadcaster } from './websocket/broadcaster.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('server');
 
 /**
- * Extended server configuration with API key
+ * Extended server configuration with API key and broadcaster
  */
 export interface AppConfig extends Partial<ServerConfig> {
   apiKey?: string;
+  broadcaster?: EventBroadcaster;
 }
 
 /**
@@ -29,8 +32,11 @@ export interface AppConfig extends Partial<ServerConfig> {
 export async function createApp(
   config: AppConfig = {}
 ): Promise<FastifyInstance> {
-  // Extract apiKey before validation (not part of ServerConfig schema)
-  const { apiKey, ...serverConfig } = config;
+  // Extract apiKey and broadcaster before validation (not part of ServerConfig schema)
+  const { apiKey, broadcaster: providedBroadcaster, ...serverConfig } = config;
+
+  // Create broadcaster instance if not provided
+  const broadcaster = providedBroadcaster ?? new EventBroadcaster();
 
   // Validate and apply defaults
   const validatedConfig = serverConfigSchema.parse(serverConfig);
@@ -125,6 +131,9 @@ export async function createApp(
   // Register API routes
   registerWorkOrderRoutes(app);
   registerRunRoutes(app);
+
+  // Register WebSocket routes
+  registerWebSocketRoutes(app, broadcaster);
 
   return app;
 }
