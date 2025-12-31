@@ -369,6 +369,48 @@ Create `src/server/websocket/index.ts` with exports.
 
 ---
 
+## Prerequisites
+
+Before executing work orders with GitHub mode, ensure:
+
+1. **GitHub Token**: Set `AGENTGATE_GITHUB_TOKEN` environment variable
+   ```bash
+   # Option 1: Export directly
+   export AGENTGATE_GITHUB_TOKEN=ghp_xxx
+
+   # Option 2: Load from .env file (requires sourcing)
+   source .env
+
+   # Option 3: Use auth command (stores in config)
+   agentgate auth github --token ghp_xxx
+   ```
+
+2. **Token Scopes**: The token needs `repo` scope for clone/push/PR operations
+
+3. **Verify Authentication**:
+   ```bash
+   agentgate auth github --status
+   ```
+
+> **Planned Enhancement**: Auto-load `.env` file at startup using `dotenv` package (WO-P1-004)
+
+---
+
+## Execution Status
+
+| Thrust | Work Order | Status | Notes |
+|--------|------------|--------|-------|
+| 1 | WO-P1-001 | ✅ Completed | Server foundation merged to main |
+| 2 | WO-P1-002 | ✅ Completed | Work Order API endpoints (PR #8 merged) |
+| 3 | WO-P1-003 | ⏳ Pending | WebSocket support |
+
+**Hotfixes Applied:**
+- `run` command added to CLI (enables `agentgate run <id>`)
+- `--github` option fix (was not being passed to validator)
+- CI test fix for subscription driver (handles missing Claude CLI in CI)
+
+---
+
 ## Work Order Execution Commands
 
 ### WO-P1-001: Server Foundation

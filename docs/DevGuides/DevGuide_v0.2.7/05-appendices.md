@@ -17,9 +17,9 @@ This document contains checklists, file references, and additional resources.
 
 | Work Order | Status | PR | Merged | Validated |
 |------------|--------|-----|--------|-----------|
-| WO-P1-001: Server Foundation | ⬜ | - | ⬜ | ⬜ |
-| WO-P1-002: Work Order API | ⬜ | - | ⬜ | ⬜ |
-| WO-P1-003: WebSocket Support | ⬜ | - | ⬜ | ⬜ |
+| WO-P1-001: Server Foundation | ✅ | - | ✅ | ✅ |
+| WO-P1-002: Work Order API | ✅ | #8 | ✅ | ✅ |
+| WO-P1-003: WebSocket Support | ⏳ | - | ⬜ | ⬜ |
 
 ### Phase 1 Validation
 
