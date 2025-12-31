@@ -8,6 +8,13 @@ export interface AgentRequest {
   contextPointers: ContextPointers;
   timeoutMs: number;
   sessionId: string | null;
+  // Optional spawn configuration for recursive agent spawning
+  spawnLimits?: {
+    maxDepth: number;
+    maxChildren: number;
+    maxTotalDescendants: number;
+  } | null;
+  workOrderId?: string | null;
 }
 
 // Agent Result
