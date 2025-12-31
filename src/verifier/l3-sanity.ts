@@ -42,6 +42,10 @@ export async function verifyL3(ctx: VerifyContext): Promise<LevelResult> {
   const cleanStateCheck = await checkCleanState(targetDir, ctx);
   checks.push(cleanStateCheck);
 
+  // Check test coverage for source files
+  const testCoverageCheck = await checkTestCoverage(targetDir, ctx);
+  checks.push(testCoverageCheck);
+
   const duration = Date.now() - startTime;
   const passed = checks.every((c) => c.passed);
 
@@ -350,4 +354,125 @@ async function checkCleanState(
       details: String(error),
     };
   }
+}
+
+/**
+ * Check test coverage for source files.
+ * Verifies that new source files have corresponding test files.
+ */
+async function checkTestCoverage(
+  workDir: string,
+  ctx: VerifyContext
+): Promise<CheckResult> {
+  try {
+    // Find all source files in src/ directory, excluding type files and index files
+    const sourceFiles = await fg('src/**/*.ts', {
+      cwd: workDir,
+      dot: false,
+      onlyFiles: true,
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/index.ts',
+        '**/*.d.ts',
+        '**/types.ts',
+        '**/types/**',
+      ],
+    });
+
+    if (sourceFiles.length === 0) {
+      return {
+        name: 'test-coverage',
+        passed: true,
+        message: 'No source files to check',
+        details: null,
+      };
+    }
+
+    const missingTests: string[] = [];
+
+    for (const sourceFile of sourceFiles) {
+      // Map source file to potential test file paths
+      const testPaths = getTestPathsForSourceFile(sourceFile);
+
+      // Check if any of the expected test files exist
+      let hasTest = false;
+      for (const testPath of testPaths) {
+        try {
+          await stat(join(workDir, testPath));
+          hasTest = true;
+          break;
+        } catch {
+          // Test file doesn't exist, continue checking other patterns
+        }
+      }
+
+      if (!hasTest) {
+        missingTests.push(sourceFile);
+      }
+    }
+
+    if (missingTests.length > 0) {
+      const details = missingTests.slice(0, 10).join('\n');
+
+      ctx.diagnostics.push({
+        level: VerificationLevel.L3,
+        type: 'test_coverage',
+        message: `${missingTests.length} source file(s) missing tests`,
+        details,
+      });
+
+      return {
+        name: 'test-coverage',
+        passed: true, // Warning only, not a failure
+        message: `Warning: ${missingTests.length} source file(s) missing tests`,
+        details,
+      };
+    }
+
+    return {
+      name: 'test-coverage',
+      passed: true,
+      message: `All ${sourceFiles.length} source file(s) have tests`,
+      details: null,
+    };
+  } catch (error) {
+    log.warn({ error }, 'Error checking test coverage');
+    return {
+      name: 'test-coverage',
+      passed: true,
+      message: 'Could not check test coverage',
+      details: String(error),
+    };
+  }
+}
+
+/**
+ * Map a source file path to potential test file paths.
+ * Supports multiple patterns:
+ * - src/foo/bar.ts → test/foo-bar.test.ts
+ * - src/foo/bar.ts → test/bar.test.ts
+ */
+function getTestPathsForSourceFile(sourceFile: string): string[] {
+  // Remove 'src/' prefix and '.ts' suffix
+  const withoutPrefix = sourceFile.replace(/^src\//, '');
+  const withoutExt = withoutPrefix.replace(/\.ts$/, '');
+
+  // Split into directory parts
+  const parts = withoutExt.split('/');
+  const fileName = parts[parts.length - 1];
+
+  const testPaths: string[] = [];
+
+  // Pattern 1: test/foo-bar.test.ts (full path with dashes)
+  const fullPathDashed = withoutExt.replace(/\//g, '-');
+  testPaths.push(`test/${fullPathDashed}.test.ts`);
+
+  // Pattern 2: test/bar.test.ts (just the filename)
+  testPaths.push(`test/${fileName}.test.ts`);
+
+  // Pattern 3: test/foo/bar.test.ts (preserve directory structure)
+  testPaths.push(`test/${withoutExt}.test.ts`);
+
+  return testPaths;
 }
