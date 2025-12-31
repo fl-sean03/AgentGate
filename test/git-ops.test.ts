@@ -84,7 +84,8 @@ describe('Git Operations', () => {
     });
 
     it('should detect existing branch', async () => {
-      const exists = await branchExists(testDir, 'main');
+      const currentBranch = await getCurrentBranch(testDir);
+      const exists = await branchExists(testDir, currentBranch);
       expect(exists).toBe(true);
     });
   });
