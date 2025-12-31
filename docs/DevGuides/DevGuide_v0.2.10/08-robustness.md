@@ -399,6 +399,154 @@ Consolidate tests into unified `run` command tests:
 
 ---
 
+## Thrust 16: CI-Aware PR Review
+
+### 16.1 Objective
+
+Enable agents to iterate on PRs based on GitHub CI feedback until CI passes.
+
+### 16.2 Background
+
+Current flow:
+1. Agent pushes PR to GitHub
+2. PR is created, run ends
+3. CI may fail, requiring manual intervention
+
+Desired flow:
+1. Agent pushes PR
+2. AgentGate polls GitHub for CI status
+3. If CI fails, agent receives failure message and remediates
+4. Agent pushes fix, repeats until CI passes
+
+### 16.3 Architecture
+
+```
+BUILD → SNAPSHOT → VERIFY → VERIFY_PASSED
+                                   ↓
+                             CREATE_PR
+                                   ↓
+                           CI_POLLING (NEW)
+                                   ↓
+                    ┌──────────────┴──────────────┐
+                    ↓                             ↓
+              CI_PASSED                    CI_FAILED
+                    ↓                             ↓
+              SUCCEEDED                    FEEDBACK
+                                              ↓
+                                           BUILDING
+                                           (Retry)
+```
+
+### 16.4 Subtasks
+
+#### 16.4.1 Add CI Types
+
+Create/modify `packages/server/src/types/`:
+- `CIStatus`: pending, running, completed
+- `CIConclusion`: success, failure, cancelled, skipped
+- `CheckRunResult`: Individual check details
+- `CIStatusResult`: Aggregated CI result
+
+#### 16.4.2 Add GitHub CI Functions
+
+Modify `packages/server/src/workspace/github.ts`:
+
+```typescript
+// Poll GitHub for CI status
+async function getCIStatus(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  ref: string
+): Promise<CIStatusResult>
+
+// Poll until CI completes (30 min timeout)
+async function pollCIStatus(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  options?: { pollIntervalMs?: number; timeoutMs?: number }
+): Promise<CIStatusResult>
+
+// Parse CI failures into agent feedback
+function parseCIFailures(status: CIStatusResult): string
+```
+
+Uses GitHub APIs:
+- `client.rest.checks.listForRef()` - Check runs per commit
+- `client.rest.actions.listWorkflowRuns()` - Workflow status
+
+#### 16.4.3 Update State Machine
+
+Modify `packages/server/src/orchestrator/state-machine.ts`:
+
+Add states:
+- `CI_POLLING`: Waiting for CI to complete
+- `CI_PASSED`: CI succeeded
+- `CI_FAILED`: CI failed
+
+Add transitions:
+- `PR_CREATED → CI_POLLING` (start polling)
+- `CI_POLLING → CI_PASSED` (all checks pass)
+- `CI_POLLING → CI_FAILED` (any check fails)
+- `CI_FAILED → BUILDING` (retry with feedback)
+
+#### 16.4.4 Add CI Polling Phase
+
+Modify `packages/server/src/orchestrator/run-executor.ts`:
+
+Add `onPollCI` callback after PR creation:
+```typescript
+interface RunExecutorCallbacks {
+  // ... existing callbacks
+  onPollCI?: (prUrl: string, branchRef: string) => Promise<CIStatusResult>;
+}
+```
+
+When CI fails:
+1. Parse failure messages
+2. Format as agent feedback
+3. Return to BUILD phase with feedback
+4. Continue iteration loop
+
+#### 16.4.5 Update Orchestrator
+
+Modify `packages/server/src/orchestrator/orchestrator.ts`:
+
+Implement `onPollCI` callback:
+1. Get Octokit client
+2. Call `pollCIStatus()` with PR branch ref
+3. If failed, format feedback via `parseCIFailures()`
+4. Return result for state machine
+
+#### 16.4.6 Optional Flag
+
+Add `--wait-for-ci` flag to CLI:
+- Default: false (current behavior - create PR and end)
+- If true: Poll CI and iterate until pass
+
+### 16.5 Verification Steps
+
+1. `pnpm --filter @agentgate/server typecheck` passes
+2. `pnpm --filter @agentgate/server test` passes
+3. E2E test: PR with failing CI → agent fixes → CI passes
+4. Timeout handling works (30 min default)
+
+### 16.6 Files Modified
+
+| File | Action |
+|------|--------|
+| `packages/server/src/types/github.ts` | Create (CI types) |
+| `packages/server/src/types/run.ts` | Add CI states/fields |
+| `packages/server/src/workspace/github.ts` | Add getCIStatus, pollCIStatus |
+| `packages/server/src/orchestrator/state-machine.ts` | Add CI transitions |
+| `packages/server/src/orchestrator/run-executor.ts` | Add onPollCI callback |
+| `packages/server/src/orchestrator/orchestrator.ts` | Implement CI polling |
+| `packages/server/src/feedback/generator.ts` | Parse CI failures |
+
+---
+
 ## Summary
 
 | Thrust | Issue | Severity | Priority |
@@ -408,3 +556,4 @@ Consolidate tests into unified `run` command tests:
 | 13 | Silent error swallowing | High | P1 |
 | 14 | API schema mismatches | Medium | P1 |
 | 15 | CLI command confusion | Medium | P1 |
+| 16 | No CI feedback loop | Medium | P2 |
