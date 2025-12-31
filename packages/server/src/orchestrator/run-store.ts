@@ -33,7 +33,9 @@ export async function loadRun(runId: string): Promise<Run | null> {
     const content = await readFile(runFile, 'utf-8');
     const data = JSON.parse(content) as Record<string, unknown>;
 
-    // Reconstruct dates
+    // Reconstruct dates and warnings
+    const warnings = (data['warnings'] as Array<{ type: string; message: string; iteration: number; timestamp: string }>) ?? [];
+
     const run: Run = {
       id: data['id'] as string,
       workOrderId: data['workOrderId'] as string,
@@ -53,6 +55,11 @@ export async function loadRun(runId: string): Promise<Run | null> {
       gitHubBranch: (data['gitHubBranch'] as string) ?? null,
       gitHubPrUrl: (data['gitHubPrUrl'] as string) ?? null,
       gitHubPrNumber: (data['gitHubPrNumber'] as number) ?? null,
+      // Warnings for non-fatal issues (v0.2.10 - Thrust 13)
+      warnings: warnings.map(w => ({
+        ...w,
+        timestamp: new Date(w.timestamp),
+      })),
     };
 
     return run;
@@ -219,5 +226,7 @@ export function createRun(
     gitHubBranch: null,
     gitHubPrUrl: null,
     gitHubPrNumber: null,
+    // Warnings for non-fatal issues (v0.2.10 - Thrust 13)
+    warnings: [],
   };
 }
