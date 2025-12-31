@@ -63,7 +63,7 @@ describe('CLI Exec Command', () => {
       id: 'test-wo-1',
       taskPrompt: 'Test task',
       workspaceSource: { type: 'local', path: '/test/path' },
-      agentType: 'claude-code',
+      agentType: 'claude-code-api',
       maxIterations: 3,
       maxWallClockSeconds: 3600,
       gatePlanSource: 'auto',
@@ -107,7 +107,7 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task',
         path: '/test/path',
-        agent: 'claude-code',
+        agent: 'claude-code-api',
         maxIterations: 3,
         maxTime: 3600,
         gatePlan: 'auto',
@@ -121,7 +121,7 @@ describe('CLI Exec Command', () => {
       expect(workOrderService.submit).toHaveBeenCalledWith(
         expect.objectContaining({
           taskPrompt: 'Test task',
-          agentType: 'claude-code',
+          agentType: 'claude-code-api',
           maxIterations: 3,
         })
       );
@@ -143,7 +143,7 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task',
         path: '/test/path',
-        agent: 'claude-code',
+        agent: 'claude-code-api',
         maxIterations: 3,
         maxTime: 3600,
         gatePlan: 'auto',
@@ -185,7 +185,7 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task',
         path: '/test/path',
-        agent: 'claude-code',
+        agent: 'claude-code-api',
         maxIterations: 3,
         maxTime: 3600,
         gatePlan: 'auto',
@@ -223,7 +223,7 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task',
         path: '/test/path',
-        agent: 'claude-code',
+        agent: 'claude-code-api',
         maxIterations: 3,
         maxTime: 3600,
         gatePlan: 'auto',
@@ -303,7 +303,7 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task',
         path: '/non/existent/path',
-        agent: 'claude-code',
+        agent: 'claude-code-api',
         maxIterations: 3,
         maxTime: 3600,
         gatePlan: 'auto',

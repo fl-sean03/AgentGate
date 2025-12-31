@@ -106,7 +106,7 @@ describe('OpenCode Driver', () => {
 describe('Claude Code Drivers', () => {
   it('should instantiate Claude Code API driver', () => {
     const driver = new ClaudeCodeDriver();
-    expect(driver.name).toBe('claude-code');
+    expect(driver.name).toBe('claude-code-api');
     expect(driver.version).toBe('1.0.0');
   });
 
@@ -123,7 +123,7 @@ describe('Driver Registry', () => {
     const names = drivers.map((d) => d.name);
 
     // Should have exactly 4 drivers
-    expect(names).toContain('claude-code');
+    expect(names).toContain('claude-code-api');
     expect(names).toContain('claude-code-subscription');
     expect(names).toContain('openai-codex');
     expect(names).toContain('opencode');
@@ -134,9 +134,9 @@ describe('Driver Registry', () => {
   });
 
   it('should get drivers by name', () => {
-    const claudeCode = driverRegistry.get('claude-code');
+    const claudeCode = driverRegistry.get('claude-code-api');
     expect(claudeCode).not.toBeNull();
-    expect(claudeCode?.name).toBe('claude-code');
+    expect(claudeCode?.name).toBe('claude-code-api');
 
     const subscription = driverRegistry.get('claude-code-subscription');
     expect(subscription).not.toBeNull();
