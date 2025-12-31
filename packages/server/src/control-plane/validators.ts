@@ -120,6 +120,7 @@ export const submitCommandOptionsSchema = z.object({
   github: z.string().optional(), // owner/repo for existing repo
   githubNew: z.string().optional(), // owner/repo for new repo
   public: z.boolean().default(false), // For github-new - repos are private by default
+  waitForCi: z.boolean().default(false), // CI polling (Thrust 16)
   agent: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE_SUBSCRIPTION),
   maxIterations: z.coerce.number().int().min(1).max(10).default(3),
   maxTime: z.coerce.number().int().min(60).max(86400).default(3600),

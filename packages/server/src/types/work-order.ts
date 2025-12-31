@@ -137,6 +137,8 @@ export interface WorkOrder {
   siblingIndex?: number;
   integrationStatus?: IntegrationStatus;
   integrationWorkOrderId?: string;
+  // CI polling (Thrust 16)
+  waitForCI?: boolean;
 }
 
 // Submit Request Schema
@@ -153,6 +155,8 @@ export const submitRequestSchema = z.object({
   rootId: z.string().optional(),
   depth: z.number().int().nonnegative().optional(),
   siblingIndex: z.number().int().nonnegative().optional(),
+  // CI polling (Thrust 16)
+  waitForCI: z.boolean().default(false),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

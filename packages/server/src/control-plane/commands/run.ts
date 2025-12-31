@@ -48,6 +48,8 @@ function formatRunState(state: RunState): string {
     [RunState.SNAPSHOTTING]: cyan,
     [RunState.VERIFYING]: cyan,
     [RunState.FEEDBACK]: yellow,
+    [RunState.PR_CREATED]: cyan,
+    [RunState.CI_POLLING]: cyan,
     [RunState.SUCCEEDED]: green,
     [RunState.FAILED]: red,
     [RunState.CANCELED]: dim,
