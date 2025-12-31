@@ -16,6 +16,8 @@
     "test:server": "pnpm --filter @agentgate/server test",
     "test:dashboard": "pnpm --filter @agentgate/dashboard test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:coverage": "pnpm -r test:coverage",
+    "test:e2e": "pnpm --filter @agentgate/server test:e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "clean": "pnpm -r clean",

@@ -112,7 +112,24 @@ jobs:
           CI: true
           NODE_ENV: test
 
-      - name: Run tests with coverage
+      - name: Run E2E tests
+        if: matrix.node-version == '20'
+        run: pnpm --filter @agentgate/server test:e2e
+        env:
+          CI: true
+        continue-on-error: true
+
+      - name: Run coverage (shared)
+        if: matrix.node-version == '20'
+        run: pnpm --filter @agentgate/shared test:coverage
+        continue-on-error: true
+
+      - name: Run coverage (dashboard)
+        if: matrix.node-version == '20'
+        run: pnpm --filter @agentgate/dashboard test:coverage
+        continue-on-error: true
+
+      - name: Run coverage (server)
         if: matrix.node-version == '20'
         run: pnpm --filter @agentgate/server test:coverage
         continue-on-error: true
