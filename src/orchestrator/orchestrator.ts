@@ -76,7 +76,6 @@ export class Orchestrator {
       createFresh,
       createFromGitHub,
       createGitHubRepo,
-      pushToGitHub,
       syncWithGitHub,
       isGitHubWorkspace,
     } = await import('../workspace/manager.js');
@@ -89,7 +88,7 @@ export class Orchestrator {
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
     const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
-    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, buildCloneUrl } = await import('../workspace/github.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest } = await import('../workspace/github.js');
     const { captureBeforeState, captureAfterState } = await import(
       '../snapshot/snapshotter.js'
     );
@@ -333,7 +332,7 @@ export class Orchestrator {
 
     // Add GitHub integration callbacks (v0.2.4)
     if (isGitHub) {
-      executorOptions.onPushIteration = async (ws, run, iteration, commitMessage) => {
+      executorOptions.onPushIteration = async (ws, run, iteration, commitMessage): Promise<void> => {
         // Set the branch name on the run if not already set
         if (!run.gitHubBranch && gitHubBranch) {
           run.gitHubBranch = gitHubBranch;
@@ -352,7 +351,7 @@ export class Orchestrator {
         }
       };
 
-      executorOptions.onCreatePullRequest = async (_ws, run, verificationReport) => {
+      executorOptions.onCreatePullRequest = async (_ws, run, verificationReport): Promise<{ prUrl: string; prNumber: number } | null> => {
         if (!gitHubBranch) {
           log.warn({ runId: run.id }, 'No GitHub branch set, skipping PR creation');
           return null;
@@ -378,7 +377,7 @@ export class Orchestrator {
         }
 
         // Determine highest verification level passed
-        const getHighestLevel = () => {
+        const getHighestLevel = (): string => {
           if (verificationReport.l3Result.passed) return 'L3';
           if (verificationReport.l2Result.passed) return 'L2';
           if (verificationReport.l1Result.passed) return 'L1';
