@@ -17,6 +17,7 @@ const serveOptionsSchema = z.object({
   port: z.coerce.number().int().min(1).max(65535).default(3001),
   host: z.string().default('0.0.0.0'),
   corsOrigin: z.string().optional(),
+  apiKey: z.string().optional(),
 });
 
 type ServeOptions = z.infer<typeof serveOptionsSchema>;
@@ -30,6 +31,7 @@ export function createServeCommand(): Command {
     .option('-p, --port <port>', 'Port to listen on', '3001')
     .option('-H, --host <host>', 'Host to bind to', '0.0.0.0')
     .option('--cors-origin <origin>', 'CORS origin to allow (can specify multiple with comma)')
+    .option('--api-key <key>', 'API key for authenticating protected endpoints')
     .action(async (options: Record<string, unknown>) => {
       try {
         await executeServe(options);
@@ -73,14 +75,19 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   print(`${bold('Port:')} ${cyan(String(options.port))}`);
   print(`${bold('Host:')} ${cyan(options.host)}`);
   print(`${bold('CORS Origins:')} ${cyan(corsOrigins.join(', '))}`);
+  print(`${bold('API Key:')} ${cyan(options.apiKey ? '(configured)' : '(none - auth disabled)')}`);
   print('');
 
-  // Start the server
-  const server = await startServer({
+  // Start the server - only include apiKey if it's set
+  const serverConfig: Parameters<typeof startServer>[0] = {
     port: options.port,
     host: options.host,
     corsOrigins,
-  });
+  };
+  if (options.apiKey) {
+    serverConfig.apiKey = options.apiKey;
+  }
+  const server = await startServer(serverConfig);
 
   // Handle shutdown signals
   const shutdown = (): void => {
@@ -101,9 +108,19 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   print(`Server is running at ${cyan(`http://${options.host}:${options.port}`)}`);
   print('');
   print('Available endpoints:');
-  print(`  ${cyan('GET')} /health       - Health check`);
-  print(`  ${cyan('GET')} /health/ready - Readiness check`);
-  print(`  ${cyan('GET')} /health/live  - Liveness check`);
+  print(`  ${cyan('GET')} /health              - Health check`);
+  print(`  ${cyan('GET')} /health/ready        - Readiness check`);
+  print(`  ${cyan('GET')} /health/live         - Liveness check`);
+  print('');
+  print('Work Order API:');
+  print(`  ${cyan('GET')}    /api/v1/work-orders     - List work orders`);
+  print(`  ${cyan('GET')}    /api/v1/work-orders/:id - Get work order details`);
+  print(`  ${cyan('POST')}   /api/v1/work-orders     - Submit work order (auth required)`);
+  print(`  ${cyan('DELETE')} /api/v1/work-orders/:id - Cancel work order (auth required)`);
+  print('');
+  print('Run API:');
+  print(`  ${cyan('GET')} /api/v1/runs     - List runs`);
+  print(`  ${cyan('GET')} /api/v1/runs/:id - Get run details`);
   print('');
   print('Press Ctrl+C to stop the server');
 }
