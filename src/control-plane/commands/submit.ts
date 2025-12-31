@@ -102,6 +102,9 @@ async function executeSubmit(rawOptions: Record<string, unknown>): Promise<void>
     fresh: options.fresh,
     template: options.template,
     projectName: options.projectName,
+    github: options.github,
+    githubNew: options.githubNew,
+    public: options.public,
   });
 
   if (!workspaceResult.success) {
