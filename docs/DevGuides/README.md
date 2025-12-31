@@ -257,6 +257,17 @@ Before considering a DevGuide complete:
 
 ## Current DevGuides
 
+### AgentGate
+
+| Version | Title | Status | Description |
+|---------|-------|--------|-------------|
+| [v0.2.2](./DevGuide_v0.2.2/00-index.md) | **Technical Debt Cleanup** | Complete | Fixed TypeScript/ESLint errors in agent module, updated package version |
+| [v0.2.1](./DevGuide_v0.2.1/00-index.md) | **Multi-Agent Driver Support** | Complete | Added OpenAI Codex, OpenAI Agents, OpenCode SDK drivers |
+| [v0.2.0](./DevGuide_v0.2.0/00-index.md) | **Claude Agent SDK Integration** | Complete | Added Claude Agent SDK driver as primary agent backend |
+| [v0.1.0](./DevGuide_v0.1.0/00-index.md) | **Core Architecture** | Complete | Workspace manager, gate resolver, verifier, orchestrator |
+
+### Legacy (Other Projects)
+
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
 | [devguide-v0.3.2](./devguide-v0.3.2/00-index.md) | **LAMMPS Reaper** | Complete | Minimal LAMMPS-only deck generator with LLM integration, L0-L3 validation, 106 unit tests + 12 live API tests |
