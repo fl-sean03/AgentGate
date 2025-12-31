@@ -14,7 +14,7 @@ export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
  * List work orders query parameters
  */
 export const listWorkOrdersQuerySchema = paginationQuerySchema.extend({
-  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']).optional(),
+  status: z.enum(['queued', 'running', 'waiting_for_children', 'integrating', 'succeeded', 'failed', 'canceled']).optional(),
 });
 
 export type ListWorkOrdersQuery = z.infer<typeof listWorkOrdersQuerySchema>;
@@ -84,7 +84,7 @@ export interface PaginatedResponse<T> {
 export interface WorkOrderSummary {
   id: string;
   taskPrompt: string;
-  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  status: 'queued' | 'running' | 'waiting_for_children' | 'integrating' | 'succeeded' | 'failed' | 'canceled';
   workspaceSource: WorkspaceSource;
   agentType: string;
   createdAt: string;

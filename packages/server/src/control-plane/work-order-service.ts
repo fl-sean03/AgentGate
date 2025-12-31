@@ -189,6 +189,8 @@ export class WorkOrderService {
     const counts: Record<WorkOrderStatus, number> = {
       [WorkOrderStatus.QUEUED]: 0,
       [WorkOrderStatus.RUNNING]: 0,
+      [WorkOrderStatus.WAITING_FOR_CHILDREN]: 0,
+      [WorkOrderStatus.INTEGRATING]: 0,
       [WorkOrderStatus.SUCCEEDED]: 0,
       [WorkOrderStatus.FAILED]: 0,
       [WorkOrderStatus.CANCELED]: 0,
@@ -214,6 +216,17 @@ export class WorkOrderService {
         WorkOrderStatus.CANCELED,
       ],
       [WorkOrderStatus.RUNNING]: [
+        WorkOrderStatus.WAITING_FOR_CHILDREN,
+        WorkOrderStatus.SUCCEEDED,
+        WorkOrderStatus.FAILED,
+        WorkOrderStatus.CANCELED,
+      ],
+      [WorkOrderStatus.WAITING_FOR_CHILDREN]: [
+        WorkOrderStatus.INTEGRATING,
+        WorkOrderStatus.FAILED,
+        WorkOrderStatus.CANCELED,
+      ],
+      [WorkOrderStatus.INTEGRATING]: [
         WorkOrderStatus.SUCCEEDED,
         WorkOrderStatus.FAILED,
         WorkOrderStatus.CANCELED,

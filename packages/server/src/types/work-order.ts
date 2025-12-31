@@ -4,12 +4,24 @@ import { z } from 'zod';
 export const WorkOrderStatus = {
   QUEUED: 'queued',
   RUNNING: 'running',
+  WAITING_FOR_CHILDREN: 'waiting_for_children',
+  INTEGRATING: 'integrating',
   SUCCEEDED: 'succeeded',
   FAILED: 'failed',
   CANCELED: 'canceled',
 } as const;
 
 export type WorkOrderStatus = (typeof WorkOrderStatus)[keyof typeof WorkOrderStatus];
+
+// Integration Status
+export const IntegrationStatus = {
+  PENDING: 'pending',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const;
+
+export type IntegrationStatus = (typeof IntegrationStatus)[keyof typeof IntegrationStatus];
 
 // Agent Types
 export const AgentType = {
@@ -117,6 +129,14 @@ export interface WorkOrder {
   runId?: string;
   completedAt?: Date;
   error?: string;
+  // Recursive agent spawning fields (v0.2.10)
+  parentId?: string;
+  childIds?: string[];
+  rootId?: string;
+  depth?: number;
+  siblingIndex?: number;
+  integrationStatus?: IntegrationStatus;
+  integrationWorkOrderId?: string;
 }
 
 // Submit Request Schema
@@ -128,6 +148,11 @@ export const submitRequestSchema = z.object({
   maxWallClockSeconds: z.number().int().min(60).max(86400).default(3600),
   gatePlanSource: z.nativeEnum(GatePlanSource).default(GatePlanSource.AUTO),
   policies: executionPoliciesSchema.optional(),
+  // Optional fields for spawned work orders (v0.2.10)
+  parentId: z.string().optional(),
+  rootId: z.string().optional(),
+  depth: z.number().int().nonnegative().optional(),
+  siblingIndex: z.number().int().nonnegative().optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

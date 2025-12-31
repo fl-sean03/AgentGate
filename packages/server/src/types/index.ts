@@ -1,6 +1,7 @@
 // Work Order Types
 export {
   WorkOrderStatus,
+  IntegrationStatus,
   AgentType,
   GatePlanSource,
   WorkspaceTemplate,
@@ -156,3 +157,14 @@ export {
   type SubscriptionStatus,
   type SubscriptionValidation,
 } from './subscription.js';
+
+// Spawn Types
+export {
+  IntegrationStrategy,
+  spawnLimitsSchema,
+  childWorkOrderRequestSchema,
+  spawnRequestSchema,
+  type SpawnLimits,
+  type ChildWorkOrderRequest,
+  type SpawnRequest,
+} from './spawn.js';
