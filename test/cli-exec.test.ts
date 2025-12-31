@@ -11,6 +11,9 @@ import { WorkOrderStatus, RunResult, RunState, type WorkOrder, type Run } from '
 // Mock dependencies
 vi.mock('../src/control-plane/work-order-service.js');
 vi.mock('../src/orchestrator/orchestrator.js');
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(() => true),
+}));
 
 describe('CLI Exec Command', () => {
   beforeEach(() => {
@@ -253,10 +256,10 @@ describe('CLI Exec Command', () => {
       const options = {
         prompt: 'Test task with options',
         path: '/custom/path',
-        agent: 'opencode',
+        agent: 'claude-code-subscription',
         maxIterations: 5,
         maxTime: 7200,
-        gatePlan: 'manual',
+        gatePlan: 'ci-workflow',
         network: true,
       };
 
@@ -266,10 +269,10 @@ describe('CLI Exec Command', () => {
       expect(workOrderService.submit).toHaveBeenCalledWith(
         expect.objectContaining({
           taskPrompt: 'Test task with options',
-          agentType: 'opencode',
+          agentType: 'claude-code-subscription',
           maxIterations: 5,
           maxWallClockSeconds: 7200,
-          gatePlanSource: 'manual',
+          gatePlanSource: 'ci-workflow',
           policies: expect.objectContaining({
             networkAllowed: true,
           }),
@@ -293,6 +296,10 @@ describe('CLI Exec Command', () => {
     });
 
     it('should handle non-existent path gracefully', async () => {
+      // Mock existsSync to return false for this test
+      const fs = await import('node:fs');
+      vi.mocked(fs.existsSync).mockReturnValueOnce(false);
+
       const options = {
         prompt: 'Test task',
         path: '/non/existent/path',
