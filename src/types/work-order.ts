@@ -14,6 +14,7 @@ export type WorkOrderStatus = (typeof WorkOrderStatus)[keyof typeof WorkOrderSta
 // Agent Types
 export const AgentType = {
   CLAUDE_CODE: 'claude-code',
+  CLAUDE_CODE_SUBSCRIPTION: 'claude-code-subscription',
 } as const;
 
 export type AgentType = (typeof AgentType)[keyof typeof AgentType];

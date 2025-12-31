@@ -96,7 +96,9 @@ export class Orchestrator {
     const { generateFeedback } = await import('../feedback/generator.js');
     const { formatForAgent } = await import('../feedback/formatter.js');
     const { ClaudeCodeDriver } = await import('../agent/claude-code-driver.js');
+    const { ClaudeCodeSubscriptionDriver } = await import('../agent/claude-code-subscription-driver.js');
     const { DEFAULT_AGENT_CONSTRAINTS } = await import('../agent/defaults.js');
+    const { AgentType } = await import('../types/work-order.js');
 
     // Create or acquire workspace
     let workspace: Workspace;
@@ -228,8 +230,32 @@ export class Orchestrator {
       throw error;
     }
 
-    // Create agent driver
-    const driver = new ClaudeCodeDriver();
+    // Create agent driver based on agent type
+    let driver: InstanceType<typeof ClaudeCodeDriver> | InstanceType<typeof ClaudeCodeSubscriptionDriver>;
+    if (workOrder.agentType === AgentType.CLAUDE_CODE_SUBSCRIPTION) {
+      const subscriptionDriver = new ClaudeCodeSubscriptionDriver();
+      const available = await subscriptionDriver.isAvailable();
+      if (!available) {
+        const subscriptionStatus = subscriptionDriver.getSubscriptionStatus();
+        const error = subscriptionStatus?.error ?? 'Subscription not available';
+        log.error({ error, workOrderId: workOrder.id }, 'Subscription driver not available');
+        await release(workspace.id);
+        throw new Error(`Cannot use subscription driver: ${error}`);
+      }
+      const subscriptionStatus = subscriptionDriver.getSubscriptionStatus();
+      log.info(
+        {
+          subscriptionType: subscriptionStatus?.subscriptionType,
+          rateLimitTier: subscriptionStatus?.rateLimitTier,
+          billingMethod: 'subscription',
+        },
+        'Using subscription-based billing'
+      );
+      driver = subscriptionDriver;
+    } else {
+      driver = new ClaudeCodeDriver();
+      log.info({ billingMethod: 'api' }, 'Using API-based billing');
+    }
 
     // Set up run executor options
     const executorOptions: RunExecutorOptions = {

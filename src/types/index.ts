@@ -147,3 +147,12 @@ export {
   type RunMetrics,
   type MetricsDisplayOptions,
 } from './metrics.js';
+
+// Subscription Types
+export {
+  type SubscriptionType,
+  type ClaudeOAuthCredentials,
+  type ClaudeCredentials,
+  type SubscriptionStatus,
+  type SubscriptionValidation,
+} from './subscription.js';
