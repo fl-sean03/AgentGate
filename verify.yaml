@@ -1,4 +1,4 @@
-# AgentGate Verification Gate Plan
+# AgentGate Monorepo Verification Gate Plan
 # This defines what MUST pass for any code change to be accepted
 
 version: "1"
@@ -23,57 +23,76 @@ contracts:
 
 # Level 1: Test commands (MUST ALL PASS)
 tests:
-  - name: typecheck
-    command: pnpm typecheck
-    description: TypeScript compilation with strict mode
+  - name: shared-typecheck
+    command: pnpm --filter @agentgate/shared typecheck
+    description: Shared types compilation
 
-  - name: lint
-    command: pnpm lint
-    description: ESLint code quality checks
+  - name: server-typecheck
+    command: pnpm --filter @agentgate/server typecheck
+    description: Server TypeScript compilation with strict mode
 
-  - name: unit-tests
-    command: pnpm test
-    description: All unit and integration tests
+  - name: dashboard-typecheck
+    command: pnpm --filter @agentgate/dashboard typecheck
+    description: Dashboard TypeScript compilation
+
+  - name: server-lint
+    command: pnpm --filter @agentgate/server lint
+    description: Server ESLint code quality checks
+
+  - name: dashboard-lint
+    command: pnpm --filter @agentgate/dashboard lint
+    description: Dashboard ESLint code quality checks
+
+  - name: server-tests
+    command: pnpm --filter @agentgate/server test
+    description: Server unit and integration tests
     timeout: 300  # 5 minutes
 
-  - name: build
+  - name: build-all
     command: pnpm build
-    description: Production build
+    description: Build all packages
 
 # Level 2: Blackbox tests (functional verification)
 blackbox:
   - name: cli-help
-    command: node dist/index.js --help
+    command: node packages/server/dist/index.js --help
     expectExitCode: 0
     description: CLI starts and shows help
 
   - name: health-endpoint
     setup: |
-      node dist/index.js serve --port 13001 &
+      node packages/server/dist/index.js serve --port 13001 &
       sleep 2
     command: curl -s http://localhost:13001/health
     expectContains: '"status":"ok"'
     teardown: pkill -f "serve --port 13001" || true
     description: HTTP server health check works
 
+  - name: dashboard-build
+    command: test -d packages/dashboard/dist
+    expectExitCode: 0
+    description: Dashboard build output exists
+
 # Level 3: Sanity checks (structural validation)
 sanity:
   requiredFiles:
-    - path: "src/**/*.ts"
-      description: Source files exist
-    - path: "test/**/*.test.ts"
-      description: Test files exist
+    - path: "packages/server/src/**/*.ts"
+      description: Server source files exist
+    - path: "packages/dashboard/src/**/*.ts"
+      description: Dashboard source files exist
+    - path: "packages/shared/src/**/*.ts"
+      description: Shared types exist
 
-  # NEW: Require tests for new source files
+  # Require tests for new source files
   testCoverage:
     enabled: true
     rules:
-      - pattern: "src/server/websocket/*.ts"
-        requiresTest: "test/websocket*.test.ts"
-      - pattern: "src/server/routes/*.ts"
-        requiresTest: "test/routes*.test.ts OR test/integration/*.test.ts"
-      - pattern: "src/orchestrator/*.ts"
-        requiresTest: "test/orchestrator*.test.ts OR test/*.test.ts"
+      - pattern: "packages/server/src/server/websocket/*.ts"
+        requiresTest: "packages/server/test/websocket*.test.ts"
+      - pattern: "packages/server/src/server/routes/*.ts"
+        requiresTest: "packages/server/test/routes*.test.ts OR packages/server/test/integration/*.test.ts"
+      - pattern: "packages/server/src/orchestrator/*.ts"
+        requiresTest: "packages/server/test/orchestrator*.test.ts OR packages/server/test/*.test.ts"
 
 # Execution policy
 execution:

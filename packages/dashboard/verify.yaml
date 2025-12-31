@@ -1,0 +1,20 @@
+version: '1'
+name: 'agentgate-dashboard'
+environment:
+  runtime: node
+  version: '20'
+  setup:
+    - pnpm install
+tests:
+  - name: typecheck
+    command: pnpm typecheck
+  - name: lint
+    command: pnpm lint
+  - name: build
+    command: pnpm build
+contracts:
+  required_files: []
+  forbidden_patterns: []
+policy:
+  network: false
+  max_runtime: 300
