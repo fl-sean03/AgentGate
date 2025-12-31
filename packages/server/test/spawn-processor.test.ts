@@ -42,7 +42,7 @@ describe('SpawnProcessor', () => {
       id: 'parent-wo-123',
       taskPrompt: 'Parent task',
       workspaceSource: { type: 'local', path: testWorkspacePath },
-      agentType: AgentType.CLAUDE_CODE,
+      agentType: AgentType.CLAUDE_CODE_API,
       maxIterations: 3,
       maxWallClockSeconds: 3600,
       gatePlanSource: GatePlanSource.AUTO,

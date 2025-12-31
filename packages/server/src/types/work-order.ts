@@ -25,7 +25,7 @@ export type IntegrationStatus = (typeof IntegrationStatus)[keyof typeof Integrat
 
 // Agent Types
 export const AgentType = {
-  CLAUDE_CODE: 'claude-code',
+  CLAUDE_CODE_API: 'claude-code-api',
   CLAUDE_CODE_SUBSCRIPTION: 'claude-code-subscription',
 } as const;
 

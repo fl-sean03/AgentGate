@@ -28,7 +28,7 @@ export interface ClaudeCodeDriverConfig {
  * Claude Code CLI driver implementation
  */
 export class ClaudeCodeDriver implements AgentDriver {
-  readonly name = 'claude-code';
+  readonly name = 'claude-code-api';
   readonly version = '1.0.0';
 
   private readonly config: Required<ClaudeCodeDriverConfig>;

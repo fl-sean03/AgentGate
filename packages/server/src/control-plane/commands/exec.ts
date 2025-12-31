@@ -46,7 +46,7 @@ export function createExecCommand(): Command {
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
-      AgentType.CLAUDE_CODE
+      AgentType.CLAUDE_CODE_SUBSCRIPTION
     )
     .option(
       '--max-iterations <n>',

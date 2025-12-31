@@ -60,7 +60,7 @@ describe('Integration Service', () => {
     id,
     taskPrompt: `Test task ${id}`,
     workspaceSource: { type: 'local', path: testDir },
-    agentType: AgentType.CLAUDE_CODE,
+    agentType: AgentType.CLAUDE_CODE_API,
     maxIterations: 3,
     maxWallClockSeconds: 3600,
     gatePlanSource: GatePlanSource.DEFAULT,

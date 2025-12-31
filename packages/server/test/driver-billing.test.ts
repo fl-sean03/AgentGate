@@ -37,7 +37,7 @@ describe('Driver Billing Method Verification', () => {
       // We can verify this by checking that the driver doesn't filter it out
 
       // Get driver name to verify it's the API-based driver
-      expect(driver.name).toBe('claude-code');
+      expect(driver.name).toBe('claude-code-api');
 
       // The API driver's execute method uses:
       // const env = { ...process.env, ...this.config.env }
@@ -99,7 +99,7 @@ describe('Driver Billing Method Verification', () => {
 
       // API driver: Uses process.env directly (includes ANTHROPIC_API_KEY)
       // - Claude Code sees ANTHROPIC_API_KEY → uses API credits
-      expect(apiDriver.name).toBe('claude-code');
+      expect(apiDriver.name).toBe('claude-code-api');
 
       // Subscription driver: Filters out ANTHROPIC_API_KEY
       // - Claude Code doesn't see API key → falls back to OAuth credentials

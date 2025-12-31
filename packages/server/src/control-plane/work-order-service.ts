@@ -35,7 +35,7 @@ export class WorkOrderService {
       id,
       taskPrompt: request.taskPrompt,
       workspaceSource: request.workspaceSource,
-      agentType: request.agentType ?? AgentType.CLAUDE_CODE,
+      agentType: request.agentType ?? AgentType.CLAUDE_CODE_SUBSCRIPTION,
       maxIterations: request.maxIterations ?? 3,
       maxWallClockSeconds: request.maxWallClockSeconds ?? 3600,
       gatePlanSource: request.gatePlanSource ?? GatePlanSource.AUTO,
