@@ -13,6 +13,8 @@ import {
   type Snapshot,
   type VerificationReport,
   type IterationData,
+  type AgentResult,
+  type Phase,
   RunEvent,
   RunResult,
 } from '../types/index.js';
@@ -24,6 +26,16 @@ import { saveRun, saveIterationData, createRun } from './run-store.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('run-executor');
+
+/**
+ * Build result including agent result for metrics
+ */
+export interface BuildResult {
+  sessionId: string;
+  success: boolean;
+  error?: string;
+  agentResult?: AgentResult;
+}
 
 /**
  * Options for run execution.
@@ -40,7 +52,7 @@ export interface RunExecutorOptions {
     feedback: string | null,
     iteration: number,
     sessionId: string | null
-  ) => Promise<{ sessionId: string; success: boolean; error?: string }>;
+  ) => Promise<BuildResult>;
 
   onSnapshot: (
     workspace: Workspace,
@@ -68,6 +80,13 @@ export interface RunExecutorOptions {
   // Optional callbacks for status updates
   onStateChange?: (run: Run) => void;
   onIterationComplete?: (run: Run, iteration: IterationData) => void;
+
+  // Metrics callbacks (v0.2.5)
+  onPhaseStart?: (phase: Phase, iteration: number) => void;
+  onPhaseEnd?: (phase: Phase, iteration: number) => void;
+  onAgentResult?: (result: AgentResult, iteration: number) => void;
+  onSnapshotCaptured?: (snapshot: Snapshot, iteration: number) => void;
+  onVerificationComplete?: (report: VerificationReport, iteration: number) => void;
 
   // GitHub integration callbacks (v0.2.4)
   onPushIteration?: (
@@ -99,6 +118,11 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     onCaptureBeforeState,
     onStateChange,
     onIterationComplete,
+    onPhaseStart,
+    onPhaseEnd,
+    onAgentResult,
+    onSnapshotCaptured,
+    onVerificationComplete,
     onPushIteration,
     onCreatePullRequest,
   } = options;
@@ -166,6 +190,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       run = applyTransition(run, RunEvent.BUILD_STARTED);
       await saveRun(run);
       onStateChange?.(run);
+      onPhaseStart?.('build', iteration);
 
       const buildResult = await onBuild(
         workspace,
@@ -174,6 +199,13 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         iteration,
         run.sessionId
       );
+
+      onPhaseEnd?.('build', iteration);
+
+      // Record agent result for metrics (v0.2.5)
+      if (buildResult.agentResult) {
+        onAgentResult?.(buildResult.agentResult, iteration);
+      }
 
       // Store session ID for continuation
       run.sessionId = buildResult.sessionId;
@@ -206,6 +238,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
 
       // SNAPSHOT PHASE
+      onPhaseStart?.('snapshot', iteration);
       const snapshot = await onSnapshot(
         workspace,
         beforeState,
@@ -213,6 +246,8 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         iteration,
         workOrder.taskPrompt
       );
+      onPhaseEnd?.('snapshot', iteration);
+      onSnapshotCaptured?.(snapshot, iteration);
 
       iterationData.snapshotId = snapshot.id;
       run.snapshotIds.push(snapshot.id);
@@ -223,7 +258,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onStateChange?.(run);
 
       // VERIFY PHASE
+      onPhaseStart?.('verify', iteration);
       const verificationReport = await onVerify(snapshot, gatePlan, runId, iteration);
+      onPhaseEnd?.('verify', iteration);
+      onVerificationComplete?.(verificationReport, iteration);
       iterationData.verificationPassed = verificationReport.passed;
 
       if (verificationReport.passed) {
@@ -269,7 +307,9 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onStateChange?.(run);
 
       // FEEDBACK PHASE
+      onPhaseStart?.('feedback', iteration);
       feedback = await onFeedback(snapshot, verificationReport, gatePlan);
+      onPhaseEnd?.('feedback', iteration);
       iterationData.feedbackGenerated = true;
 
       run = applyTransition(run, RunEvent.FEEDBACK_GENERATED);

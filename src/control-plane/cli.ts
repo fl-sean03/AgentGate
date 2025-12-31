@@ -4,12 +4,13 @@ import { createStatusCommand } from './commands/status.js';
 import { createListCommand } from './commands/list.js';
 import { createCancelCommand } from './commands/cancel.js';
 import { createAuthCommand } from './commands/auth.js';
+import { createMetricsCommand } from './commands/metrics.js';
 import { ensureAllDirs } from '../artifacts/paths.js';
 
 /**
  * Package version - will be updated during build
  */
-const VERSION = '0.2.4';
+const VERSION = '0.2.5';
 
 /**
  * Create and configure the CLI program.
@@ -34,6 +35,7 @@ export function createProgram(): Command {
   program.addCommand(createListCommand());
   program.addCommand(createCancelCommand());
   program.addCommand(createAuthCommand());
+  program.addCommand(createMetricsCommand());
 
   // Error handling
   program.exitOverride();
@@ -71,3 +73,4 @@ export { createStatusCommand } from './commands/status.js';
 export { createListCommand } from './commands/list.js';
 export { createCancelCommand } from './commands/cancel.js';
 export { createAuthCommand } from './commands/auth.js';
+export { createMetricsCommand } from './commands/metrics.js';

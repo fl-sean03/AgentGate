@@ -119,6 +119,23 @@ export function getVerificationLogsPath(
   return join(getVerificationDir(runId, iteration), `${level.toLowerCase()}-logs.txt`);
 }
 
+// Metrics paths (v0.2.5)
+export function getMetricsDir(runId: string): string {
+  return join(getRunDir(runId), 'metrics');
+}
+
+export function getMetricsIterationsDir(runId: string): string {
+  return join(getMetricsDir(runId), 'iterations');
+}
+
+export function getIterationMetricsPath(runId: string, iteration: number): string {
+  return join(getMetricsIterationsDir(runId), `${iteration}.json`);
+}
+
+export function getRunMetricsPath(runId: string): string {
+  return join(getMetricsDir(runId), 'run-metrics.json');
+}
+
 // Ensure directories exist
 export async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
