@@ -84,6 +84,7 @@ export async function createFresh(
 
   // Write seed files
   const { writeFile } = await import('node:fs/promises');
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Static functions, not methods
   const { join, dirname } = await import('node:path');
 
   for (const seed of seedFiles) {

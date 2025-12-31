@@ -72,7 +72,7 @@ export async function parseGitHubActions(path: string): Promise<CIPlan | null> {
     );
   }
 
-  if (!workflow || !workflow.jobs) {
+  if (!workflow?.jobs) {
     return null;
   }
 
@@ -158,7 +158,7 @@ export function extractNodeVersion(workflow: GitHubWorkflow): string | null {
     // Check matrix
     if (job.strategy?.matrix) {
       const matrix = job.strategy.matrix;
-      const nodeVersions = matrix['node-version'] || matrix.node;
+      const nodeVersions = matrix['node-version'] ?? matrix.node;
       if (nodeVersions && nodeVersions.length > 0) {
         // Return the latest (usually last) version
         return String(nodeVersions[nodeVersions.length - 1]);
@@ -195,7 +195,7 @@ export function extractPythonVersion(workflow: GitHubWorkflow): string | null {
     // Check matrix
     if (job.strategy?.matrix) {
       const matrix = job.strategy.matrix;
-      const pythonVersions = matrix['python-version'] || matrix.python;
+      const pythonVersions = matrix['python-version'] ?? matrix.python;
       if (pythonVersions && pythonVersions.length > 0) {
         return String(pythonVersions[pythonVersions.length - 1]);
       }

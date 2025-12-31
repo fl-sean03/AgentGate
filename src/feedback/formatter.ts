@@ -1,4 +1,4 @@
-import type { StructuredFeedback, Failure } from '../types/index.js';
+import type { StructuredFeedback } from '../types/index.js';
 
 const MAX_TOTAL_LENGTH = 4000;
 const MAX_FAILURE_DETAIL_LENGTH = 500;

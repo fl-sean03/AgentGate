@@ -5,11 +5,8 @@
 import type {
   VerificationLevel,
   GatePlan,
-  Workspace,
   LevelResult,
   CheckResult,
-  CommandResult,
-  BlackboxResult,
   CleanRoom,
 } from '../types/index.js';
 

@@ -1,4 +1,4 @@
-import type { WorkOrder, WorkOrderStatus, ListFilters } from '../types/index.js';
+import type { WorkOrder, WorkOrderStatus } from '../types/index.js';
 
 /**
  * ANSI color codes for terminal output.
@@ -396,6 +396,7 @@ export function formatWorkOrderListJson(orders: WorkOrder[]): string {
  * Print to stdout.
  */
 export function print(text: string): void {
+  // eslint-disable-next-line no-console -- CLI output function
   console.log(text);
 }
 
@@ -403,6 +404,7 @@ export function print(text: string): void {
  * Print error to stderr.
  */
 export function printError(text: string): void {
+  // eslint-disable-next-line no-console -- CLI error output function
   console.error(text);
 }
 

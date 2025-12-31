@@ -26,7 +26,7 @@ export function createListCommand(): Command {
     .option('-l, --limit <n>', 'Maximum number of results', '20')
     .option('-o, --offset <n>', 'Skip first N results', '0')
     .option('--json', 'Output result as JSON', false)
-    .action(async (options) => {
+    .action(async (options: Record<string, unknown>) => {
       try {
         await executeList(options);
       } catch (error) {

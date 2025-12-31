@@ -3,10 +3,10 @@
  * Runs blackbox tests with fixtures and assertions.
  */
 
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { execa, type Options as ExecaOptions } from 'execa';
-import { VerificationLevel, type GatePlan, type LevelResult, type CheckResult, type BlackboxTest, type Assertion } from '../types/index.js';
+import { VerificationLevel, type LevelResult, type CheckResult, type BlackboxTest, type Assertion } from '../types/index.js';
 import type { VerifyContext, ExecutionResult } from './types.js';
 import { runInCleanRoom } from './clean-room.js';
 import { createLogger } from '../utils/logger.js';
@@ -297,7 +297,7 @@ function checkAssertion(
 
     case 'json_equals': {
       try {
-        const parsedOutput = JSON.parse(output);
+        const parsedOutput = JSON.parse(output) as unknown;
         const expected = assertion.expected;
         if (JSON.stringify(parsedOutput) !== JSON.stringify(expected)) {
           return {
@@ -347,34 +347,4 @@ function checkAssertion(
   }
 
   return { passed: true, message: '' };
-}
-
-/**
- * Get a value from JSON using a path like "foo.bar.0.baz".
- */
-function getJsonPath(obj: unknown, path: string): unknown {
-  if (!path) return obj;
-
-  const parts = path.split('.');
-  let current: unknown = obj;
-
-  for (const part of parts) {
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-
-    if (Array.isArray(current)) {
-      const index = parseInt(part, 10);
-      if (isNaN(index)) {
-        return undefined;
-      }
-      current = current[index];
-    } else if (typeof current === 'object') {
-      current = (current as Record<string, unknown>)[part];
-    } else {
-      return undefined;
-    }
-  }
-
-  return current;
 }

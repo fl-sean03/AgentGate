@@ -6,7 +6,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   VerificationLevel,
-  type GatePlan,
   type VerificationReport,
   type LevelResult,
 } from '../types/index.js';
@@ -58,7 +57,6 @@ export async function verify(options: VerifyWithMetadataOptions): Promise<Verifi
     cleanRoom: useCleanRoom = false,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     skip = [],
-    verbose = false,
     snapshotId = 'unknown',
     runId = randomUUID(),
     iteration = 1,
@@ -95,7 +93,7 @@ export async function verify(options: VerifyWithMetadataOptions): Promise<Verifi
 
   // Log collector for the report
   const logs: string[] = [];
-  const addLog = (msg: string) => logs.push(`[${new Date().toISOString()}] ${msg}`);
+  const addLog = (msg: string): void => { logs.push(`[${new Date().toISOString()}] ${msg}`); };
   addLog(`Starting verification of ${snapshotPath}`);
 
   try {
@@ -247,8 +245,10 @@ export async function verifyLevel(
         return await verifyL2(ctx);
       case VerificationLevel.L3:
         return await verifyL3(ctx);
-      default:
-        throw new Error(`Unknown verification level: ${level}`);
+      default: {
+        const exhaustiveCheck: never = level;
+        throw new Error(`Unknown verification level: ${String(exhaustiveCheck)}`);
+      }
     }
   } finally {
     if (ctx.cleanRoom) {

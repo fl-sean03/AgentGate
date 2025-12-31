@@ -2,7 +2,7 @@ import { mkdir, rm, cp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execa } from 'execa';
 import type { Workspace } from '../types/index.js';
-import { getTmpDir, ensureDir } from '../artifacts/paths.js';
+import { getTmpDir } from '../artifacts/paths.js';
 import { createTempDir, removeTempDir } from '../utils/temp.js';
 import { createLogger } from '../utils/logger.js';
 import { getCurrentSha } from './git-ops.js';

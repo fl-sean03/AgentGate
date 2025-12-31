@@ -3,8 +3,8 @@
  * Creates an isolated environment for running verification.
  */
 
-import { mkdir, rm, cp, writeFile, chmod } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { cp } from 'node:fs/promises';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execa, type Options as ExecaOptions } from 'execa';
 import type { CleanRoom, GatePlan } from '../types/index.js';
@@ -152,18 +152,14 @@ async function createPythonVenv(
  */
 async function setupNodeEnvironment(
   workDir: string,
-  gatePlan: GatePlan
+  _gatePlan: GatePlan
 ): Promise<void> {
   log.debug({ workDir }, 'Setting up Node.js environment');
-
-  // Check if package.json exists
-  const packageJsonPath = join(workDir, 'package.json');
 
   try {
     // Determine package manager
     const pnpmLock = join(workDir, 'pnpm-lock.yaml');
     const yarnLock = join(workDir, 'yarn.lock');
-    const npmLock = join(workDir, 'package-lock.json');
 
     let installCmd: string[];
 

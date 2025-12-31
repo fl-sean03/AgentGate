@@ -3,11 +3,11 @@
  * Checks required files, forbidden patterns, schemas, and naming conventions.
  */
 
-import { access, readFile, readdir, stat } from 'node:fs/promises';
-import { join, relative, basename, extname } from 'node:path';
+import { access, readFile } from 'node:fs/promises';
+import { join, basename, extname } from 'node:path';
 import fg from 'fast-glob';
-import { VerificationLevel, type GatePlan, type LevelResult, type CheckResult } from '../types/index.js';
-import type { VerifyContext, Diagnostic, ContractCheckResult } from './types.js';
+import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
+import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('l0-contracts');

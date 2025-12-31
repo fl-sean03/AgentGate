@@ -3,7 +3,7 @@
  * Stores and retrieves run state and iteration data.
  */
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RunState, type Run, type IterationData, type RunStatus } from '../types/index.js';
 import { getRunDir, ensureRunStructure } from '../artifacts/paths.js';

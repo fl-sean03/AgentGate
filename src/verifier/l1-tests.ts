@@ -4,7 +4,7 @@
  */
 
 import { execa, type Options as ExecaOptions } from 'execa';
-import { VerificationLevel, type GatePlan, type LevelResult, type CheckResult, type CommandResult } from '../types/index.js';
+import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext, ExecutionResult } from './types.js';
 import { runInCleanRoom } from './clean-room.js';
 import { createLogger } from '../utils/logger.js';
@@ -140,7 +140,7 @@ async function runCommand(
   command: string,
   timeoutMs: number,
   cleanRoom: VerifyContext['cleanRoom'],
-  ctx: VerifyContext
+  _ctx: VerifyContext
 ): Promise<ExecutionResult> {
   const startTime = Date.now();
 

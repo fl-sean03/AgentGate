@@ -3,7 +3,7 @@
  * Final sanity checks before marking verification as passed.
  */
 
-import { readdir, stat, access } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import fg from 'fast-glob';
 import { VerificationLevel, type GatePlan, type LevelResult, type CheckResult } from '../types/index.js';

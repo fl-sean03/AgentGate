@@ -2,7 +2,6 @@ import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CleanupResult, RetentionPolicy, StorageUsage } from '../types/summary.js';
 import {
-  getAgentGateRoot,
   getRunsDir,
   getTmpDir,
   getLeasesDir,
@@ -160,8 +159,6 @@ export async function cleanupOrphanedLeases(): Promise<CleanupResult> {
 }
 
 export async function getStorageUsage(): Promise<StorageUsage> {
-  const root = getAgentGateRoot();
-
   const [workspacesBytes, runsBytes, snapshotsBytes, tempBytes] = await Promise.all([
     getDirSize(getWorkspacesDir()).catch(() => 0),
     getDirSize(getRunsDir()).catch(() => 0),

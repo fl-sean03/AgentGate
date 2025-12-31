@@ -13,15 +13,12 @@ import {
   type Snapshot,
   type VerificationReport,
   type IterationData,
-  RunState,
   RunEvent,
   RunResult,
-  WorkOrderStatus,
 } from '../types/index.js';
 import {
   applyTransition,
   isTerminalState,
-  getResultForEvent,
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun } from './run-store.js';
 import { createLogger } from '../utils/logger.js';

@@ -88,6 +88,7 @@ export {
 /**
  * Validate a submit request.
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- Complex generic type inference
 export function validateSubmitRequest(data: unknown) {
   return validate(submitRequestSchema, data);
 }
@@ -95,6 +96,7 @@ export function validateSubmitRequest(data: unknown) {
 /**
  * Validate list filters.
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- Complex generic type inference
 export function validateListFilters(data: unknown) {
   return validate(listFiltersSchema, data);
 }
@@ -249,7 +251,7 @@ export function validateWorkspaceSourceOptions(
   }
 
   // template or projectName without fresh
-  if ((options.template || options.projectName) && !options.fresh) {
+  if ((options.template ?? options.projectName) && !options.fresh) {
     return {
       success: false,
       errors: [

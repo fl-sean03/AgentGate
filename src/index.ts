@@ -9,6 +9,7 @@ async function main(): Promise<void> {
   try {
     await runCli();
   } catch (error) {
+    // eslint-disable-next-line no-console -- CLI error output
     console.error(
       'Fatal error:',
       error instanceof Error ? error.message : String(error)
@@ -17,4 +18,4 @@ async function main(): Promise<void> {
   }
 }
 
-main();
+void main();

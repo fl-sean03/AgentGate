@@ -5,7 +5,6 @@ import { workOrderService } from '../work-order-service.js';
 import {
   submitCommandOptionsSchema,
   validateWorkspaceSourceOptions,
-  parseWorkspaceSource,
 } from '../validators.js';
 import {
   print,
@@ -58,7 +57,7 @@ export function createSubmitCommand(): Command {
     )
     .option('--network', 'Allow network access during execution', false)
     .option('--json', 'Output result as JSON', false)
-    .action(async (options) => {
+    .action(async (options: Record<string, unknown>) => {
       try {
         await executeSubmit(options);
       } catch (error) {

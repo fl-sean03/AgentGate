@@ -3,7 +3,6 @@
  * Discovers and parses CI configuration files to create a GatePlan.
  */
 
-import { join } from 'node:path';
 import * as fg from 'fast-glob';
 import { nanoid } from 'nanoid';
 import { RuntimeType, GatePlanSource, type GatePlan } from '../types/index.js';
@@ -71,7 +70,7 @@ export async function ingestCIWorkflows(workspacePath: string): Promise<GatePlan
 /**
  * Merge multiple CI plans into a single GatePlan.
  */
-function mergeCIPlans(plans: CIPlan[], workspacePath: string): GatePlan {
+function mergeCIPlans(plans: CIPlan[], _workspacePath: string): GatePlan {
   // Collect all unique commands
   const allSetupCommands = new Set<string>();
   const allTestCommands = new Set<string>();

@@ -10,7 +10,6 @@ import type { RunSummary } from '../types/summary.js';
 import {
   getRunDir,
   getRunMetadataPath,
-  getRunWorkOrderPath,
   getRunGatePlanPath,
   getRunSummaryPath,
   getIterationMetadataPath,
@@ -209,6 +208,7 @@ export async function listRuns(): Promise<RunSummary[]> {
 }
 
 export async function listIterations(runId: string): Promise<number[]> {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Static function, not a method
   const { join } = await import('node:path');
   const iterationsDir = join(getRunDir(runId), 'iterations');
 

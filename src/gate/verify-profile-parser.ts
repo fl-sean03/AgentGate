@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
 import { verifyProfileSchema, type VerifyProfile } from '../types/index.js';
-import { ProfileNotFoundError, ProfileParseError, ProfileValidationError } from './errors.js';
+import { ProfileParseError, ProfileValidationError } from './errors.js';
 
 /**
  * Search locations for verify.yaml, relative to workspace root.

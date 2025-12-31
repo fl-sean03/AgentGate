@@ -9,11 +9,7 @@ import {
   type Run,
   type GatePlan,
   type Workspace,
-  type VerificationReport,
   type AgentRequest,
-  type FreshSource,
-  WorkOrderStatus,
-  AgentType,
   WorkspaceTemplate,
 } from '../types/index.js';
 import { executeRun, type RunExecutorOptions } from './run-executor.js';
@@ -104,7 +100,7 @@ export class Orchestrator {
           gitSource.branch ?? 'main'
         );
       } else if (workOrder.workspaceSource.type === 'fresh') {
-        const freshSource = workOrder.workspaceSource as FreshSource;
+        const freshSource = workOrder.workspaceSource;
 
         // Generate seed files with task prompt embedded in CLAUDE.md
         const templateVars = {
@@ -231,6 +227,7 @@ export class Orchestrator {
         return report;
       },
 
+      // eslint-disable-next-line @typescript-eslint/require-await -- Callback interface requires Promise
       onFeedback: async (_snapshot, report, _plan) => {
         log.debug({ passed: report.passed }, 'Generating feedback');
         const structuredFeedback = generateFeedback(report, report.iteration);
@@ -283,14 +280,14 @@ export class Orchestrator {
   /**
    * Get status of a run.
    */
-  async getStatus(runId: string) {
+  async getStatus(runId: string): ReturnType<typeof getRunStatus> {
     return getRunStatus(runId);
   }
 
   /**
    * Get a run by ID.
    */
-  async getRun(runId: string) {
+  async getRun(runId: string): ReturnType<typeof loadRun> {
     return loadRun(runId);
   }
 

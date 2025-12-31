@@ -1,5 +1,4 @@
 import { writeFile } from 'node:fs/promises';
-import { nanoid } from 'nanoid';
 import type { Workspace, BeforeState, Snapshot } from '../types/index.js';
 import {
   createSnapshotCommit,
