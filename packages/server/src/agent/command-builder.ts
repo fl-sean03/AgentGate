@@ -59,7 +59,7 @@ function buildContextSection(request: AgentRequest): string | null {
  * @returns Formatted spawn instructions
  */
 export function buildSpawnInstructions(limits: SpawnLimits, workOrderId?: string | null): string {
-  const workOrderIdExample = workOrderId || '<current-work-order-id>';
+  const workOrderIdExample = workOrderId ?? '<current-work-order-id>';
   return `## Spawning Child Agents (Optional)
 
 If a task is too complex to complete in one session, you may decompose it into subtasks

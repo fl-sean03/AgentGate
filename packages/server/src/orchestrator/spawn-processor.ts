@@ -14,9 +14,7 @@ import {
 import {
   type SpawnRequest,
   type SpawnLimits,
-  type ChildWorkOrderRequest,
   spawnRequestSchema,
-  IntegrationStrategy,
 } from '../types/spawn.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
@@ -46,7 +44,7 @@ export class SpawnProcessor {
 
     try {
       const content = await fs.readFile(spawnFilePath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed: unknown = JSON.parse(content);
       const validated = spawnRequestSchema.parse(parsed);
 
       log.info({ workspacePath, childCount: validated.children.length }, 'Spawn request found');
@@ -134,7 +132,7 @@ export class SpawnProcessor {
   async createChildWorkOrders(
     parent: WorkOrder,
     request: SpawnRequest,
-    workspace: Workspace
+    _workspace: Workspace
   ): Promise<WorkOrder[]> {
     const childOrders: WorkOrder[] = [];
     const childIds: string[] = [];

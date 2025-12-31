@@ -415,10 +415,11 @@ function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): Wor
         repoName: source.repo.split('/')[1] ?? source.repo,
         template: source.template as 'minimal' | 'typescript' | 'python' | undefined,
       };
-    default:
+    default: {
       // Exhaustive check - TypeScript will error if we miss a case
       const _exhaustive: never = source;
       throw new Error(`Unknown workspace source type: ${(_exhaustive as { type: string }).type}`);
+    }
   }
 }
 

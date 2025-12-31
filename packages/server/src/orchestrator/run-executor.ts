@@ -156,13 +156,15 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   if (leaseId) {
     const { renewLease } = await import('../workspace/lease.js');
     // Renew lease every 10 minutes
-    renewalInterval = setInterval(async () => {
-      try {
-        await renewLease(leaseId);
-        log.debug({ runId, leaseId }, 'Lease renewed');
-      } catch (error) {
-        log.warn({ runId, leaseId, error }, 'Failed to renew lease');
-      }
+    renewalInterval = setInterval(() => {
+      void (async () => {
+        try {
+          await renewLease(leaseId);
+          log.debug({ runId, leaseId }, 'Lease renewed');
+        } catch (error) {
+          log.warn({ runId, leaseId, error }, 'Failed to renew lease');
+        }
+      })();
     }, 10 * 60 * 1000);
   }
 

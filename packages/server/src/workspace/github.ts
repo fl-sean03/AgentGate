@@ -646,6 +646,7 @@ export async function pollCIStatus(
   const timeoutMs = options?.timeoutMs ?? 30 * 60 * 1000; // 30 minutes default
   const startTime = Date.now();
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const status = await getCIStatus(client, owner, repo, ref);
 
