@@ -1,0 +1,58 @@
+# Gate Plan for Toy Repo
+# Tests AgentGate verification system
+
+id: toy-repo-gate-plan
+name: Toy Repo Verification
+version: "1.0.0"
+
+gates:
+  - id: l0-contracts
+    level: L0
+    name: Contract Checks
+    contracts:
+      - type: typescript
+        config:
+          strict: true
+          noEmit: true
+      - type: lint
+        config:
+          tool: eslint
+
+  - id: l1-tests
+    level: L1
+    name: Unit Tests
+    tests:
+      - type: jest
+        config:
+          pattern: "src/__tests__/**/*.test.ts"
+          coverage:
+            enabled: true
+            threshold: 80
+
+  - id: l2-blackbox
+    level: L2
+    name: Black-box Tests
+    blackbox:
+      - id: build-check
+        name: Build produces output
+        command: npm run build
+        assertions:
+          - type: exit_code
+            expected: 0
+          - type: contains
+            target: stdout
+            pattern: ""
+
+  - id: l3-sanity
+    level: L3
+    name: Sanity Checks
+    sanity:
+      - type: no_secrets
+        config:
+          patterns:
+            - "API_KEY"
+            - "SECRET"
+            - "PASSWORD"
+      - type: no_large_files
+        config:
+          maxSizeKb: 1024

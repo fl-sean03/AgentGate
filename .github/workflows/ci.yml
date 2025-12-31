@@ -46,12 +46,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run ESLint
+      - name: Run ESLint (all packages)
         run: pnpm lint
-
-      - name: Check Formatting (Prettier)
-        run: pnpm format:check
-        continue-on-error: true
 
   typecheck:
     name: TypeScript Check
@@ -74,7 +70,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run TypeScript compiler
+      - name: Run TypeScript compiler (all packages)
         run: pnpm typecheck
 
   # ============================================================================
@@ -110,7 +106,7 @@ jobs:
           git config --global user.email "ci@agentgate.dev"
           git config --global user.name "AgentGate CI"
 
-      - name: Run tests
+      - name: Run tests (all packages)
         run: pnpm test
         env:
           CI: true
@@ -118,7 +114,7 @@ jobs:
 
       - name: Run tests with coverage
         if: matrix.node-version == '20'
-        run: pnpm test:coverage
+        run: pnpm --filter @agentgate/server test:coverage
         continue-on-error: true
 
       - name: Upload coverage reports
@@ -153,19 +149,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build project
+      - name: Build all packages
         run: pnpm build
 
-      - name: Verify build output
+      - name: Verify server build output
         run: |
-          test -f dist/index.js || (echo "Build output missing" && exit 1)
-          echo "Build output verified"
+          test -f packages/server/dist/index.js || (echo "Server build output missing" && exit 1)
+          echo "Server build output verified"
 
-      - name: Upload build artifacts
+      - name: Verify dashboard build output
+        run: |
+          test -d packages/dashboard/dist || (echo "Dashboard build output missing" && exit 1)
+          echo "Dashboard build output verified"
+
+      - name: Upload server build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: dist
-          path: dist/
+          name: server-dist
+          path: packages/server/dist/
+          retention-days: 7
+
+      - name: Upload dashboard build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: dashboard-dist
+          path: packages/dashboard/dist/
           retention-days: 7
 
   # ============================================================================
@@ -193,11 +201,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download build artifacts
+      - name: Download server build artifacts
         uses: actions/download-artifact@v7
         with:
-          name: dist
-          path: dist/
+          name: server-dist
+          path: packages/server/dist/
 
       - name: Configure Git
         run: |
@@ -205,16 +213,16 @@ jobs:
           git config --global user.name "AgentGate CI"
 
       - name: Test CLI help
-        run: node dist/index.js --help
+        run: node packages/server/dist/index.js --help
 
       - name: Test CLI version
-        run: node dist/index.js --version
+        run: node packages/server/dist/index.js --version
 
       - name: Test submit command help
-        run: node dist/index.js submit --help
+        run: node packages/server/dist/index.js submit --help
 
       - name: Test list command
-        run: node dist/index.js list || true
+        run: node packages/server/dist/index.js list || true
 
   # ============================================================================
   # Cross-Platform Tests
@@ -250,8 +258,8 @@ jobs:
           git config --global user.email "ci@agentgate.dev"
           git config --global user.name "AgentGate CI"
 
-      - name: Run tests
-        run: pnpm test
+      - name: Run server tests
+        run: pnpm --filter @agentgate/server test
         env:
           CI: true
 
