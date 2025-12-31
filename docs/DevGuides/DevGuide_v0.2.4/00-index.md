@@ -122,6 +122,7 @@ This DevGuide implements GitHub-backed workspaces, a fundamental architectural c
 - [01-overview.md](./01-overview.md) - Architecture and design decisions
 - [02-implementation.md](./02-implementation.md) - Thrust specifications
 - [03-appendices.md](./03-appendices.md) - Checklists and file references
+- [04-e2e-testing.md](./04-e2e-testing.md) - End-to-End testing with real GitHub API
 
 ---
 
