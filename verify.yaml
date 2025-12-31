@@ -48,6 +48,14 @@ tests:
     description: Server unit and integration tests
     timeout: 300  # 5 minutes
 
+  - name: shared-tests
+    command: pnpm --filter @agentgate/shared test
+    description: Shared package unit tests
+
+  - name: dashboard-tests
+    command: pnpm --filter @agentgate/dashboard test
+    description: Dashboard unit tests
+
   - name: build-all
     command: pnpm build
     description: Build all packages
