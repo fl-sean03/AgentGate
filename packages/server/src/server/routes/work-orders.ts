@@ -396,25 +396,37 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
 /**
  * Map API workspace source to internal format
  * Uses exhaustive switch for type safety (v0.2.10 - Thrust 14)
+ *
+ * For GitHub sources, the repo field can be:
+ * - "owner/repo" format (explicit owner)
+ * - "repo" only (uses AGENTGATE_GITHUB_OWNER env var as default)
  */
 function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): WorkOrder['workspaceSource'] {
+  const defaultOwner = process.env.AGENTGATE_GITHUB_OWNER ?? '';
+
   switch (source.type) {
     case 'local':
       return { type: 'local', path: source.path };
-    case 'github':
+    case 'github': {
+      const parts = source.repo.split('/');
+      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
       return {
         type: 'github',
-        owner: source.repo.split('/')[0] ?? source.repo,
-        repo: source.repo.split('/')[1] ?? source.repo,
+        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
+        repo: hasExplicitOwner ? (parts[1] as string) : source.repo,
         branch: source.branch,
       };
-    case 'github-new':
+    }
+    case 'github-new': {
+      const parts = source.repo.split('/');
+      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
       return {
         type: 'github-new',
-        owner: source.repo.split('/')[0] ?? source.repo,
-        repoName: source.repo.split('/')[1] ?? source.repo,
+        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
+        repoName: hasExplicitOwner ? (parts[1] as string) : source.repo,
         template: source.template as 'minimal' | 'typescript' | 'python' | undefined,
       };
+    }
     default: {
       // Exhaustive check - TypeScript will error if we miss a case
       const _exhaustive: never = source;
