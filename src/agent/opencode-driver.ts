@@ -136,18 +136,28 @@ export class OpenCodeDriver implements AgentDriver {
         this.server = server;
         logger.debug({ url: server.url }, 'OpenCode server started');
 
-        // Configure authentication if API keys are available
-        if (process.env.ANTHROPIC_API_KEY) {
-          logger.debug('Setting up Anthropic authentication');
+        // Configure authentication based on OPENCODE_PROVIDER
+        // Note: OpenCode has internal model routing bugs with OpenAI (tries to use gpt-5-nano)
+        // Anthropic works correctly with OpenCode's internal agents
+        const provider = process.env.OPENCODE_PROVIDER || 'anthropic';
+        if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+          logger.debug('Setting up Anthropic authentication for OpenCode');
           await this.client.auth.set({
             path: { id: 'anthropic' },
             body: { type: 'api', key: process.env.ANTHROPIC_API_KEY },
           });
-        } else if (process.env.OPENAI_API_KEY) {
-          logger.debug('Setting up OpenAI authentication');
+        } else if (provider === 'openai' && process.env.OPENAI_API_KEY) {
+          logger.debug('Setting up OpenAI authentication for OpenCode');
           await this.client.auth.set({
             path: { id: 'openai' },
             body: { type: 'api', key: process.env.OPENAI_API_KEY },
+          });
+        } else if (process.env.ANTHROPIC_API_KEY) {
+          // Fallback to Anthropic (more reliable with OpenCode)
+          logger.debug('Falling back to Anthropic authentication');
+          await this.client.auth.set({
+            path: { id: 'anthropic' },
+            body: { type: 'api', key: process.env.ANTHROPIC_API_KEY },
           });
         }
       }
@@ -191,10 +201,17 @@ export class OpenCodeDriver implements AgentDriver {
         'OpenCode prompt built'
       );
 
-      // Determine the model to use based on available API keys and env config
-      const model = process.env.ANTHROPIC_API_KEY
-        ? { providerID: 'anthropic', modelID: process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514' }
-        : { providerID: 'openai', modelID: process.env.OPENAI_API_MODEL || 'gpt-4o' };
+      // Determine the model to use from OPENCODE_* env vars, falling back to provider defaults
+      const providerID = process.env.OPENCODE_PROVIDER || 'openai';
+      let modelID: string;
+      if (process.env.OPENCODE_MODEL) {
+        modelID = process.env.OPENCODE_MODEL;
+      } else if (providerID === 'openai') {
+        modelID = process.env.OPENAI_API_MODEL || 'gpt-4o';
+      } else {
+        modelID = process.env.CLAUDE_MODEL || 'claude-sonnet-4-20250514';
+      }
+      const model = { providerID, modelID };
 
       logger.debug({ model }, 'Using model for OpenCode');
 
@@ -225,6 +242,9 @@ export class OpenCodeDriver implements AgentDriver {
       }
 
       // Wait for the response (polling for completion)
+      // NOTE: session.status() is unreliable - it returns {} when idle instead of { type: "idle" }
+      // Workaround: Check if last message is from assistant and has completion timestamp
+      // See: https://github.com/sst/opencode/issues/3815
       let finalResponse = '';
       let messageCount = 0;
       const pollStartTime = Date.now();
@@ -232,14 +252,22 @@ export class OpenCodeDriver implements AgentDriver {
 
       while (Date.now() - pollStartTime < timeout) {
         pollCount++;
-        // Get session status - returns a map of session statuses
-        // Need to pass the directory to scope the status request
-        const statusResponse = await this.client.session.status({
+
+        // Check messages to determine completion (workaround for status API bug)
+        const messagesCheck = await this.client.session.messages({
+          path: { id: sessionId },
           query: { directory: request.workspacePath },
         });
 
-        // Check if our session is idle
-        const sessionStatus = statusResponse.data?.[sessionId];
+        const messages = messagesCheck.data || [];
+        const lastMessage = messages[messages.length - 1];
+
+        // Session is complete if:
+        // 1. Last message is from assistant
+        // 2. Last message has a completion timestamp (info.time.completed)
+        const isComplete =
+          lastMessage?.info?.role === 'assistant' &&
+          lastMessage?.info?.time?.completed != null;
 
         // Log status every 5 polls
         if (pollCount % 5 === 1) {
@@ -247,16 +275,17 @@ export class OpenCodeDriver implements AgentDriver {
             {
               pollCount,
               elapsed: Date.now() - pollStartTime,
-              sessionStatus: sessionStatus?.type,
-              allStatuses: statusResponse.data ? Object.keys(statusResponse.data) : [],
+              messageCount: messages.length,
+              lastRole: lastMessage?.info?.role,
+              hasCompleted: lastMessage?.info?.time?.completed != null,
+              isComplete,
             },
-            'Polling session status'
+            'Polling session completion'
           );
         }
 
-        if (sessionStatus?.type === 'idle') {
-          // Session is done processing
-          logger.debug({ pollCount }, 'Session is idle, done processing');
+        if (isComplete) {
+          logger.debug({ pollCount }, 'Session complete (assistant message with completion timestamp)');
           break;
         }
 

@@ -1,7 +1,8 @@
 # DevGuide v0.2.1: Multi-Agent Driver Support
 
-**Status**: IN PROGRESS (OpenCode pending)
+**Status**: ✅ COMPLETE
 **Created**: 2025-12-30
+**Completed**: 2025-12-30
 **Target**: Add OpenAI Codex SDK, OpenAI Agents SDK, and OpenCode SDK drivers
 
 ---
@@ -14,21 +15,21 @@ This DevGuide adds support for multiple AI coding agent backends beyond Claude. 
 
 ## Completion Summary
 
-Phase 1 (OpenAI drivers) completed and validated:
+All four drivers implemented and validated:
 
 | Test | Result | Duration |
 |------|--------|----------|
-| Claude Agent SDK E2E | PASSED | 14.2s |
-| OpenAI Codex SDK E2E | PASSED | 8.9s |
-| OpenAI Agents SDK E2E | PASSED | 4.1s |
-| OpenCode SDK E2E | PENDING | - |
-| Unit Tests | 31 PASSED | 0.8s |
+| Claude Agent SDK E2E | ✅ PASSED | 14.2s |
+| OpenAI Codex SDK E2E | ✅ PASSED | 8.9s |
+| OpenAI Agents SDK E2E | ✅ PASSED | 4.1s |
+| OpenCode SDK E2E | ✅ PASSED | 49.2s |
+| Unit Tests | ✅ 35 PASSED | 1.0s |
 
 Key deliverables:
 - `@openai/codex-sdk` driver with thread-based execution
 - `@openai/agents` driver with custom file tools
-- `@opencode-ai/sdk` driver (in progress)
-- Unit tests for all drivers
+- `@opencode-ai/sdk` driver with local server + session management
+- Unit tests for all drivers (35 total)
 - E2E test scripts for live validation
 
 ---
@@ -37,8 +38,8 @@ Key deliverables:
 
 1. ✅ OpenAI Codex SDK driver passes E2E test creating calculator.ts
 2. ✅ OpenAI Agents SDK driver passes E2E test with custom tools
-3. ⏳ OpenCode SDK driver passes E2E test
-4. ✅ All existing tests continue to pass
+3. ✅ OpenCode SDK driver passes E2E test
+4. ✅ All existing tests continue to pass (35 total)
 5. ✅ Driver registry supports dynamic selection
 6. ✅ Environment variables configure API keys for each provider
 
@@ -62,11 +63,11 @@ Key deliverables:
 | 1 | Install Dependencies | Add SDK packages | ✅ Complete |
 | 2 | OpenAI Codex Driver | Implement driver using Codex SDK | ✅ Complete |
 | 3 | OpenAI Agents Driver | Implement driver using Agents SDK | ✅ Complete |
-| 4 | OpenCode Driver | Implement driver using OpenCode SDK | ⏳ In Progress |
+| 4 | OpenCode Driver | Implement driver using OpenCode SDK | ✅ Complete |
 | 5 | Update Registry | Auto-register all available drivers | ✅ Complete |
 | 6 | Environment Config | Configure API keys from .env | ✅ Complete |
-| 7 | Tests | Unit tests for new drivers | ⏳ Adding OpenCode |
-| 8 | E2E Validation | Live tests with real API calls | ⏳ Adding OpenCode |
+| 7 | Tests | Unit tests for new drivers (35 total) | ✅ Complete |
+| 8 | E2E Validation | Live tests with real API calls | ✅ Complete |
 
 ---
 
@@ -75,12 +76,11 @@ Key deliverables:
 ### New Files
 - `src/agent/openai-codex-driver.ts` - Codex SDK driver (278 lines)
 - `src/agent/openai-agents-driver.ts` - Agents SDK driver (230 lines)
-- `src/agent/opencode-driver.ts` - OpenCode SDK driver (pending)
-- `test/openai-drivers.test.ts` - Unit tests for OpenAI drivers
-- `test/opencode-driver.test.ts` - Unit tests for OpenCode driver (pending)
+- `src/agent/opencode-driver.ts` - OpenCode SDK driver (387 lines)
+- `test/openai-drivers.test.ts` - Unit tests for all new drivers (17 tests)
 - `scripts/live-codex-test.ts` - Live E2E test for Codex
 - `scripts/live-agents-test.ts` - Live E2E test for Agents SDK
-- `scripts/live-opencode-test.ts` - Live E2E test for OpenCode (pending)
+- `scripts/live-opencode-test.ts` - Live E2E test for OpenCode
 
 ### Modified Files
 - `package.json` - Added `@openai/codex-sdk`, `@openai/agents`, `@opencode-ai/sdk`, `zod`
