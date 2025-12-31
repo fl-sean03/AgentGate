@@ -146,8 +146,32 @@ export {
   type OpenCodeResult,
 } from './opencode-driver.js';
 
+// Subscription detection
+export {
+  getCredentialsPath,
+  credentialsExist,
+  parseCredentials,
+  isTokenExpired,
+  isValidSubscriptionType,
+  validateSubscription,
+  detectSubscription,
+  getSubscriptionCredentials,
+} from './subscription-detector.js';
+
+// Claude Code Subscription driver (uses Pro/Max subscription)
+export {
+  ClaudeCodeSubscriptionDriver,
+  createClaudeCodeSubscriptionDriver,
+  tryCreateSubscriptionDriver,
+  SUBSCRIPTION_CAPABILITIES,
+  type ClaudeCodeSubscriptionDriverConfig,
+  type SubscriptionCapabilities,
+} from './claude-code-subscription-driver.js';
+
 // Initialize and register drivers
 import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
+import { ClaudeCodeDriver } from './claude-code-driver.js';
+import { ClaudeCodeSubscriptionDriver } from './claude-code-subscription-driver.js';
 import { OpenAICodexDriver } from './openai-codex-driver.js';
 import { OpenAIAgentsDriver } from './openai-agents-driver.js';
 import { OpenCodeDriver } from './opencode-driver.js';
@@ -157,6 +181,15 @@ import { register } from './registry.js';
 // Claude SDK is registered first and becomes the default
 const claudeDriver = new ClaudeAgentSDKDriver();
 register(claudeDriver);
+
+// Register Claude Code CLI driver (API-based)
+const claudeCodeDriver = new ClaudeCodeDriver();
+register(claudeCodeDriver);
+
+// Register Claude Code Subscription driver (subscription-based)
+// Note: This driver requires subscription validation at runtime
+const subscriptionDriver = new ClaudeCodeSubscriptionDriver();
+register(subscriptionDriver);
 
 // Register OpenAI drivers (available when OPENAI_API_KEY is set)
 const codexDriver = new OpenAICodexDriver();
