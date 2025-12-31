@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+import dotenv from 'dotenv';
+
+// Load environment variables from .env file before anything else
+dotenv.config();
+
 import { runCli } from './control-plane/cli.js';
 
 /**
