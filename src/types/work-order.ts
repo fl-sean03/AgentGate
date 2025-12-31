@@ -123,7 +123,7 @@ export interface WorkOrder {
 export const submitRequestSchema = z.object({
   taskPrompt: z.string().min(1).max(10000),
   workspaceSource: workspaceSourceSchema,
-  agentType: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE),
+  agentType: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE_SUBSCRIPTION),
   maxIterations: z.number().int().min(1).max(10).default(3),
   maxWallClockSeconds: z.number().int().min(60).max(86400).default(3600),
   gatePlanSource: z.nativeEnum(GatePlanSource).default(GatePlanSource.AUTO),
