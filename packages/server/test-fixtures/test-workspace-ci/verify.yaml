@@ -1,0 +1,18 @@
+
+version: "1"
+name: Test with GitHub CI
+useGitHubCI: true
+environment:
+  runtime: node
+  version: "20"
+  setup:
+    - npm install
+contracts:
+  forbidden_patterns:
+    - "**/.env"
+tests:
+  - name: manual-test
+    command: echo "This should be replaced"
+policy:
+  network: false
+  max_runtime: 600
