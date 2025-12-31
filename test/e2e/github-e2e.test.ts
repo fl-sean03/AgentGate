@@ -11,7 +11,13 @@
  *   pnpm test test/e2e/github-e2e.test.ts
  */
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach } from 'vitest';
+
+// Check if E2E tests should run
+const SHOULD_RUN_E2E = !!process.env.AGENTGATE_GITHUB_TOKEN;
+
+// Use conditional describe - skips all tests if no token
+const describeE2E = SHOULD_RUN_E2E ? describe : describe.skip;
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, rm, readdir, readFile } from 'node:fs/promises';
@@ -181,20 +187,13 @@ function createTestDir(): string {
   return dir;
 }
 
-function skipIfNoToken(): void {
-  if (!process.env.AGENTGATE_GITHUB_TOKEN) {
-    throw new Error('Skipping: AGENTGATE_GITHUB_TOKEN not set');
-  }
-}
 
 // ============================================================================
 // Category 1: Authentication Tests
 // ============================================================================
 
-describe('E2E: Authentication Tests', () => {
+describeE2E('E2E: Authentication Tests', () => {
   it('AUTH-01: Token Validation - validates PAT and returns user info', async () => {
-    skipIfNoToken();
-
     const result = await validateAuth(client);
 
     expect(result.authenticated).toBe(true);
@@ -204,16 +203,12 @@ describe('E2E: Authentication Tests', () => {
   });
 
   it('AUTH-03: Token Scopes - verifies token has repo scope', async () => {
-    skipIfNoToken();
-
     const result = await validateAuth(client);
 
     expect(result.scopes).toContain('repo');
   });
 
   it('AUTH-04: Config From Env - reads token from environment', async () => {
-    skipIfNoToken();
-
     const envConfig = getGitHubConfigFromEnv();
 
     expect(envConfig.token).toBeTruthy();
@@ -225,26 +220,20 @@ describe('E2E: Authentication Tests', () => {
 // Category 2: Repository Operations
 // ============================================================================
 
-describe('E2E: Repository Operations', () => {
+describeE2E('E2E: Repository Operations', () => {
   it('REPO-01: Check Existing Repo - confirms test repo exists', async () => {
-    skipIfNoToken();
-
     const exists = await repositoryExists(client, username, testRepoName);
 
     expect(exists).toBe(true);
   });
 
   it('REPO-02: Check Non-Existent Repo - returns false for fake repo', async () => {
-    skipIfNoToken();
-
     const exists = await repositoryExists(client, username, 'this-repo-does-not-exist-12345');
 
     expect(exists).toBe(false);
   });
 
   it('REPO-03: Get Repository Info - returns metadata for test repo', async () => {
-    skipIfNoToken();
-
     const repo = await getRepository(client, username, testRepoName);
 
     expect(repo.owner).toBe(username);
@@ -256,8 +245,6 @@ describe('E2E: Repository Operations', () => {
   });
 
   it('REPO-04: Create Public Repo - creates new public repository', async () => {
-    skipIfNoToken();
-
     const repoName = `${TEST_PREFIX}-public-${Date.now()}`;
 
     const repo = await createRepository(client, {
@@ -278,8 +265,6 @@ describe('E2E: Repository Operations', () => {
   });
 
   it('REPO-05: Create Private Repo - creates new private repository', async () => {
-    skipIfNoToken();
-
     const repoName = `${TEST_PREFIX}-private-${Date.now()}`;
 
     const repo = await createRepository(client, {
@@ -300,7 +285,7 @@ describe('E2E: Repository Operations', () => {
 // Category 3: URL Helper Tests
 // ============================================================================
 
-describe('E2E: URL Helpers', () => {
+describeE2E('E2E: URL Helpers', () => {
   it('URL-01: Authenticated Remote URL - injects token correctly', () => {
     const cloneUrl = 'https://github.com/owner/repo.git';
     const token = 'ghp_test_token';
@@ -341,10 +326,8 @@ describe('E2E: URL Helpers', () => {
 // Category 4: Workspace Operations
 // ============================================================================
 
-describe('E2E: Workspace Operations', () => {
+describeE2E('E2E: Workspace Operations', () => {
   it('WS-01: Clone Existing Repo - creates workspace from test repo', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -376,8 +359,6 @@ describe('E2E: Workspace Operations', () => {
   }, 30000);
 
   it('WS-02: Create New Repo Workspace - creates new repo with template', async () => {
-    skipIfNoToken();
-
     const repoName = `${TEST_PREFIX}-newrepo-${Date.now()}`;
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
@@ -416,8 +397,6 @@ describe('E2E: Workspace Operations', () => {
   }, 60000);
 
   it('WS-03: GitHub Workspace Helpers - isGitHubWorkspace and getGitHubInfo', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -443,10 +422,8 @@ describe('E2E: Workspace Operations', () => {
 // Category 5: Git Operations
 // ============================================================================
 
-describe('E2E: Git Operations', () => {
+describeE2E('E2E: Git Operations', () => {
   it('GIT-01: Create and Push Branch - creates branch and pushes to GitHub', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -480,8 +457,6 @@ describe('E2E: Git Operations', () => {
   }, 30000);
 
   it('GIT-02: Push Commits - pushes local commits to GitHub', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -522,8 +497,6 @@ describe('E2E: Git Operations', () => {
   }, 30000);
 
   it('GIT-03: Fetch Updates - fetches from remote', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -549,10 +522,8 @@ describe('E2E: Git Operations', () => {
 // Category 6: Pull Request Operations
 // ============================================================================
 
-describe('E2E: Pull Request Operations', () => {
+describeE2E('E2E: Pull Request Operations', () => {
   it('PR-01: Create PR - creates pull request from branch', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -610,8 +581,6 @@ describe('E2E: Pull Request Operations', () => {
   }, 60000);
 
   it('PR-02: Get PR Info - retrieves PR details', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -671,10 +640,8 @@ describe('E2E: Pull Request Operations', () => {
 // Category 7: Full Workflow Tests
 // ============================================================================
 
-describe('E2E: Full Workflow Tests', () => {
+describeE2E('E2E: Full Workflow Tests', () => {
   it('FLOW-01: Existing Repo Workflow - full agentgate flow with existing repo', async () => {
-    skipIfNoToken();
-
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
 
@@ -747,8 +714,6 @@ describe('E2E: Full Workflow Tests', () => {
   }, 120000);
 
   it('FLOW-02: New Repo Workflow - full agentgate flow creating new repo', async () => {
-    skipIfNoToken();
-
     const repoName = `${TEST_PREFIX}-flow-${Date.now()}`;
     const destPath = createTestDir();
     await mkdir(destPath, { recursive: true });
@@ -815,7 +780,7 @@ describe('E2E: Full Workflow Tests', () => {
 // Test Summary
 // ============================================================================
 
-describe('E2E: Test Summary', () => {
+describeE2E('E2E: Test Summary', () => {
   it('prints test configuration', () => {
     if (!process.env.AGENTGATE_GITHUB_TOKEN) {
       console.log('\n⚠️  E2E tests were skipped: AGENTGATE_GITHUB_TOKEN not set');
