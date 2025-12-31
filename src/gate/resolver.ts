@@ -5,7 +5,8 @@
 
 import { GatePlanSource, type GatePlan } from '../types/index.js';
 import { loadVerifyProfile, findProfilePath } from './verify-profile-parser.js';
-import { ingestCIWorkflows } from './ci-ingestion.js';
+import { ingestCIWorkflows, findCIConfigs } from './ci-ingestion.js';
+import { parseGitHubActions, type CIPlan } from './github-actions-parser.js';
 import { normalizeFromProfile, createDefaultPlan, mergePlans } from './normalizer.js';
 import { ProfileParseError, ProfileValidationError } from './errors.js';
 
@@ -71,6 +72,30 @@ export async function resolveGatePlanWithWarnings(
 }
 
 /**
+ * Get a CIPlan by parsing CI workflow files.
+ * Returns the first parseable CI workflow as a CIPlan.
+ * @param workspacePath - Path to the workspace root
+ * @returns CIPlan if found and parseable, null otherwise
+ */
+async function getCIPlan(workspacePath: string): Promise<CIPlan | null> {
+  const configFiles = await findCIConfigs(workspacePath);
+
+  if (configFiles.length === 0) {
+    return null;
+  }
+
+  // Try to parse each workflow file
+  for (const configFile of configFiles) {
+    const plan = await parseGitHubActions(configFile);
+    if (plan && plan.isSimple) {
+      return plan;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Resolve from verify.yaml profile.
  */
 async function resolveFromProfile(
@@ -89,7 +114,23 @@ async function resolveFromProfile(
     }
 
     const profilePath = await findProfilePath(workspacePath);
-    const plan = normalizeFromProfile(profile, profilePath ?? undefined);
+
+    // If useGitHubCI is true, parse CI workflows and use those test commands
+    let ciPlan = null;
+    if (profile.useGitHubCI) {
+      try {
+        ciPlan = await getCIPlan(workspacePath);
+        if (ciPlan) {
+          warnings.push('Using GitHub CI workflow test commands from verify.yaml useGitHubCI option');
+        } else {
+          warnings.push('useGitHubCI is true but no usable CI workflows found, using verify.yaml tests');
+        }
+      } catch (error) {
+        warnings.push(`useGitHubCI is true but CI workflow parsing failed: ${String(error)}, using verify.yaml tests`);
+      }
+    }
+
+    const plan = normalizeFromProfile(profile, profilePath ?? undefined, ciPlan ?? undefined);
 
     // Merge with default to ensure security policies are present
     const mergedPlan = mergePlans(createDefaultPlan(), plan);
@@ -157,7 +198,23 @@ async function resolveAuto(
 
     if (profile) {
       const profilePath = await findProfilePath(workspacePath);
-      const plan = normalizeFromProfile(profile, profilePath ?? undefined);
+
+      // If useGitHubCI is true, parse CI workflows and use those test commands
+      let ciPlan = null;
+      if (profile.useGitHubCI) {
+        try {
+          ciPlan = await getCIPlan(workspacePath);
+          if (ciPlan) {
+            warnings.push('Using GitHub CI workflow test commands from verify.yaml useGitHubCI option');
+          } else {
+            warnings.push('useGitHubCI is true but no usable CI workflows found, using verify.yaml tests');
+          }
+        } catch (error) {
+          warnings.push(`useGitHubCI is true but CI workflow parsing failed: ${String(error)}, using verify.yaml tests`);
+        }
+      }
+
+      const plan = normalizeFromProfile(profile, profilePath ?? undefined, ciPlan ?? undefined);
       const mergedPlan = mergePlans(createDefaultPlan(), plan);
       mergedPlan.source = GatePlanSource.VERIFY_PROFILE;
       mergedPlan.sourceFile = profilePath;

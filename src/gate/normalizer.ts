@@ -31,9 +31,10 @@ type SchemaRuleInput =
  * Normalize a VerifyProfile to a GatePlan.
  * @param profile - Parsed verify.yaml profile
  * @param sourcePath - Path to the source file
+ * @param ciPlan - Optional CI plan to use for test commands (when useGitHubCI is true)
  * @returns Normalized GatePlan
  */
-export function normalizeFromProfile(profile: VerifyProfile, sourcePath?: string): GatePlan {
+export function normalizeFromProfile(profile: VerifyProfile, sourcePath?: string, ciPlan?: CIPlan): GatePlan {
   // Convert runtime
   const runtime = profile.environment.runtime as RuntimeType;
 
@@ -45,13 +46,39 @@ export function normalizeFromProfile(profile: VerifyProfile, sourcePath?: string
     expectedExit: 0,
   }));
 
-  // Convert test commands
-  const tests: Command[] = profile.tests.map((test) => ({
-    name: test.name,
-    command: test.command,
-    timeout: test.timeout,
-    expectedExit: test.expected_exit,
-  }));
+  // Convert test commands - use CI commands if ciPlan is provided, otherwise use profile tests
+  let tests: Command[];
+  if (ciPlan) {
+    // Use CI workflow test commands
+    tests = [
+      ...ciPlan.lintCommands.map((cmd, idx) => ({
+        name: `lint-${idx + 1}`,
+        command: cmd,
+        timeout: 120,
+        expectedExit: 0,
+      })),
+      ...ciPlan.testCommands.map((cmd, idx) => ({
+        name: `test-${idx + 1}`,
+        command: cmd,
+        timeout: 300,
+        expectedExit: 0,
+      })),
+      ...ciPlan.buildCommands.map((cmd, idx) => ({
+        name: `build-${idx + 1}`,
+        command: cmd,
+        timeout: 300,
+        expectedExit: 0,
+      })),
+    ];
+  } else {
+    // Use verify.yaml test commands
+    tests = profile.tests.map((test) => ({
+      name: test.name,
+      command: test.command,
+      timeout: test.timeout,
+      expectedExit: test.expected_exit,
+    }));
+  }
 
   // Convert schema checks
   const requiredSchemas: SchemaCheck[] = profile.contracts.required_schemas.map((schema) => ({
