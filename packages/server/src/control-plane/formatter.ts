@@ -97,6 +97,8 @@ export function formatStatus(status: WorkOrderStatus): string {
   const statusColors: Record<WorkOrderStatus, keyof typeof colors> = {
     queued: 'yellow',
     running: 'blue',
+    waiting_for_children: 'cyan',
+    integrating: 'magenta',
     succeeded: 'green',
     failed: 'red',
     canceled: 'gray',
