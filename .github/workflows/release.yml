@@ -105,7 +105,7 @@ jobs:
         run: pnpm pack
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-${{ needs.validate.outputs.version }}
           path: |
