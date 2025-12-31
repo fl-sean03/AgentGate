@@ -795,3 +795,311 @@ After implementing:
 4. **Agents write tests** because they're instructed to
 
 This creates a self-reinforcing quality loop where AgentGate improves its own quality standards.
+
+---
+
+## Local Verification Loop (Critical Enhancement)
+
+### The Problem with GitHub CI-Only Verification
+
+Previous work orders passed verification because:
+- `pnpm typecheck` passed - code compiles
+- `pnpm lint` passed - code follows style rules
+- `pnpm test` passed - existing tests pass
+- `pnpm build` succeeded - production build works
+
+**But no NEW tests were written!** The agents wrote code that worked but wasn't validated.
+
+This is a **downstream failure** - we only discover the gap after code is merged.
+
+### Solution: Local Verification Before Commit
+
+AgentGate's internal verification pipeline already runs L0-L3 checks during work order execution. The key enhancement is:
+
+1. **AGENTS.md injection** - Tell agents they MUST write tests
+2. **L3 Sanity: Test Coverage Check** - Fail if new source files lack tests
+3. **Local loop** - Run verification locally before pushing to GitHub
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Local Verification Loop                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Agent writes code                                                           │
+│       ↓                                                                      │
+│  L0: Contract Check (files exist, no secrets)                               │
+│       ↓                                                                      │
+│  L1: Tests Pass (pnpm typecheck && lint && test && build)                   │
+│       ↓                                                                      │
+│  L2: Blackbox Tests (CLI works, server responds)                            │
+│       ↓                                                                      │
+│  L3: Sanity Check                                                           │
+│       ├── NEW: Check test coverage for new files                            │
+│       ├── No debug artifacts                                                │
+│       └── Clean state                                                       │
+│       ↓                                                                      │
+│  PASS? → Create PR → GitHub CI (mirrors local checks)                       │
+│  FAIL? → Return feedback → Agent fixes → Re-verify (iteration loop)         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why GitHub CI Is Not Enough
+
+GitHub CI runs **after** the PR is created. Problems:
+- Delayed feedback (agent already finished)
+- No iteration loop to fix issues
+- Manual intervention required
+
+The local verification loop catches issues **during** agent execution, allowing automatic retry with feedback.
+
+---
+
+## Phase 1 Test Coverage Gap Analysis
+
+After Phase 1 completion, the following features were implemented **WITHOUT dedicated tests**:
+
+| Feature | Files Created | Tests Written | Gap |
+|---------|---------------|---------------|-----|
+| HTTP Server Foundation | `src/server/app.ts`, `routes/health.ts` | ❌ None | **Critical** |
+| Work Order API | `src/server/routes/work-orders.ts`, `routes/runs.ts` | ❌ None | **Critical** |
+| Auth Middleware | `src/server/middleware/auth.ts` | ❌ None | **Critical** |
+| WebSocket Support | `src/server/websocket/*` | ❌ None | **Critical** |
+| dotenv Loading | `src/control-plane/cli.ts` | ❌ None | Medium |
+| Status Transition Fix | `src/orchestrator/*` | ❌ None | **Critical** |
+
+### Required Test Files
+
+| Test File | Must Test | Priority |
+|-----------|-----------|----------|
+| `test/server-app.test.ts` | Fastify app creation, CORS, error handling | P0 |
+| `test/routes-health.test.ts` | `/health`, `/health/ready`, `/health/live` | P0 |
+| `test/routes-work-orders.test.ts` | All CRUD operations, validation, auth | P0 |
+| `test/routes-runs.test.ts` | Run list and detail endpoints | P1 |
+| `test/middleware-auth.test.ts` | Valid/invalid/missing API keys | P0 |
+| `test/websocket-broadcaster.test.ts` | Connection management, broadcast | P0 |
+| `test/websocket-handler.test.ts` | Message handling, ping/pong | P0 |
+| `test/status-transitions.test.ts` | QUEUED → RUNNING → SUCCEEDED/FAILED | P0 |
+| `test/dotenv-loading.test.ts` | .env auto-load, missing file handling | P2 |
+
+---
+
+## Execution Procedure: Work Order Workflow
+
+This is the **standard procedure** for every work order submission:
+
+### Step 1: Ensure Clean State
+```bash
+# Pull latest from main
+git pull origin main
+
+# Rebuild
+pnpm install && pnpm build
+
+# Verify all tests pass
+pnpm typecheck && pnpm lint && pnpm test
+```
+
+### Step 2: Submit Work Order
+```bash
+agentgate submit \
+  --prompt "<detailed task prompt>" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+### Step 3: Monitor Progress
+```bash
+# Check status
+agentgate status <work-order-id>
+
+# Watch for:
+# - Status: QUEUED → RUNNING
+# - Iterations: 1/3, 2/3, etc.
+# - Verification: L0 ✓, L1 ✓, L2 ✓, L3 ✓
+```
+
+### Step 4: Review PR
+- Check GitHub for auto-created PR
+- Review code changes
+- Verify tests were written (per AGENTS.md standards)
+- Run local validation if needed
+
+### Step 5: Merge and Sync
+```bash
+# After PR is merged on GitHub
+git pull origin main
+pnpm install && pnpm build
+
+# Verify
+pnpm typecheck && pnpm lint && pnpm test
+```
+
+### Step 6: Repeat
+Only submit the next work order AFTER the previous one is fully merged and validated.
+
+---
+
+## WO-STD-003: Local Verification Enhancement
+
+After WO-STD-001 (AGENTS.md injection) and WO-STD-002 (missing tests), submit this to enhance L3 sanity checks:
+
+```bash
+agentgate submit \
+  --prompt "Enhance L3 sanity verification to check test coverage for new files.
+
+REQUIREMENTS:
+1. Modify src/verifier/l3-sanity.ts to add test coverage check:
+   - For each new/modified source file in src/
+   - Check if corresponding test file exists in test/
+   - Pattern: src/foo/bar.ts → test/foo-bar.test.ts OR test/foo/bar.test.ts
+
+2. Add checkTestCoverage() function:
+   - Get list of source files in the changeset
+   - Map to expected test file paths
+   - Return warning (not failure) if tests missing
+
+3. Update verify.yaml schema to support:
+   testCoverage:
+     enabled: true
+     rules:
+       - pattern: 'src/server/**/*.ts'
+         requiresTest: 'test/server-*.test.ts OR test/routes-*.test.ts'
+
+4. Write tests for the new functionality:
+   - test/l3-sanity-coverage.test.ts
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes (including new tests)
+- pnpm build succeeds" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+---
+
+## Work Order Submission Queue
+
+Execute these in order, waiting for each to merge before the next:
+
+| Order | Work Order | Description | Depends On |
+|-------|------------|-------------|------------|
+| 1 | WO-STD-001 | AGENTS.md injection into agent prompts | None |
+| 2 | WO-STD-002 | Add missing Phase 1 tests | WO-STD-001 |
+| 3 | WO-STD-003 | L3 test coverage verification | WO-STD-002 |
+| 4 | WO-P2-001 | Frontend project bootstrap | All STD complete |
+
+### Execution Commands
+
+**WO-STD-001: AGENTS.md Injection**
+```bash
+agentgate submit \
+  --prompt "Implement AGENTS.md injection into agent system prompts.
+
+CONTEXT:
+docs/AGENTS.md contains engineering standards that every agent should follow.
+Currently, agents don't receive these standards in their prompts.
+
+REQUIREMENTS:
+1. Create src/agent/standards.ts with:
+   - loadEngineeringStandards(workspacePath?: string): string | null
+   - Search for AGENTS.md in: .agentgate/, docs/, root
+   - Cache the result
+   - Fall back to embedded defaults if not found
+
+2. Modify src/agent/command-builder.ts buildSystemPromptAppend():
+   - Call loadEngineeringStandards() at the START of the function
+   - Prepend standards to the parts array (before gate plan, feedback)
+   - Pass workspace path from the request
+
+3. Add embedded fallback in src/agent/defaults.ts:
+   - getEmbeddedStandards(): string
+   - Minimal version with core testing requirements
+
+4. Write tests in test/agent-standards.test.ts:
+   - Test file discovery logic
+   - Test caching
+   - Test fallback behavior
+   - Test injection into prompts
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes (including new tests)
+- pnpm build succeeds
+- Manual: Submit test work order, confirm standards in agent logs" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 3
+```
+
+**WO-STD-002: Missing Phase 1 Tests**
+```bash
+agentgate submit \
+  --prompt "Add comprehensive tests for Phase 1 features.
+
+CONTEXT:
+Phase 1 implemented HTTP server, API routes, auth, and WebSocket without tests.
+This work order adds the missing test coverage.
+
+REQUIRED TEST FILES:
+
+1. test/server-app.test.ts:
+   - createApp() returns configured Fastify instance
+   - CORS configured correctly
+   - Error handler returns proper format
+   - Not found handler returns 404
+
+2. test/routes-health.test.ts:
+   - GET /health returns {status: 'ok', version}
+   - GET /health/ready checks components
+   - GET /health/live returns {alive: true}
+
+3. test/routes-work-orders.test.ts:
+   - GET /api/v1/work-orders returns list
+   - GET /api/v1/work-orders/:id returns order or 404
+   - POST /api/v1/work-orders creates order (with auth)
+   - POST without auth returns 401
+   - DELETE /api/v1/work-orders/:id cancels (with auth)
+   - DELETE completed order returns 409
+
+4. test/routes-runs.test.ts:
+   - GET /api/v1/runs returns list
+   - GET /api/v1/runs/:id returns run or 404
+
+5. test/middleware-auth.test.ts:
+   - Valid API key passes
+   - Invalid API key returns 401
+   - Missing Authorization header returns 401
+   - Malformed Bearer token returns 401
+
+6. test/websocket-broadcaster.test.ts:
+   - addConnection() tracks connection
+   - removeConnection() removes connection
+   - broadcast() sends to subscribed connections
+   - broadcastToAll() sends to all connections
+   - Connection cleanup on error
+
+7. test/websocket-handler.test.ts:
+   - Ping message returns pong
+   - Subscribe adds to channel
+   - Unsubscribe removes from channel
+   - Invalid message returns error
+   - Connection cleanup on close
+
+USE:
+- Vitest for testing
+- Fastify inject() for HTTP tests
+- Mock WebSocket for WS tests
+- Follow patterns in existing tests
+
+VERIFICATION:
+- pnpm typecheck passes
+- pnpm lint passes
+- pnpm test passes (ALL new tests)
+- pnpm build succeeds
+- Coverage for server/ directory > 80%" \
+  --github fl-sean03/AgentGate \
+  --max-iterations 5
+```
