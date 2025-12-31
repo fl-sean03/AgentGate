@@ -391,3 +391,150 @@ export async function hasUpstream(path: string): Promise<boolean> {
     return false;
   }
 }
+
+// ============================================================================
+// Merge Operations (Added in v0.2.10)
+// ============================================================================
+
+export interface MergeOptions {
+  /** Strategy for merge (recursive, ours, theirs, etc.) */
+  strategy?: string;
+  /** Strategy options */
+  strategyOption?: string;
+  /** Allow fast-forward merges */
+  fastForward?: boolean;
+  /** Squash commits */
+  squash?: boolean;
+  /** Commit message (required if squash is true) */
+  message?: string;
+}
+
+export interface MergeResult {
+  success: boolean;
+  fastForward: boolean;
+  conflicts: boolean;
+  conflictFiles?: string[];
+  mergeCommit: string | undefined;
+  message: string | undefined;
+}
+
+/**
+ * Merge a branch into the current branch
+ */
+export async function merge(
+  repoPath: string,
+  branchToMerge: string,
+  options: MergeOptions = {}
+): Promise<MergeResult> {
+  const git = getGit(repoPath);
+  const args: string[] = [branchToMerge];
+
+  // Add strategy if specified
+  if (options.strategy) {
+    args.push('-s', options.strategy);
+  }
+
+  // Add strategy options
+  if (options.strategyOption) {
+    args.push('-X', options.strategyOption);
+  }
+
+  // Handle fast-forward options
+  if (options.fastForward === false) {
+    args.push('--no-ff');
+  }
+
+  // Handle squash
+  if (options.squash) {
+    args.push('--squash');
+  }
+
+  try {
+    const result = await git.merge(args);
+
+    log.info(
+      { repoPath, branchToMerge, fastForward: result.summary?.changes === 0 },
+      'Merge completed'
+    );
+
+    // If squash merge, we need to commit manually
+    let mergeCommitSha: string | undefined = undefined;
+    if (options.squash) {
+      const message = options.message || `Squash merge of ${branchToMerge}`;
+      mergeCommitSha = await commit(repoPath, message);
+    } else {
+      // Get the current HEAD SHA after merge
+      mergeCommitSha = await getCurrentSha(repoPath);
+    }
+
+    return {
+      success: true,
+      fastForward: result.summary?.changes === 0,
+      conflicts: false,
+      mergeCommit: mergeCommitSha,
+      message: result.summary?.changes ? `Merged ${branchToMerge}` : 'Fast-forward merge',
+    };
+  } catch (error: unknown) {
+    // Check if this is a merge conflict
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('CONFLICT') || errorMessage.includes('conflict')) {
+      log.warn({ repoPath, branchToMerge }, 'Merge resulted in conflicts');
+
+      // Get list of conflicted files
+      const status = await git.status();
+      const conflictFiles = status.conflicted;
+
+      return {
+        success: false,
+        fastForward: false,
+        conflicts: true,
+        conflictFiles,
+        mergeCommit: undefined,
+        message: 'Merge conflicts detected',
+      };
+    }
+
+    // Other error
+    log.error({ repoPath, branchToMerge, err: error }, 'Merge failed');
+    throw error;
+  }
+}
+
+/**
+ * Check if the repository has merge conflicts
+ */
+export async function hasConflicts(repoPath: string): Promise<boolean> {
+  const git = getGit(repoPath);
+  const status = await git.status();
+  return status.conflicted.length > 0;
+}
+
+/**
+ * Abort an in-progress merge
+ */
+export async function abortMerge(repoPath: string): Promise<void> {
+  const git = getGit(repoPath);
+  await git.merge(['--abort']);
+  log.debug({ repoPath }, 'Aborted merge');
+}
+
+/**
+ * Delete a branch (local or remote)
+ */
+export async function deleteBranch(
+  repoPath: string,
+  branchName: string,
+  remote?: string
+): Promise<void> {
+  const git = getGit(repoPath);
+
+  if (remote) {
+    // Delete remote branch
+    await git.push(remote, branchName, ['--delete']);
+    log.info({ repoPath, branchName, remote }, 'Deleted remote branch');
+  } else {
+    // Delete local branch
+    await git.deleteLocalBranch(branchName, true); // force delete
+    log.info({ repoPath, branchName }, 'Deleted local branch');
+  }
+}
