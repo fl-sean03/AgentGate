@@ -3,13 +3,52 @@
  * Tests for API key authentication
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createApp } from '../src/server/app.js';
+import { WorkOrderStatus } from '../src/types/index.js';
+
+// Mock the work order service to avoid real database operations
+vi.mock('../src/control-plane/work-order-service.js', () => {
+  return {
+    workOrderService: {
+      list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
+      submit: vi.fn(async (request: any) => ({
+        id: 'test-wo-1',
+        taskPrompt: request.taskPrompt,
+        workspaceSource: request.workspaceSource,
+        agentType: request.agentType ?? 'claude-code-subscription',
+        maxIterations: request.maxIterations ?? 3,
+        maxWallClockSeconds: request.maxWallClockSeconds ?? 3600,
+        status: WorkOrderStatus.QUEUED,
+        createdAt: new Date(),
+      })),
+      cancel: vi.fn(async () => undefined),
+      getCounts: vi.fn(async () => ({
+        [WorkOrderStatus.QUEUED]: 0,
+        [WorkOrderStatus.RUNNING]: 0,
+        [WorkOrderStatus.SUCCEEDED]: 0,
+        [WorkOrderStatus.FAILED]: 0,
+        [WorkOrderStatus.CANCELED]: 0,
+      })),
+    },
+  };
+});
+
+vi.mock('../src/orchestrator/run-store.js', () => ({
+  listRuns: vi.fn(async () => []),
+}));
 
 describe('Auth Middleware', () => {
   let app: FastifyInstance;
   const testApiKey = 'test-api-key-secret-123';
+
+  // Reset API key before each test to ensure isolation
+  beforeEach(async () => {
+    const { setApiKey } = await import('../src/server/middleware/auth.js');
+    setApiKey(undefined);
+  });
 
   describe('With API key configured', () => {
     beforeEach(async () => {
