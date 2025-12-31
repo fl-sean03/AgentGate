@@ -1,4 +1,5 @@
 import type { AgentRequest } from '../types/index.js';
+import type { SpawnLimits } from '../types/spawn.js';
 import { buildFeedbackSystemPrompt, buildGatePlanSystemPrompt } from './defaults.js';
 import { loadEngineeringStandards } from './standards.js';
 
@@ -51,6 +52,54 @@ function buildContextSection(request: AgentRequest): string | null {
 }
 
 /**
+ * Builds spawn instructions for the agent system prompt.
+ *
+ * @param limits - Spawn limits to include in instructions
+ * @param workOrderId - Current work order ID to include in format example
+ * @returns Formatted spawn instructions
+ */
+export function buildSpawnInstructions(limits: SpawnLimits, workOrderId?: string | null): string {
+  const workOrderIdExample = workOrderId || '<current-work-order-id>';
+  return `## Spawning Child Agents (Optional)
+
+If a task is too complex to complete in one session, you may decompose it into subtasks
+by creating \`.agentgate/spawn-requests.json\` in the workspace root.
+
+**Format:**
+\`\`\`json
+{
+  "parentWorkOrderId": "${workOrderIdExample}",
+  "children": [
+    {
+      "taskPrompt": "Description of the subtask",
+      "siblingIndex": 0,
+      "integrationStrategy": "manual",
+      "maxIterations": 3,
+      "maxWallClockSeconds": 3600
+    }
+  ]
+}
+\`\`\`
+
+**Guidelines:**
+- Only spawn when genuinely needed (task too complex for single session)
+- Keep subtasks independent when possible
+- Each child should be testable in isolation
+- Maximum **${limits.maxChildren}** children per parent
+- Maximum **${limits.maxDepth}** levels of nesting
+- Total tree size limited to **${limits.maxTotalDescendants}** work orders
+
+**Integration Strategies:**
+- \`manual\`: You manually integrate changes (default)
+- \`auto-merge\`: System auto-merges child branches
+- \`auto-squash\`: System squashes child commits
+- \`custom\`: Custom integration logic
+
+After creating spawn-requests.json, your current iteration will pause.
+Children will execute in parallel, and results can be integrated as needed.`;
+}
+
+/**
  * Builds the system prompt appendix for constraints and feedback
  */
 export function buildSystemPromptAppend(request: AgentRequest): string | null {
@@ -77,6 +126,14 @@ export function buildSystemPromptAppend(request: AgentRequest): string | null {
     const feedbackPrompt = buildFeedbackSystemPrompt(request.priorFeedback);
     if (feedbackPrompt) {
       parts.push(feedbackPrompt);
+    }
+  }
+
+  // Add spawn instructions if enabled
+  if (request.spawnLimits) {
+    const spawnInstructions = buildSpawnInstructions(request.spawnLimits, request.workOrderId);
+    if (spawnInstructions) {
+      parts.push(spawnInstructions);
     }
   }
 
