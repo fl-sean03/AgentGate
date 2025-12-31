@@ -97,6 +97,7 @@ export interface NamingRule {
 export const verifyProfileSchema = z.object({
   version: z.string().default('1'),
   name: z.string(),
+  useGitHubCI: z.boolean().default(false),
   environment: z.object({
     runtime: z.enum(['node', 'python', 'generic']).default('generic'),
     version: z.string().optional(),
