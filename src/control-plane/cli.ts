@@ -5,6 +5,7 @@ import { createListCommand } from './commands/list.js';
 import { createCancelCommand } from './commands/cancel.js';
 import { createAuthCommand } from './commands/auth.js';
 import { createMetricsCommand } from './commands/metrics.js';
+import { createServeCommand } from './commands/serve.js';
 import { ensureAllDirs } from '../artifacts/paths.js';
 
 /**
@@ -36,6 +37,7 @@ export function createProgram(): Command {
   program.addCommand(createCancelCommand());
   program.addCommand(createAuthCommand());
   program.addCommand(createMetricsCommand());
+  program.addCommand(createServeCommand());
 
   // Error handling
   program.exitOverride();
@@ -74,3 +76,4 @@ export { createListCommand } from './commands/list.js';
 export { createCancelCommand } from './commands/cancel.js';
 export { createAuthCommand } from './commands/auth.js';
 export { createMetricsCommand } from './commands/metrics.js';
+export { createServeCommand } from './commands/serve.js';

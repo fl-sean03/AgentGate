@@ -1,0 +1,132 @@
+import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyError } from 'fastify';
+import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
+import { nanoid } from 'nanoid';
+import {
+  serverConfigSchema,
+  createErrorResponse,
+  ErrorCode,
+  type ServerConfig,
+} from './types.js';
+import { registerHealthRoutes } from './routes/health.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('server');
+
+/**
+ * Create and configure a Fastify application instance
+ */
+export async function createApp(
+  config: Partial<ServerConfig> = {}
+): Promise<FastifyInstance> {
+  // Validate and apply defaults
+  const validatedConfig = serverConfigSchema.parse(config);
+
+  // Create Fastify instance with logging
+  const app = Fastify({
+    logger: validatedConfig.enableLogging
+      ? {
+          level: 'info',
+          transport: {
+            target: 'pino-pretty',
+            options: {
+              colorize: true,
+            },
+          },
+        }
+      : false,
+    requestTimeout: validatedConfig.requestTimeout,
+    genReqId: () => nanoid(12),
+  });
+
+  // Register CORS plugin
+  await app.register(cors, {
+    origin: validatedConfig.corsOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  });
+
+  // Register WebSocket plugin
+  await app.register(websocket);
+
+  // Add request ID to response headers
+  app.addHook('onRequest', (request: FastifyRequest, reply, done) => {
+    void reply.header('X-Request-ID', request.id);
+    done();
+  });
+
+  // Global error handler
+  app.setErrorHandler(async (error: FastifyError, request, reply) => {
+    logger.error({ err: error, requestId: request.id }, 'Request error');
+
+    // Handle validation errors
+    if (error.validation) {
+      return reply.status(400).send(
+        createErrorResponse(
+          ErrorCode.BAD_REQUEST,
+          'Validation error',
+          { errors: error.validation },
+          request.id
+        )
+      );
+    }
+
+    // Handle specific HTTP status codes
+    if (error.statusCode) {
+      const code = mapStatusToErrorCode(error.statusCode);
+      return reply.status(error.statusCode).send(
+        createErrorResponse(code, error.message, undefined, request.id)
+      );
+    }
+
+    // Generic internal error
+    return reply.status(500).send(
+      createErrorResponse(
+        ErrorCode.INTERNAL_ERROR,
+        'An unexpected error occurred',
+        undefined,
+        request.id
+      )
+    );
+  });
+
+  // Not found handler
+  app.setNotFoundHandler(async (request, reply) => {
+    return reply.status(404).send(
+      createErrorResponse(
+        ErrorCode.NOT_FOUND,
+        `Route ${request.method} ${request.url} not found`,
+        undefined,
+        request.id
+      )
+    );
+  });
+
+  // Register health routes
+  registerHealthRoutes(app);
+
+  return app;
+}
+
+/**
+ * Map HTTP status code to error code
+ */
+function mapStatusToErrorCode(status: number): ErrorCode {
+  switch (status) {
+    case 400:
+      return ErrorCode.BAD_REQUEST;
+    case 401:
+      return ErrorCode.UNAUTHORIZED;
+    case 403:
+      return ErrorCode.FORBIDDEN;
+    case 404:
+      return ErrorCode.NOT_FOUND;
+    case 409:
+      return ErrorCode.CONFLICT;
+    case 503:
+      return ErrorCode.SERVICE_UNAVAILABLE;
+    default:
+      return ErrorCode.INTERNAL_ERROR;
+  }
+}
