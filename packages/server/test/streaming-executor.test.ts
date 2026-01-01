@@ -335,13 +335,18 @@ describe('StreamingExecutor', () => {
         runId,
       });
 
-      const result = await executor.execute('pwd', [], {
-        cwd: '/tmp',
+      // Use os.tmpdir() for cross-platform temp directory
+      const os = await import('node:os');
+      const tmpDir = os.tmpdir();
+
+      // Use Node.js to print cwd instead of pwd (cross-platform)
+      const result = await executor.execute('node', ['-e', 'console.log(process.cwd())'], {
+        cwd: tmpDir,
       });
 
       expect(result.success).toBe(true);
       // Normalize path to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
-      const expectedPath = await fs.realpath('/tmp');
+      const expectedPath = await fs.realpath(tmpDir);
       expect(result.stdout.trim()).toBe(expectedPath);
     });
   });
