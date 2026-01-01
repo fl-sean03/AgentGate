@@ -1,5 +1,8 @@
 /**
  * File Watcher Unit Tests
+ *
+ * Note: Tests use recursive: false to ensure compatibility across all platforms.
+ * Node 18 on some CI runners doesn't support recursive fs.watch.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -102,7 +105,7 @@ describe('FileWatcher', () => {
   describe('file detection', () => {
     it('should detect file creation', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -119,7 +122,7 @@ describe('FileWatcher', () => {
       await writeFile(join(tempDir, 'existing.txt'), 'initial');
 
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.markFileKnown('existing.txt');
       watcher.onFileChange(e => events.push(e));
       watcher.start();
@@ -139,7 +142,7 @@ describe('FileWatcher', () => {
       await writeFile(filePath, 'delete me');
 
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.markFileKnown('to-delete.txt');
       watcher.onFileChange(e => events.push(e));
       watcher.start();
@@ -155,7 +158,7 @@ describe('FileWatcher', () => {
 
     it('should include file size for created files', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50, trackSizes: true });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, trackSizes: true, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -172,7 +175,7 @@ describe('FileWatcher', () => {
   describe('ignore patterns', () => {
     it('should ignore .git directory', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -186,7 +189,7 @@ describe('FileWatcher', () => {
 
     it('should ignore node_modules directory', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -200,7 +203,7 @@ describe('FileWatcher', () => {
 
     it('should ignore *.log files', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 50 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 50, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -216,6 +219,7 @@ describe('FileWatcher', () => {
       watcher = new FileWatcher(tempDir, {
         debounceMs: 50,
         ignorePatterns: ['custom-ignore'],
+        recursive: false,
       });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
@@ -232,7 +236,7 @@ describe('FileWatcher', () => {
   describe('debouncing', () => {
     it('should debounce rapid changes', async () => {
       const events: FileChangedEvent[] = [];
-      watcher = new FileWatcher(tempDir, { debounceMs: 100 });
+      watcher = new FileWatcher(tempDir, { debounceMs: 100, recursive: false });
       watcher.onFileChange(e => events.push(e));
       watcher.start();
 
@@ -291,7 +295,7 @@ describe('createFileWatcher', () => {
 
   it('should inject work order context into events', async () => {
     const events: FileChangedEvent[] = [];
-    const ctx = createFileWatcher(tempDir, 'wo-123', 'run-456', { debounceMs: 50 });
+    const ctx = createFileWatcher(tempDir, 'wo-123', 'run-456', { debounceMs: 50, recursive: false });
 
     ctx.onFileChange(e => events.push(e));
     ctx.start();

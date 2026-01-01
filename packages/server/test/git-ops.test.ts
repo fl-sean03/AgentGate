@@ -181,6 +181,9 @@ describe('Git Operations', () => {
     });
 
     it('should perform a fast-forward merge', async () => {
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create and checkout feature branch
       await createBranch(testDir, 'feature');
 
@@ -189,11 +192,7 @@ describe('Git Operations', () => {
       await stageAll(testDir);
       await commit(testDir, 'Add feature file');
 
-      // Get initial branch name
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'feature' ? 'main' : 'master';
-
-      // Switch back to main
+      // Switch back to initial branch
       await checkout(testDir, initialBranch);
 
       // Merge feature into main (should be fast-forward)
@@ -204,6 +203,9 @@ describe('Git Operations', () => {
     });
 
     it('should detect merge conflicts', async () => {
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create feature branch
       await createBranch(testDir, 'feature');
 
@@ -212,9 +214,7 @@ describe('Git Operations', () => {
       await stageAll(testDir);
       await commit(testDir, 'Modify main.txt on feature');
 
-      // Switch back to main
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'feature' ? 'main' : 'master';
+      // Switch back to initial branch
       await checkout(testDir, initialBranch);
 
       // Modify same file on main
@@ -232,6 +232,9 @@ describe('Git Operations', () => {
     });
 
     it('should perform squash merge', async () => {
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create feature branch with multiple commits
       await createBranch(testDir, 'feature');
 
@@ -243,9 +246,7 @@ describe('Git Operations', () => {
       await stageAll(testDir);
       await commit(testDir, 'Commit 2');
 
-      // Switch back to main
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'feature' ? 'main' : 'master';
+      // Switch back to initial branch
       await checkout(testDir, initialBranch);
 
       // Squash merge
@@ -264,14 +265,15 @@ describe('Git Operations', () => {
       let conflicts = await hasConflicts(testDir);
       expect(conflicts).toBe(false);
 
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create conflicting merge
       await createBranch(testDir, 'feature');
       await writeFile(path.join(testDir, 'main.txt'), 'feature content');
       await stageAll(testDir);
       await commit(testDir, 'Modify on feature');
 
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'feature' ? 'main' : 'master';
       await checkout(testDir, initialBranch);
 
       await writeFile(path.join(testDir, 'main.txt'), 'main content updated');
@@ -287,14 +289,15 @@ describe('Git Operations', () => {
     });
 
     it('should abort a merge', async () => {
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       // Create conflicting merge
       await createBranch(testDir, 'feature');
       await writeFile(path.join(testDir, 'main.txt'), 'feature content');
       await stageAll(testDir);
       await commit(testDir, 'Modify on feature');
 
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'feature' ? 'main' : 'master';
       await checkout(testDir, initialBranch);
 
       await writeFile(path.join(testDir, 'main.txt'), 'main content updated');
@@ -349,6 +352,9 @@ describe('Git Operations', () => {
     });
 
     it('should get changed files between branches', async () => {
+      // Save initial branch name before switching
+      const baseBranch = await getCurrentBranch(testDir);
+
       // Create feature branch with changes
       await createBranch(testDir, 'feature');
 
@@ -356,10 +362,6 @@ describe('Git Operations', () => {
       await writeFile(path.join(testDir, 'another.txt'), 'another content');
       await stageAll(testDir);
       await commit(testDir, 'Add new files');
-
-      // Get main branch name
-      const mainBranch = await getCurrentBranch(testDir);
-      const baseBranch = mainBranch === 'feature' ? 'main' : 'master';
 
       // Get changed files
       const changed = await getChangedFiles(testDir, baseBranch, 'feature');
