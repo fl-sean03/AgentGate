@@ -92,6 +92,7 @@ Currently, when an agent creates a PR:
 | 4 | Failure Summarizer | Extract actionable feedback from logs | 2 |
 | 5 | CI Feedback Integration | Connect CI results to orchestrator feedback loop | 3 |
 | 6 | Configuration & Dashboard | CI settings and visibility | 3 |
+| 7 | Draft PR Until Verified | Create draft PRs, convert to ready after CI passes | 3 |
 
 ---
 
@@ -118,10 +119,12 @@ Currently, when an agent creates a PR:
 | File | Thrust | Changes |
 |------|--------|---------|
 | `packages/server/src/orchestrator/run-executor.ts` | 5 | Add CI polling phase |
-| `packages/server/src/orchestrator/orchestrator.ts` | 5 | Wire CI feedback loop |
+| `packages/server/src/orchestrator/orchestrator.ts` | 5, 7 | Wire CI feedback loop, draft PR creation |
 | `packages/server/src/config/index.ts` | 6 | Add CI configuration |
 | `packages/server/src/server/routes/health.ts` | 6 | Add CI status |
 | `packages/dashboard/src/components/WorkOrderDetail.tsx` | 6 | Show CI status |
+| `packages/server/src/types/github.ts` | 7 | Add `draft` field to PR schema |
+| `packages/server/src/workspace/github.ts` | 7 | Add `convertDraftToReady` function |
 
 ---
 
