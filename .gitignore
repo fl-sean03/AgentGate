@@ -58,3 +58,8 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+
+# Security - never track key/cert files
+**/*.pem
+**/*.key
+**/secrets/
