@@ -1,3 +1,6 @@
+// Import SDK types for AgentResult
+import type { ToolCallRecord } from './sdk.js';
+
 // Agent Request
 export interface AgentRequest {
   workspacePath: string;
@@ -27,6 +30,14 @@ export interface AgentResult {
   sessionId: string | null;
   tokensUsed: TokenUsage | null;
   durationMs: number;
+  /** Total cost in USD (SDK-specific) */
+  totalCostUsd?: number;
+  /** Record of all tool calls made (SDK-specific) */
+  toolCalls?: ToolCallRecord[];
+  /** Model used for execution (SDK-specific) */
+  model?: string;
+  /** Number of conversation turns (SDK-specific) */
+  turns?: number;
 }
 
 // Agent Structured Output
@@ -70,6 +81,14 @@ export interface DriverCapabilities {
   supportsToolRestriction: boolean;
   supportsTimeout: boolean;
   supportsHooks?: boolean;
+  /** Whether the driver supports sandbox execution */
+  supportsSandbox?: boolean;
+  /** Whether the driver supports real-time streaming */
+  supportsStreaming?: boolean;
+  /** Whether the driver supports cost tracking */
+  supportsCostTracking?: boolean;
+  /** Billing method used by this driver */
+  billingMethod?: 'api-key' | 'subscription';
   maxTurns: number;
 }
 
