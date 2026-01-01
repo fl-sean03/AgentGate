@@ -10,6 +10,7 @@ import type { LoopStrategyConfig, LoopStrategyMode } from '../types/harness-conf
 import { LoopStrategyMode as Modes } from '../types/harness-config.js';
 import { FixedStrategy } from './strategies/fixed-strategy.js';
 import { HybridStrategy } from './strategies/hybrid-strategy.js';
+import { CustomStrategy } from './strategies/custom-strategy.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('strategy-registry');
@@ -193,8 +194,14 @@ export class StrategyRegistry {
       'Hybrid strategy combining progress tracking with multiple completion criteria. Recommended default for most tasks.'
     );
 
-    // Placeholder for future strategies (ralph, custom)
-    // These will be implemented in future thrusts
+    // Custom strategy
+    this.register(
+      Modes.CUSTOM,
+      () => new CustomStrategy(),
+      'Custom strategy that loads user-defined strategy modules dynamically.'
+    );
+
+    // Placeholder for future strategies (ralph)
 
     logger.debug(
       { strategies: this.getAvailableStrategies() },

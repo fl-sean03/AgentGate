@@ -50,11 +50,18 @@ describe('StrategyRegistry', () => {
       expect(registry.has(LoopStrategyMode.FIXED)).toBe(true);
     });
 
+    it('should have custom strategy registered', () => {
+      const registry = StrategyRegistry.getInstance();
+
+      expect(registry.has(LoopStrategyMode.CUSTOM)).toBe(true);
+    });
+
     it('should list available strategies', () => {
       const registry = StrategyRegistry.getInstance();
       const strategies = registry.getAvailableStrategies();
 
       expect(strategies).toContain(LoopStrategyMode.FIXED);
+      expect(strategies).toContain(LoopStrategyMode.CUSTOM);
     });
 
     it('should provide strategy descriptions', () => {
@@ -64,21 +71,25 @@ describe('StrategyRegistry', () => {
       const fixedDesc = descriptions.find(d => d.mode === LoopStrategyMode.FIXED);
       expect(fixedDesc).toBeDefined();
       expect(fixedDesc?.description).toContain('Fixed');
+
+      const customDesc = descriptions.find(d => d.mode === LoopStrategyMode.CUSTOM);
+      expect(customDesc).toBeDefined();
+      expect(customDesc?.description).toContain('Custom');
     });
   });
 
   describe('register', () => {
-    it('should register a custom strategy', () => {
+    it('should register a new strategy', () => {
       const registry = StrategyRegistry.getInstance();
 
-      // Use 'custom' mode for testing custom registration
+      // Use 'ralph' mode for testing custom registration (not yet built-in)
       registry.register(
-        LoopStrategyMode.CUSTOM,
+        LoopStrategyMode.RALPH,
         () => new FixedStrategy(),
-        'Test custom strategy'
+        'Test ralph strategy'
       );
 
-      expect(registry.has(LoopStrategyMode.CUSTOM)).toBe(true);
+      expect(registry.has(LoopStrategyMode.RALPH)).toBe(true);
     });
 
     it('should throw on duplicate registration', () => {
@@ -113,19 +124,19 @@ describe('StrategyRegistry', () => {
     it('should unregister a strategy', () => {
       const registry = StrategyRegistry.getInstance();
 
-      // Register a custom one first
+      // Register a ralph one first (not yet built-in)
       registry.register(
-        LoopStrategyMode.CUSTOM,
+        LoopStrategyMode.RALPH,
         () => new FixedStrategy(),
-        'Test custom'
+        'Test ralph'
       );
 
-      expect(registry.has(LoopStrategyMode.CUSTOM)).toBe(true);
+      expect(registry.has(LoopStrategyMode.RALPH)).toBe(true);
 
-      const result = registry.unregister(LoopStrategyMode.CUSTOM);
+      const result = registry.unregister(LoopStrategyMode.RALPH);
 
       expect(result).toBe(true);
-      expect(registry.has(LoopStrategyMode.CUSTOM)).toBe(false);
+      expect(registry.has(LoopStrategyMode.RALPH)).toBe(false);
     });
 
     it('should return false for non-existent strategy', () => {
