@@ -164,7 +164,7 @@ async function executeSubmit(rawOptions: Record<string, unknown>): Promise<void>
     maxWallClockSeconds: options.maxTime,
     gatePlanSource: options.gatePlan,
     waitForCI: options.waitForCi ?? false,
-    skipVerification: options.skipVerification as typeof VerificationLevel[keyof typeof VerificationLevel][] | undefined,
+    skipVerification: options.skipVerification,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],
