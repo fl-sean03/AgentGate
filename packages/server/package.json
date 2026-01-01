@@ -44,10 +44,12 @@
     "pino-pretty": "^10.3.1",
     "simple-git": "^3.22.0",
     "yaml": "^2.3.4",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "dockerode": "^4.0.4"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
+    "@types/dockerode": "^3.3.34",
     "@types/node": "^20.10.6",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.17.0",

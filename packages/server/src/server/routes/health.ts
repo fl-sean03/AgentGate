@@ -6,12 +6,13 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits, getCIConfig, getSDKConfig, type CIConfig, type SDKConfig } from '../../config/index.js';
+import { getConfigLimits, getCIConfig, getSDKConfig, getSandboxConfig, type CIConfig, type SDKConfig, type SandboxConfig } from '../../config/index.js';
+import { getSandboxManager, type SandboxSystemStatus } from '../../sandbox/index.js';
 
 /**
  * Package version - should match package.json
  */
-const VERSION = '0.2.14';
+const VERSION = '0.2.15';
 
 /**
  * Register health check routes
@@ -25,10 +26,22 @@ export function registerHealthRoutes(app: FastifyInstance): void {
     const limits = getConfigLimits();
     const ciConfig = getCIConfig();
     const sdkConfig = getSDKConfig();
+    const sandboxConfig = getSandboxConfig();
+
+    // Get sandbox status
+    let sandboxStatus: SandboxSystemStatus | null = null;
+    try {
+      const manager = getSandboxManager();
+      sandboxStatus = await manager.getStatus();
+    } catch {
+      // Sandbox manager may not be initialized yet
+    }
+
     const response: HealthStatus & {
       limits: typeof limits;
-      config: { ci: CIConfig; sdk: SDKConfig };
+      config: { ci: CIConfig; sdk: SDKConfig; sandbox: SandboxConfig };
       drivers: { sdk: { apiKeySet: boolean; sandboxEnabled: boolean } };
+      sandbox: SandboxSystemStatus | null;
     } = {
       status: 'ok',
       version: VERSION,
@@ -37,6 +50,7 @@ export function registerHealthRoutes(app: FastifyInstance): void {
       config: {
         ci: ciConfig,
         sdk: sdkConfig,
+        sandbox: sandboxConfig,
       },
       drivers: {
         sdk: {
@@ -44,6 +58,7 @@ export function registerHealthRoutes(app: FastifyInstance): void {
           sandboxEnabled: sdkConfig.enableSandbox,
         },
       },
+      sandbox: sandboxStatus,
     };
     return reply.send(createSuccessResponse(response, request.id));
   });

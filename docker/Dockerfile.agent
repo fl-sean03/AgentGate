@@ -1,0 +1,89 @@
+# AgentGate Agent Container
+#
+# Minimal, secure Docker image for agent execution.
+# Based on Alpine Linux for minimal footprint.
+#
+# Build:
+#   docker build -f docker/Dockerfile.agent -t agentgate/agent:latest .
+#
+# Multi-arch build:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -f docker/Dockerfile.agent -t agentgate/agent:latest --push .
+
+# =============================================================================
+# Stage 1: Builder
+# =============================================================================
+FROM node:20-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code@latest
+
+# =============================================================================
+# Stage 2: Runtime
+# =============================================================================
+FROM node:20-alpine AS runtime
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash \
+    python3 \
+    jq \
+    openssh-client \
+    && rm -rf /var/cache/apk/*
+
+# Create agentgate user (UID 1000)
+RUN addgroup -g 1000 agentgate \
+    && adduser -u 1000 -G agentgate -s /bin/bash -D agentgate
+
+# Copy Node.js modules from builder
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=builder /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=builder /usr/local/bin/npx /usr/local/bin/npx
+
+# Create symlink for claude CLI
+RUN ln -s /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
+
+# Create workspace directory
+RUN mkdir -p /workspace && chown agentgate:agentgate /workspace
+
+# Create home directory for agentgate user
+RUN mkdir -p /home/agentgate/.claude && chown -R agentgate:agentgate /home/agentgate
+
+# Copy entrypoint script
+COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh
+
+# Set working directory
+WORKDIR /workspace
+
+# Switch to agentgate user
+USER agentgate
+
+# Environment variables
+ENV NODE_ENV=production \
+    HOME=/home/agentgate \
+    USER=agentgate \
+    WORKSPACE=/workspace \
+    NO_COLOR=1 \
+    FORCE_COLOR=0
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD node --version && claude --version || exit 1
+
+# Default entrypoint
+ENTRYPOINT ["/usr/local/bin/agent-entrypoint.sh"]
+
+# Default command (keep container running)
+CMD ["sleep", "infinity"]
