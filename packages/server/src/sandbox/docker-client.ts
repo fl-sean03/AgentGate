@@ -5,6 +5,13 @@
  * Provides connection management, health checks, and container operations.
  */
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/require-await */
+
 import Docker from 'dockerode';
 import type { Container, ContainerCreateOptions, Exec } from 'dockerode';
 import { createLogger } from '../utils/logger.js';
@@ -60,7 +67,7 @@ export class DockerClient {
   private constructor(socketPath?: string) {
     this.docker = new Docker({
       socketPath: socketPath ?? '/var/run/docker.sock',
-    });
+    }) as Docker;
   }
 
   /**
@@ -90,10 +97,16 @@ export class DockerClient {
 
     try {
       // Ping Docker daemon
-      await this.docker.ping();
+      await (this.docker.ping() as Promise<unknown>);
 
       // Get version info
-      const info = await this.docker.version();
+      const info = (await this.docker.version()) as {
+        Version?: string;
+        ApiVersion?: string;
+        MinAPIVersion?: string;
+        Os?: string;
+        Arch?: string;
+      };
       this.versionInfo = {
         version: info.Version ?? 'unknown',
         apiVersion: info.ApiVersion ?? 'unknown',

@@ -124,7 +124,7 @@ export class SandboxManager {
     this.dockerAvailable = await dockerProvider.isAvailable();
 
     // Select provider based on mode
-    await this.selectProvider();
+    this.selectProvider();
 
     // Start periodic cleanup
     if (this.config.cleanupIntervalMs > 0) {
@@ -147,7 +147,7 @@ export class SandboxManager {
   /**
    * Select the appropriate provider based on configuration.
    */
-  private async selectProvider(): Promise<void> {
+  private selectProvider(): void {
     const mode = this.config.provider;
 
     if (mode === 'docker') {

@@ -5,6 +5,10 @@
  * Provides namespace and cgroup-based isolation for secure agent execution.
  */
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { BaseSandboxProvider, DEFAULT_WORKSPACE_MOUNT } from './provider.js';
@@ -316,7 +320,7 @@ export class DockerProvider extends BaseSandboxProvider {
 
     // Pull image if needed (singleton promise to avoid concurrent pulls)
     if (!this.imagePullPromise) {
-      this.imagePullPromise = this.dockerClient.pullImage(image).catch((error) => {
+      this.imagePullPromise = this.dockerClient.pullImage(image).catch((error: unknown) => {
         this.logger.warn({ image, err: error }, 'Failed to pull image, using local');
         this.imagePullPromise = null;
       });
