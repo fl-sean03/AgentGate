@@ -5,6 +5,7 @@ import {
   WorkOrderInfo,
   WorkOrderTimeline,
 } from '../components/work-orders';
+import { AgentActivityPanel } from '../components/streaming';
 import { useWorkOrder, useRuns, useCancelWorkOrder } from '../hooks';
 import { LoadingSpinner, ErrorDisplay } from '../components/common';
 
@@ -73,6 +74,7 @@ export function WorkOrderDetail() {
   }
 
   const runs = runsData?.runs || [];
+  const isRunning = workOrder.status === 'running';
 
   return (
     <div className="space-y-6">
@@ -87,6 +89,16 @@ export function WorkOrderDetail() {
       <WorkOrderHeader workOrder={workOrder} onCancel={handleCancel} />
 
       <WorkOrderInfo workOrder={workOrder} />
+
+      {/* Live Activity Panel - shown when work order is running */}
+      {isRunning && id && (
+        <AgentActivityPanel
+          workOrderId={id}
+          maxEvents={500}
+          autoScroll={true}
+          className="relative"
+        />
+      )}
 
       <WorkOrderTimeline runs={runs} />
     </div>
