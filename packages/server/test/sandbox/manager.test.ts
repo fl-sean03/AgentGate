@@ -305,11 +305,12 @@ describe('SandboxManager', () => {
       let status = await manager.getStatus();
       expect(status.activeSandboxCount).toBe(2);
 
-      await sandbox1.destroy();
+      // Use manager.destroySandbox to properly update the count
+      await manager.destroySandbox(sandbox1.id);
       status = await manager.getStatus();
       expect(status.activeSandboxCount).toBe(1);
 
-      await sandbox2.destroy();
+      await manager.destroySandbox(sandbox2.id);
     });
   });
 
