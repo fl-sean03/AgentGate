@@ -13,6 +13,9 @@ export { FixedStrategy, createFixedStrategy } from './fixed-strategy.js';
 // Hybrid strategy (recommended default)
 export { HybridStrategy, createHybridStrategy } from './hybrid-strategy.js';
 
+// Ralph strategy (Geoffrey Huntley's Ralph Wiggum technique)
+export { RalphStrategy, createRalphStrategy } from './ralph-strategy.js';
+
 // Custom strategy
 export {
   CustomStrategy,

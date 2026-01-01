@@ -10,6 +10,7 @@ import type { LoopStrategyConfig, LoopStrategyMode } from '../types/harness-conf
 import { LoopStrategyMode as Modes } from '../types/harness-config.js';
 import { FixedStrategy } from './strategies/fixed-strategy.js';
 import { HybridStrategy } from './strategies/hybrid-strategy.js';
+import { RalphStrategy } from './strategies/ralph-strategy.js';
 import { CustomStrategy } from './strategies/custom-strategy.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -194,6 +195,13 @@ export class StrategyRegistry {
       'Hybrid strategy combining progress tracking with multiple completion criteria. Recommended default for most tasks.'
     );
 
+    // Ralph strategy (Geoffrey Huntley's Ralph Wiggum technique)
+    this.register(
+      Modes.RALPH,
+      () => new RalphStrategy(),
+      'Ralph Wiggum strategy. Loops until agent signals completion or output similarity loop is detected.'
+    );
+
     // Custom strategy
     this.register(
       Modes.CUSTOM,
@@ -201,7 +209,7 @@ export class StrategyRegistry {
       'Custom strategy that loads user-defined strategy modules dynamically.'
     );
 
-    // Placeholder for future strategies (ralph)
+    // All built-in strategies registered
 
     logger.debug(
       { strategies: this.getAvailableStrategies() },
