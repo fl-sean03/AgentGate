@@ -146,6 +146,7 @@ async function checkForbiddenPatterns(
       dot: true,
       onlyFiles: true,
       followSymbolicLinks: false,
+      ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
     });
 
     for (const match of matches) {
@@ -376,6 +377,7 @@ async function checkNamingConvention(
     cwd: workDir,
     dot: true,
     onlyFiles: true,
+    ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
   });
 
   if (files.length === 0) {
