@@ -60,6 +60,14 @@ export async function loadRun(runId: string): Promise<Run | null> {
         ...w,
         timestamp: new Date(w.timestamp),
       })),
+      // CI integration (v0.2.12 - Thrust 6)
+      ciEnabled: (data['ciEnabled'] as boolean) ?? false,
+      ciIterationCount: (data['ciIterationCount'] as number) ?? 0,
+      maxCiIterations: (data['maxCiIterations'] as number) ?? 3,
+      ciStatus: (data['ciStatus'] as Run['ciStatus']) ?? null,
+      ciPollingStartedAt: data['ciPollingStartedAt'] ? new Date(data['ciPollingStartedAt'] as string) : null,
+      ciCompletedAt: data['ciCompletedAt'] ? new Date(data['ciCompletedAt'] as string) : null,
+      ciWorkflowUrl: (data['ciWorkflowUrl'] as string) ?? null,
     };
 
     return run;
@@ -199,13 +207,24 @@ export async function listRuns(
 }
 
 /**
+ * Options for creating a run.
+ */
+export interface CreateRunOptions {
+  /** Enable CI monitoring */
+  ciEnabled?: boolean;
+  /** Maximum CI remediation attempts */
+  maxCiIterations?: number;
+}
+
+/**
  * Create a new run.
  */
 export function createRun(
   runId: string,
   workOrderId: string,
   workspaceId: string,
-  maxIterations: number
+  maxIterations: number,
+  options?: CreateRunOptions
 ): Run {
   return {
     id: runId,
@@ -228,5 +247,13 @@ export function createRun(
     gitHubPrNumber: null,
     // Warnings for non-fatal issues (v0.2.10 - Thrust 13)
     warnings: [],
+    // CI integration (v0.2.12 - Thrust 6)
+    ciEnabled: options?.ciEnabled ?? false,
+    ciIterationCount: 0,
+    maxCiIterations: options?.maxCiIterations ?? 3,
+    ciStatus: null,
+    ciPollingStartedAt: null,
+    ciCompletedAt: null,
+    ciWorkflowUrl: null,
   };
 }

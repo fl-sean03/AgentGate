@@ -23,7 +23,8 @@ import {
   applyTransition,
   isTerminalState,
 } from './state-machine.js';
-import { saveRun, saveIterationData, createRun } from './run-store.js';
+import { saveRun, saveIterationData, createRun, type CreateRunOptions } from './run-store.js';
+import { getConfig } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
 import type { ParsedEvent } from '../agent/stream-parser.js';
@@ -148,7 +149,12 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   } = options;
 
   const runId = randomUUID();
-  let run = createRun(runId, workOrder.id, workspace.id, workOrder.maxIterations);
+  const config = getConfig();
+  const ciOptions: CreateRunOptions = {
+    ciEnabled: workOrder.waitForCI ?? false,
+    maxCiIterations: config.ci.maxIterations,
+  };
+  let run = createRun(runId, workOrder.id, workspace.id, workOrder.maxIterations, ciOptions);
 
   log.info(
     {
@@ -156,6 +162,8 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       workOrderId: workOrder.id,
       workspaceId: workspace.id,
       maxIterations: workOrder.maxIterations,
+      ciEnabled: run.ciEnabled,
+      maxCiIterations: run.maxCiIterations,
     },
     'Starting run execution'
   );
@@ -166,7 +174,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     const { renewLease } = await import('../workspace/lease.js');
     // Renew lease every 10 minutes
     renewalInterval = setInterval(() => {
-      void (async () => {
+      void (async (): Promise<void> => {
         try {
           await renewLease(leaseId);
           log.debug({ runId, leaseId }, 'Lease renewed');
