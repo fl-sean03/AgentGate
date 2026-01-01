@@ -81,12 +81,15 @@ describe('DockerProvider', () => {
   });
 });
 
-// Integration tests - only run if Docker is available
-describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => {
+// Integration tests - require Docker with agentgate/agent image
+// These tests are skipped by default since they need a real Docker environment
+// To run: DOCKER_INTEGRATION=1 pnpm test test/sandbox/docker-provider.test.ts
+describe.skipIf(!process.env.DOCKER_INTEGRATION)('DockerProvider integration', () => {
   let provider: DockerProvider;
   let tempDir: string;
 
   beforeEach(async () => {
+    // Use root user for Alpine since it doesn't have agentgate user
     provider = new DockerProvider({ image: 'alpine:latest' });
     // Create temp directory
     const { mkdtemp } = await import('node:fs/promises');
@@ -114,6 +117,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root', // Alpine doesn't have agentgate user
       });
 
       expect(sandbox).toBeDefined();
@@ -128,6 +132,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       const sandboxes = await provider.listSandboxes();
@@ -143,6 +148,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       try {
@@ -160,6 +166,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       try {
@@ -179,6 +186,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       try {
@@ -195,6 +203,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       try {
@@ -215,6 +224,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       expect(sandbox.status).toBe('running');
@@ -228,6 +238,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       const sandboxId = sandbox.id;
@@ -241,6 +252,7 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       await sandbox.destroy();
@@ -255,10 +267,12 @@ describe.skipIf(!await isDockerAvailable())('DockerProvider integration', () => 
       const sandbox1 = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
       const sandbox2 = await provider.createSandbox({
         workspacePath: tempDir,
         image: 'alpine:latest',
+        user: 'root',
       });
 
       expect(await provider.listSandboxes()).toHaveLength(2);
