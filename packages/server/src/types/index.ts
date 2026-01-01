@@ -191,6 +191,53 @@ export type {
   SandboxProvider,
 } from '../sandbox/types.js';
 
+// Harness Config Types (v0.2.16)
+export {
+  LoopStrategyMode,
+  CompletionDetection,
+  ProgressTrackingMode,
+  GitOperationMode,
+  fixedStrategyConfigSchema,
+  hybridStrategyConfigSchema,
+  ralphStrategyConfigSchema,
+  customStrategyConfigSchema,
+  loopStrategyConfigSchema,
+  agentDriverConfigSchema,
+  verificationConfigSchema,
+  gitOpsConfigSchema,
+  executionLimitsSchema,
+  harnessConfigSchema,
+  type FixedStrategyConfig,
+  type HybridStrategyConfig,
+  type RalphStrategyConfig,
+  type CustomStrategyConfig,
+  type LoopStrategyConfig,
+  type AgentDriverConfig,
+  type VerificationConfig,
+  type GitOpsConfig,
+  type ExecutionLimits,
+  type HarnessConfig,
+  type ResolvedHarnessConfig,
+  type ConfigSnapshot,
+  type ConfigChange,
+  type ConfigAuditRecord,
+} from './harness-config.js';
+
+// Loop Strategy Types (v0.2.16)
+export type {
+  LoopDecision,
+  LoopProgress,
+  ProgressMetrics,
+  LoopDetectionData,
+  SnapshotFingerprint,
+  RepeatPattern,
+  LoopState,
+  IterationHistory,
+  LoopContext,
+  LoopStrategy,
+  LoopStrategyFactory,
+} from './loop-strategy.js';
+
 // SDK Types (Claude Agent SDK)
 export type {
   // Re-exported SDK types
