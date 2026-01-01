@@ -25,6 +25,9 @@ import {
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun } from './run-store.js';
 import { createLogger } from '../utils/logger.js';
+import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
+import type { ParsedEvent } from '../agent/stream-parser.js';
+import type { StreamingEventCallback } from '../agent/streaming-executor.js';
 
 const log = createLogger('run-executor');
 
@@ -47,13 +50,17 @@ export interface RunExecutorOptions {
   gatePlan: GatePlan;
   leaseId?: string; // Lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
+  // Optional EventBroadcaster for streaming events (v0.2.11 - Thrust 4)
+  broadcaster?: EventBroadcaster;
+
   // Callbacks for each phase
   onBuild: (
     workspace: Workspace,
     taskPrompt: string,
     feedback: string | null,
     iteration: number,
-    sessionId: string | null
+    sessionId: string | null,
+    streamingCallback?: StreamingEventCallback
   ) => Promise<BuildResult>;
 
   onSnapshot: (
@@ -121,6 +128,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     workspace,
     gatePlan,
     leaseId,
+    broadcaster,
     onBuild,
     onSnapshot,
     onVerify,
@@ -227,12 +235,18 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
       onPhaseStart?.('build', iteration);
 
+      // Create streaming callback if broadcaster is available (v0.2.11 - Thrust 4)
+      const streamingCallback: StreamingEventCallback | undefined = broadcaster
+        ? createStreamingCallback(broadcaster, workOrder.id, runId)
+        : undefined;
+
       const buildResult = await onBuild(
         workspace,
         workOrder.taskPrompt,
         feedback,
         iteration,
-        run.sessionId
+        run.sessionId,
+        streamingCallback
       );
 
       onPhaseEnd?.('build', iteration);
@@ -504,4 +518,111 @@ export async function cancelRun(run: Run): Promise<Run> {
   await saveRun(updatedRun);
 
   return updatedRun;
+}
+
+// ==========================================================================
+// Streaming Event Helpers (v0.2.11 - Thrust 4)
+// ==========================================================================
+
+/**
+ * Throttling state for output events
+ */
+interface ThrottleState {
+  lastOutputTime: number;
+  pendingToolCalls: ParsedEvent[];
+  batchTimeout: NodeJS.Timeout | null;
+}
+
+/** Minimum interval between output events (ms) */
+const OUTPUT_DEBOUNCE_MS = 100;
+
+/** Batch window for rapid tool calls (ms) */
+const TOOL_CALL_BATCH_WINDOW_MS = 50;
+
+/**
+ * Create a streaming callback that emits events to the broadcaster.
+ * Implements throttling for high-frequency events.
+ */
+function createStreamingCallback(
+  broadcaster: EventBroadcaster,
+  _workOrderId: string,
+  _runId: string
+): StreamingEventCallback {
+  const throttleState: ThrottleState = {
+    lastOutputTime: 0,
+    pendingToolCalls: [],
+    batchTimeout: null,
+  };
+
+  return (event: ParsedEvent): void => {
+    switch (event.type) {
+      case 'agent_tool_call':
+        // Batch rapid tool calls
+        throttleState.pendingToolCalls.push(event);
+
+        if (!throttleState.batchTimeout) {
+          throttleState.batchTimeout = setTimeout(() => {
+            // Emit all batched tool calls
+            for (const toolCallEvent of throttleState.pendingToolCalls) {
+              if (toolCallEvent.type === 'agent_tool_call') {
+                broadcaster.emitAgentToolCall(
+                  toolCallEvent.workOrderId,
+                  toolCallEvent.runId,
+                  toolCallEvent.toolUseId,
+                  toolCallEvent.tool,
+                  toolCallEvent.input
+                );
+              }
+            }
+            throttleState.pendingToolCalls = [];
+            throttleState.batchTimeout = null;
+          }, TOOL_CALL_BATCH_WINDOW_MS);
+        }
+        break;
+
+      case 'agent_tool_result':
+        // Tool results are not throttled (important for completion tracking)
+        broadcaster.emitAgentToolResult(
+          event.workOrderId,
+          event.runId,
+          event.toolUseId,
+          event.success,
+          event.contentPreview,
+          event.contentLength,
+          event.durationMs
+        );
+        break;
+
+      case 'agent_output': {
+        // Debounce output events
+        const now = Date.now();
+        if (now - throttleState.lastOutputTime >= OUTPUT_DEBOUNCE_MS) {
+          broadcaster.emitAgentOutput(
+            event.workOrderId,
+            event.runId,
+            event.content
+          );
+          throttleState.lastOutputTime = now;
+        }
+        break;
+      }
+
+      case 'progress_update':
+        // Progress updates are not throttled (already controlled by interval)
+        broadcaster.emitProgressUpdate(
+          event.workOrderId,
+          event.runId,
+          event.percentage,
+          event.currentPhase,
+          event.toolCallCount,
+          event.elapsedSeconds,
+          event.estimatedRemainingSeconds
+        );
+        break;
+
+      default:
+        // Log unknown event types but don't fail
+        log.debug({ eventType: (event as ParsedEvent).type }, 'Unknown streaming event type');
+    }
+  };
 }

@@ -21,6 +21,11 @@ import { buildClaudeCommand, buildCommandString } from './command-builder.js';
 import { DEFAULT_TIMEOUT_MS } from './defaults.js';
 import { extractSessionId, extractTokenUsage, parseOutput } from './output-parser.js';
 import { detectSubscription } from './subscription-detector.js';
+import {
+  StreamingExecutor,
+  type StreamingEventCallback,
+  type StreamingOptions,
+} from './streaming-executor.js';
 
 const logger = createLogger('agent:claude-code-subscription');
 
@@ -65,6 +70,22 @@ export interface ClaudeCodeSubscriptionDriverConfig {
   defaultTimeoutMs?: number;
   /** Additional environment variables to pass (API keys will still be excluded) */
   env?: Record<string, string>;
+}
+
+/**
+ * Options for execution with streaming
+ */
+export interface SubscriptionExecuteWithStreamingOptions {
+  /** Work order ID for event context */
+  workOrderId: string;
+  /** Run ID for event context */
+  runId: string;
+  /** Callback for streaming events */
+  onEvent?: StreamingEventCallback | undefined;
+  /** Streaming options */
+  streamingOptions?: StreamingOptions | undefined;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -343,6 +364,98 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
         });
       });
     });
+  }
+
+  /**
+   * Execute agent request with streaming using subscription.
+   * This method provides real-time events as the subprocess runs.
+   */
+  async executeWithStreaming(
+    request: AgentRequest,
+    options: SubscriptionExecuteWithStreamingOptions
+  ): Promise<AgentResult> {
+    const startTime = Date.now();
+
+    // Validate subscription before execution
+    if (!this.subscriptionStatus) {
+      this.subscriptionStatus = await detectSubscription();
+    }
+
+    if (!this.subscriptionStatus.available) {
+      const error = this.subscriptionStatus.error ?? 'Subscription not available';
+      logger.error({ error }, 'Cannot execute with streaming: subscription not available');
+
+      return {
+        success: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: error,
+        structuredOutput: null,
+        sessionId: null,
+        tokensUsed: null,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    const args = buildClaudeCommand(request);
+    const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
+
+    logger.info(
+      {
+        workspace: request.workspacePath,
+        maxTurns: request.constraints.maxTurns,
+        hasSession: !!request.sessionId,
+        timeout,
+        subscriptionType: this.subscriptionStatus.subscriptionType,
+        rateLimitTier: this.subscriptionStatus.rateLimitTier,
+        billingMethod: 'subscription',
+        streaming: true,
+        workOrderId: options.workOrderId,
+        runId: options.runId,
+      },
+      'Executing Claude Code with subscription and streaming'
+    );
+
+    logger.debug({ command: buildCommandString(request) }, 'Full command');
+
+    // Create clean environment WITHOUT API keys
+    const env = this.createCleanEnvironment();
+
+    // Log that we're explicitly NOT using API keys
+    logger.debug(
+      {
+        excludedVars: EXCLUDED_ENV_VARS.filter(v => process.env[v] !== undefined),
+      },
+      'Excluded API key variables from environment'
+    );
+
+    // Create streaming executor
+    const executor = new StreamingExecutor({
+      workOrderId: options.workOrderId,
+      runId: options.runId,
+      onEvent: options.onEvent,
+      options: options.streamingOptions,
+    });
+
+    // Execute with streaming
+    const result = await executor.execute(this.config.binaryPath, args, {
+      cwd: request.workspacePath,
+      env,
+      timeout,
+      signal: options.signal,
+    });
+
+    // Convert to AgentResult
+    return {
+      success: result.success,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      structuredOutput: result.structuredOutput,
+      sessionId: result.sessionId,
+      tokensUsed: result.tokensUsed,
+      durationMs: result.durationMs,
+    };
   }
 }
 
