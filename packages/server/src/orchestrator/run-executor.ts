@@ -19,6 +19,8 @@ import {
   RunResult,
   RunState,
 } from '../types/index.js';
+import type { ResolvedHarnessConfig } from '../types/harness-config.js';
+import type { LoopStrategy, LoopContext, LoopState, LoopDecision, LoopProgress, LoopDetectionData } from '../types/loop-strategy.js';
 import {
   applyTransition,
   isTerminalState,
@@ -31,6 +33,78 @@ import type { ParsedEvent } from '../agent/stream-parser.js';
 import type { StreamingEventCallback } from '../agent/streaming-executor.js';
 
 const log = createLogger('run-executor');
+
+/**
+ * Build a LoopContext for the current iteration.
+ * (v0.2.16 - Thrust 9)
+ */
+function buildLoopContext(
+  workOrderId: string,
+  runId: string,
+  taskPrompt: string,
+  config: ResolvedHarnessConfig,
+  state: LoopState,
+  currentSnapshot: Snapshot | null,
+  currentVerification: VerificationReport | null,
+  previousSnapshots: Snapshot[],
+  previousVerifications: VerificationReport[]
+): LoopContext {
+  return {
+    workOrderId,
+    runId,
+    taskPrompt,
+    config: config.loopStrategy,
+    state,
+    currentSnapshot,
+    currentVerification,
+    previousSnapshots,
+    previousVerifications,
+  };
+}
+
+/**
+ * Create initial loop state.
+ * (v0.2.16 - Thrust 9)
+ */
+function createInitialLoopState(maxIterations: number): LoopState {
+  const now = new Date();
+  return {
+    iteration: 1,
+    maxIterations,
+    startedAt: now,
+    lastDecision: null,
+    progress: {
+      iteration: 1,
+      totalIterations: maxIterations,
+      startedAt: now,
+      lastIterationAt: null,
+      estimatedCompletion: null,
+      progressPercent: 0,
+      trend: 'unknown',
+      metrics: {
+        testsPassingPrevious: 0,
+        testsPassingCurrent: 0,
+        testsTotal: 0,
+        linesChanged: 0,
+        filesChanged: 0,
+        errorsFixed: 0,
+        errorsRemaining: 0,
+        customMetrics: {},
+      },
+    },
+    loopDetection: {
+      recentSnapshots: [],
+      repeatPatterns: [],
+      loopDetected: false,
+      loopType: null,
+      confidence: 0,
+      detectedAt: null,
+    },
+    history: [],
+    isTerminal: false,
+    terminationReason: null,
+  };
+}
 
 /**
  * Build result including agent result for metrics
@@ -49,6 +123,8 @@ export interface RunExecutorOptions {
   workOrder: WorkOrder;
   workspace: Workspace;
   gatePlan: GatePlan;
+  harnessConfig?: ResolvedHarnessConfig; // v0.2.16 - Thrust 9
+  loopStrategy?: LoopStrategy;           // v0.2.16 - Thrust 9
   leaseId?: string; // Lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
   // Optional EventBroadcaster for streaming events (v0.2.11 - Thrust 4)
@@ -128,6 +204,8 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     workOrder,
     workspace,
     gatePlan,
+    harnessConfig,   // v0.2.16 - Thrust 9
+    loopStrategy,    // v0.2.16 - Thrust 9
     leaseId,
     broadcaster,
     onBuild,
@@ -212,6 +290,37 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     return run;
   }
 
+  // Initialize loop state and strategy (v0.2.16 - Thrust 9)
+  let loopState = createInitialLoopState(run.maxIterations);
+  const previousSnapshots: Snapshot[] = [];
+  const previousVerifications: VerificationReport[] = [];
+
+  // Initialize loop strategy if provided
+  if (loopStrategy && harnessConfig) {
+    try {
+      const initialContext = buildLoopContext(
+        workOrder.id,
+        runId,
+        workOrder.taskPrompt,
+        harnessConfig,
+        loopState,
+        null,
+        null,
+        previousSnapshots,
+        previousVerifications
+      );
+      await loopStrategy.onLoopStart(initialContext);
+      log.debug({ runId, strategyName: loopStrategy.name }, 'Loop strategy initialized');
+    } catch (error) {
+      log.error({ error, runId }, 'Failed to initialize loop strategy');
+      run = applyTransition(run, RunEvent.SYSTEM_ERROR);
+      run.result = RunResult.FAILED_ERROR;
+      run.error = error instanceof Error ? error.message : String(error);
+      await saveRun(run);
+      return run;
+    }
+  }
+
   // Main iteration loop
   let feedback: string | null = null;
 
@@ -220,6 +329,33 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     const iteration = run.iteration;
 
     log.info({ runId, iteration, maxIterations: run.maxIterations }, 'Starting iteration');
+
+    // Update loop state and notify strategy (v0.2.16 - Thrust 9)
+    loopState.iteration = iteration;
+    loopState.progress.iteration = iteration;
+    let currentSnapshot: Snapshot | null = null;
+    let currentVerification: VerificationReport | null = null;
+
+    if (loopStrategy && harnessConfig) {
+      try {
+        const iterContext = buildLoopContext(
+          workOrder.id,
+          runId,
+          workOrder.taskPrompt,
+          harnessConfig,
+          loopState,
+          null,
+          null,
+          previousSnapshots,
+          previousVerifications
+        );
+        await loopStrategy.onIterationStart(iterContext);
+        log.debug({ runId, iteration }, 'Strategy notified of iteration start');
+      } catch (error) {
+        log.warn({ error, runId, iteration }, 'Strategy onIterationStart failed');
+        // Continue execution - strategy errors should not fail the run
+      }
+    }
 
     // Create iteration tracking
     const iterationData: IterationData = {
@@ -314,6 +450,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onPhaseEnd?.('snapshot', iteration);
       onSnapshotCaptured?.(snapshot, iteration);
 
+      // Track snapshot for strategy (v0.2.16 - Thrust 9)
+      currentSnapshot = snapshot;
+      previousSnapshots.push(snapshot);
+
       iterationData.snapshotId = snapshot.id;
       run.snapshotIds.push(snapshot.id);
       run.snapshotAfterSha = snapshot.afterSha;
@@ -328,6 +468,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onPhaseEnd?.('verify', iteration);
       onVerificationComplete?.(verificationReport, iteration);
       iterationData.verificationPassed = verificationReport.passed;
+
+      // Track verification for strategy (v0.2.16 - Thrust 9)
+      currentVerification = verificationReport;
+      previousVerifications.push(verificationReport);
 
       if (verificationReport.passed) {
         log.info({ runId, iteration }, 'Verification passed');
@@ -434,12 +578,76 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         }
       }
 
-      // Check if we have more iterations
-      if (iteration >= run.maxIterations) {
+      // Check if we have more iterations (strategy may override)
+      let shouldStop = iteration >= run.maxIterations;
+      let strategyDecision: LoopDecision | null = null;
+
+      // Consult strategy for continue/stop decision (v0.2.16 - Thrust 9)
+      if (loopStrategy && harnessConfig) {
+        try {
+          const decisionContext = buildLoopContext(
+            workOrder.id,
+            runId,
+            workOrder.taskPrompt,
+            harnessConfig,
+            loopState,
+            currentSnapshot,
+            currentVerification,
+            previousSnapshots,
+            previousVerifications
+          );
+          strategyDecision = await loopStrategy.shouldContinue(decisionContext);
+          log.debug(
+            {
+              runId,
+              iteration,
+              shouldContinue: strategyDecision.shouldContinue,
+              action: strategyDecision.action,
+              reason: strategyDecision.reason,
+            },
+            'Strategy decision received'
+          );
+
+          // Strategy can override max iterations check
+          if (!strategyDecision.shouldContinue) {
+            shouldStop = true;
+          } else if (strategyDecision.action === 'continue') {
+            // Strategy says continue even if we hit max iterations
+            // (e.g., hybrid strategy giving bonus iterations)
+            shouldStop = false;
+          }
+        } catch (error) {
+          log.warn({ error, runId, iteration }, 'Strategy shouldContinue failed, using default logic');
+          // Fall back to default max iterations check
+        }
+      }
+
+      if (shouldStop) {
         log.warn({ runId, iteration }, 'Max iterations reached, verification failed');
+
+        // Notify strategy of loop end (v0.2.16 - Thrust 9)
+        if (loopStrategy && harnessConfig && strategyDecision) {
+          try {
+            const endContext = buildLoopContext(
+              workOrder.id,
+              runId,
+              workOrder.taskPrompt,
+              harnessConfig,
+              loopState,
+              currentSnapshot,
+              currentVerification,
+              previousSnapshots,
+              previousVerifications
+            );
+            await loopStrategy.onLoopEnd(endContext, strategyDecision);
+          } catch (error) {
+            log.warn({ error, runId }, 'Strategy onLoopEnd failed');
+          }
+        }
+
         run = applyTransition(run, RunEvent.VERIFY_FAILED_TERMINAL);
         run.result = RunResult.FAILED_VERIFICATION;
-        run.error = 'Max iterations reached without passing verification';
+        run.error = strategyDecision?.reason ?? 'Max iterations reached without passing verification';
         await saveRun(run);
         onStateChange?.(run);
         break;
@@ -467,6 +675,30 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       iterationData.durationMs = Date.now() - iterationStart;
       await saveIterationData(runId, iteration, iterationData);
       onIterationComplete?.(run, iterationData);
+
+      // Notify strategy of iteration end (v0.2.16 - Thrust 9)
+      if (loopStrategy && harnessConfig && strategyDecision) {
+        try {
+          const iterEndContext = buildLoopContext(
+            workOrder.id,
+            runId,
+            workOrder.taskPrompt,
+            harnessConfig,
+            loopState,
+            currentSnapshot,
+            currentVerification,
+            previousSnapshots,
+            previousVerifications
+          );
+          await loopStrategy.onIterationEnd(iterEndContext, strategyDecision);
+
+          // Update loop state with iteration history
+          loopState.progress.lastIterationAt = new Date();
+          loopState.lastDecision = strategyDecision;
+        } catch (error) {
+          log.warn({ error, runId, iteration }, 'Strategy onIterationEnd failed');
+        }
+      }
 
       // Update before state for next iteration
       beforeState = {
