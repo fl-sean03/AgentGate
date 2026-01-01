@@ -82,14 +82,16 @@ describe('StrategyRegistry', () => {
     it('should register a new strategy', () => {
       const registry = StrategyRegistry.getInstance();
 
-      // Use 'ralph' mode for testing custom registration (not yet built-in)
+      // Use 'custom' mode for testing since we can unregister it first
+      registry.unregister(LoopStrategyMode.CUSTOM);
+
       registry.register(
-        LoopStrategyMode.RALPH,
+        LoopStrategyMode.CUSTOM,
         () => new FixedStrategy(),
-        'Test ralph strategy'
+        'Test custom strategy'
       );
 
-      expect(registry.has(LoopStrategyMode.RALPH)).toBe(true);
+      expect(registry.has(LoopStrategyMode.CUSTOM)).toBe(true);
     });
 
     it('should throw on duplicate registration', () => {
@@ -124,19 +126,20 @@ describe('StrategyRegistry', () => {
     it('should unregister a strategy', () => {
       const registry = StrategyRegistry.getInstance();
 
-      // Register a ralph one first (not yet built-in)
-      registry.register(
-        LoopStrategyMode.RALPH,
-        () => new FixedStrategy(),
-        'Test ralph'
-      );
-
+      // Ralph is now a built-in strategy
       expect(registry.has(LoopStrategyMode.RALPH)).toBe(true);
 
       const result = registry.unregister(LoopStrategyMode.RALPH);
 
       expect(result).toBe(true);
       expect(registry.has(LoopStrategyMode.RALPH)).toBe(false);
+
+      // Re-register it for other tests
+      registry.register(
+        LoopStrategyMode.RALPH,
+        () => new FixedStrategy(),
+        'Ralph re-registered for testing'
+      );
     });
 
     it('should return false for non-existent strategy', () => {
