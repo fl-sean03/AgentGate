@@ -88,6 +88,7 @@ jobs:
     name: Tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     needs: [lint, typecheck]
+    timeout-minutes: 15
     permissions:
       contents: read
       checks: write
@@ -95,7 +96,8 @@ jobs:
       fail-fast: false
       matrix:
         # Run full matrix only on main branch push, single node version for PRs
-        node-version: ${{ github.event_name == 'pull_request' && fromJson('["20"]') || fromJson('["18", "20", "22"]') }}
+        # Note: Package requires Node >= 20, so we only test 20 and 22
+        node-version: ${{ github.event_name == 'pull_request' && fromJson('["20"]') || fromJson('["20", "22"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -279,6 +281,7 @@ jobs:
     name: Platform (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: [lint, typecheck]
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
