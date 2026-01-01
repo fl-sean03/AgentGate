@@ -1,0 +1,136 @@
+# =============================================================================
+# AgentGate Docker Compose Configuration
+#
+# Usage:
+#   1. Copy .env.example to .env and configure
+#   2. Run: docker-compose up -d
+#   3. Access dashboard at http://localhost:5173
+#   4. API available at http://localhost:3001
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # AgentGate Server
+  # Main orchestration server
+  # ---------------------------------------------------------------------------
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: agentgate-server
+    restart: unless-stopped
+
+    ports:
+      - "${AGENTGATE_PORT:-3001}:3001"
+
+    environment:
+      # Required
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_TOKEN=${AGENTGATE_GITHUB_TOKEN:-${GITHUB_TOKEN}}
+
+      # Concurrency limits
+      - AGENTGATE_MAX_CONCURRENT_RUNS=${AGENTGATE_MAX_CONCURRENT_RUNS:-10}
+
+      # Spawn limits
+      - AGENTGATE_MAX_SPAWN_DEPTH=${AGENTGATE_MAX_SPAWN_DEPTH:-3}
+      - AGENTGATE_MAX_CHILDREN_PER_PARENT=${AGENTGATE_MAX_CHILDREN_PER_PARENT:-10}
+      - AGENTGATE_MAX_TREE_SIZE=${AGENTGATE_MAX_TREE_SIZE:-100}
+
+      # Timeouts
+      - AGENTGATE_DEFAULT_TIMEOUT_SECONDS=${AGENTGATE_DEFAULT_TIMEOUT_SECONDS:-3600}
+
+      # Paths
+      - AGENTGATE_DATA_DIR=/data/agentgate
+
+      # Server config
+      - NODE_ENV=production
+
+    volumes:
+      # Persistent data
+      - agentgate-data:/data/agentgate
+
+      # Workspace directory for git operations
+      - agentgate-workspaces:/workspaces
+
+      # Optional: Mount Docker socket for spawning agent containers
+      # WARNING: This gives the container access to Docker daemon
+      # Only enable if you need container-based agent isolation
+      # - /var/run/docker.sock:/var/run/docker.sock
+
+    networks:
+      - agentgate
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '${SERVER_CPU_LIMIT:-4}'
+          memory: ${SERVER_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # AgentGate Dashboard
+  # React web interface
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: agentgate-dashboard
+    restart: unless-stopped
+
+    ports:
+      - "${DASHBOARD_PORT:-5173}:80"
+
+    depends_on:
+      server:
+        condition: service_healthy
+
+    networks:
+      - agentgate
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  agentgate:
+    driver: bridge
+    name: agentgate-network
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  agentgate-data:
+    name: agentgate-data
+  agentgate-workspaces:
+    name: agentgate-workspaces
