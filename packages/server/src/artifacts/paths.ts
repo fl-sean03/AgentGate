@@ -145,6 +145,15 @@ export function getTreePath(rootId: string): string {
   return join(getTreesDir(), `${rootId}.json`);
 }
 
+// Audit paths (v0.2.16 - Thrust 11)
+export function getAuditDir(): string {
+  return join(getAgentGateRoot(), 'audit');
+}
+
+export function getAuditPath(runId: string): string {
+  return join(getAuditDir(), `${runId}.json`);
+}
+
 // Ensure directories exist
 export async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
@@ -171,5 +180,6 @@ export async function ensureAllDirs(): Promise<void> {
     ensureDir(getSnapshotsDir()),
     ensureDir(getTmpDir()),
     ensureDir(getTreesDir()),
+    ensureDir(getAuditDir()),
   ]);
 }
