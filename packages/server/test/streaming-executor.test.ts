@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import * as fs from 'node:fs/promises';
 import {
   StreamingExecutor,
   createStreamingExecutor,
@@ -339,7 +340,9 @@ describe('StreamingExecutor', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.stdout.trim()).toBe('/tmp');
+      // Normalize path to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
+      const expectedPath = await fs.realpath('/tmp');
+      expect(result.stdout.trim()).toBe(expectedPath);
     });
   });
 

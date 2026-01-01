@@ -28,6 +28,23 @@ import {
 
 const TEST_OUTPUT_DIR = path.join(import.meta.dirname, '../test-output');
 
+/**
+ * Retry cleanup with exponential backoff
+ */
+async function cleanupWithRetry(dir: string, maxAttempts = 3): Promise<void> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      break;
+    } catch (error) {
+      if (attempt === maxAttempts - 1) {
+        console.warn(`Failed to cleanup ${dir}:`, error);
+      }
+      await new Promise(r => setTimeout(r, 100 * Math.pow(2, attempt)));
+    }
+  }
+}
+
 describe('Git Operations', () => {
   let testDir: string;
 
@@ -38,12 +55,8 @@ describe('Git Operations', () => {
   });
 
   afterEach(async () => {
-    // Cleanup
-    try {
-      await rm(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Cleanup with retry logic
+    await cleanupWithRetry(testDir);
   });
 
   describe('initRepo', () => {

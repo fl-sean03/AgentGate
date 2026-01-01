@@ -21,7 +21,21 @@ import {
   yellow,
   formatDuration,
 } from '../formatter.js';
-import { AgentType, GatePlanSource, WorkspaceTemplate, type SubmitRequest, RunState, RunResult, type Run } from '../../types/index.js';
+import { AgentType, GatePlanSource, WorkspaceTemplate, VerificationLevel, type SubmitRequest, RunState, RunResult, type Run } from '../../types/index.js';
+
+/**
+ * Parse comma-separated verification levels.
+ */
+function parseVerificationLevels(value: string): string[] {
+  const levels = value.split(',').map(l => l.trim().toUpperCase());
+  const valid = Object.values(VerificationLevel);
+  for (const level of levels) {
+    if (!valid.includes(level as typeof valid[number])) {
+      throw new Error(`Invalid verification level: ${level}. Valid levels: ${valid.join(', ')}`);
+    }
+  }
+  return levels;
+}
 
 /**
  * Create the exec command.
@@ -44,6 +58,11 @@ export function createExecCommand(): Command {
     .option('--github-new <owner/repo>', 'Create a new GitHub repository')
     .option('--public', 'Make the new GitHub repository public (default is private, requires --github-new)', false)
     .option('--wait-for-ci', 'Wait for CI checks to pass after PR creation (Thrust 16)', false)
+    .option(
+      '--skip-verification <levels>',
+      'Skip verification levels (comma-separated: L0,L1,L2,L3)',
+      parseVerificationLevels
+    )
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
@@ -255,6 +274,7 @@ export async function executeExec(rawOptions: Record<string, unknown>): Promise<
     maxWallClockSeconds: options.maxTime,
     gatePlanSource: options.gatePlan,
     waitForCI: options.waitForCi ?? false,
+    skipVerification: options.skipVerification as typeof VerificationLevel[keyof typeof VerificationLevel][] | undefined,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],
