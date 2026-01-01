@@ -1,0 +1,18 @@
+# This profile has valid YAML but fails schema validation
+name: invalid-schema-profile
+description: "Profile with schema violations"
+
+loopStrategy:
+  mode: unknown_mode_that_does_not_exist
+  maxIterations: -5
+
+agentDriver:
+  type: nonexistent-driver
+  temperature: 999
+
+verification:
+  timeoutMs: -1000
+
+executionLimits:
+  maxWallClockSeconds: -100
+  maxConcurrentAgents: 999
