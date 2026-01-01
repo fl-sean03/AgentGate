@@ -1,0 +1,94 @@
+# =============================================================================
+# AgentGate Agent Container Image
+#
+# Minimal, secure Docker image for agent execution with Claude Code CLI.
+# Optimized for:
+# - Fast startup (~300ms)
+# - Minimal attack surface
+# - Non-root execution
+# - Read-only rootfs compatibility
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# Install Claude Code CLI and build dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++
+
+# Install Claude Code CLI globally
+RUN npm install -g @anthropic-ai/claude-code
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime
+# Minimal runtime image with only necessary dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS runtime
+
+# Runtime dependencies
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash \
+    python3 \
+    jq \
+    openssh-client \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user for agent execution
+# UID 1000 typically matches host user for permission compatibility
+RUN addgroup -g 1000 agentgate \
+    && adduser -D -u 1000 -G agentgate -h /home/agentgate -s /bin/bash agentgate
+
+# Copy Node.js and npm from builder
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=builder /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=builder /usr/local/bin/npx /usr/local/bin/npx
+
+# Link claude CLI
+RUN ln -s /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.mjs /usr/local/bin/claude \
+    && chmod +x /usr/local/bin/claude
+
+# Create workspace directory
+RUN mkdir -p /workspace && chown agentgate:agentgate /workspace
+
+# Copy entrypoint script
+COPY docker/agent-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Configure git for safe directory access
+RUN git config --system safe.directory '*'
+
+# Set environment variables
+ENV NODE_ENV=production \
+    HOME=/home/agentgate \
+    USER=agentgate \
+    WORKSPACE=/workspace \
+    NO_COLOR=1 \
+    FORCE_COLOR=0 \
+    # Disable Claude telemetry in container
+    CLAUDE_CODE_TELEMETRY=0
+
+# Switch to non-root user
+USER agentgate
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD node --version && claude --version || exit 1
+
+# Default to keep-alive mode
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["sleep", "infinity"]
+
+# Labels
+LABEL org.opencontainers.image.title="AgentGate Agent" \
+      org.opencontainers.image.description="Sandboxed agent execution environment for AgentGate" \
+      org.opencontainers.image.vendor="AgentGate" \
+      org.opencontainers.image.source="https://github.com/your-org/agentgate"

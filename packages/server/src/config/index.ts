@@ -31,6 +31,28 @@ const ciConfigSchema = z.object({
 export type CIConfig = z.infer<typeof ciConfigSchema>;
 
 /**
+ * Sandbox configuration schema
+ */
+const sandboxConfigSchema = z.object({
+  /** Sandbox provider: 'auto', 'docker', or 'subprocess' */
+  provider: z.enum(['auto', 'docker', 'subprocess']).default('auto'),
+  /** Docker image for agent containers */
+  image: z.string().default('agentgate/agent:latest'),
+  /** Container network mode: 'none', 'bridge', or 'host' */
+  networkMode: z.enum(['none', 'bridge', 'host']).default('none'),
+  /** CPU limit per container (0.5-16 cores) */
+  cpuLimit: z.coerce.number().min(0.5).max(16).default(2),
+  /** Memory limit per container in MB (256-32768) */
+  memoryMB: z.coerce.number().int().min(256).max(32768).default(4096),
+  /** Execution timeout in seconds (60-86400) */
+  timeoutSeconds: z.coerce.number().int().min(60).max(86400).default(3600),
+  /** Auto-cleanup interval in minutes (1-60) */
+  autoCleanupMinutes: z.coerce.number().int().min(1).max(60).default(5),
+});
+
+export type SandboxConfig = z.infer<typeof sandboxConfigSchema>;
+
+/**
  * Configuration schema with validation
  */
 const configSchema = z.object({
@@ -56,6 +78,9 @@ const configSchema = z.object({
 
   // CI configuration
   ci: ciConfigSchema,
+
+  // Sandbox configuration
+  sandbox: sandboxConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -84,6 +109,16 @@ export function loadConfig(): AgentGateConfig {
       skipIfNoWorkflows: process.env.AGENTGATE_CI_SKIP_IF_NO_WORKFLOWS,
       logRetentionCount: process.env.AGENTGATE_CI_LOG_RETENTION_COUNT,
     },
+    // Sandbox configuration
+    sandbox: {
+      provider: process.env.AGENTGATE_SANDBOX_PROVIDER,
+      image: process.env.AGENTGATE_SANDBOX_IMAGE,
+      networkMode: process.env.AGENTGATE_SANDBOX_NETWORK,
+      cpuLimit: process.env.AGENTGATE_SANDBOX_CPU_LIMIT,
+      memoryMB: process.env.AGENTGATE_SANDBOX_MEMORY_MB,
+      timeoutSeconds: process.env.AGENTGATE_SANDBOX_TIMEOUT,
+      autoCleanupMinutes: process.env.AGENTGATE_SANDBOX_AUTO_CLEANUP_MINUTES,
+    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -101,6 +136,8 @@ export function loadConfig(): AgentGateConfig {
       maxTreeSize: result.data.maxTreeSize,
       ciEnabled: result.data.ci.enabled,
       ciMaxIterations: result.data.ci.maxIterations,
+      sandboxProvider: result.data.sandbox.provider,
+      sandboxImage: result.data.sandbox.image,
     },
     'Configuration loaded'
   );
@@ -156,4 +193,12 @@ export function getConfigLimits(): {
 export function getCIConfig(): CIConfig {
   const config = getConfig();
   return config.ci;
+}
+
+/**
+ * Get sandbox configuration
+ */
+export function getSandboxConfig(): SandboxConfig {
+  const config = getConfig();
+  return config.sandbox;
 }

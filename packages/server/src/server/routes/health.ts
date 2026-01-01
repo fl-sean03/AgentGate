@@ -6,12 +6,19 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits, getCIConfig, type CIConfig } from '../../config/index.js';
+import {
+  getConfigLimits,
+  getCIConfig,
+  getSandboxConfig,
+  type CIConfig,
+  type SandboxConfig,
+} from '../../config/index.js';
+import { getSandboxManager, type SandboxSystemStatus } from '../../sandbox/index.js';
 
 /**
  * Package version - should match package.json
  */
-const VERSION = '0.2.12';
+const VERSION = '0.2.13';
 
 /**
  * Register health check routes
@@ -24,15 +31,46 @@ export function registerHealthRoutes(app: FastifyInstance): void {
   app.get('/health', async (request, reply) => {
     const limits = getConfigLimits();
     const ciConfig = getCIConfig();
-    const response: HealthStatus & { limits: typeof limits; config: { ci: CIConfig } } = {
+    const sandboxConfig = getSandboxConfig();
+
+    // Get sandbox status (lazy initialization)
+    let sandboxStatus: SandboxSystemStatus | null = null;
+    try {
+      const manager = getSandboxManager({
+        provider: sandboxConfig.provider,
+        defaultImage: sandboxConfig.image,
+        defaultResourceLimits: {
+          cpuCount: sandboxConfig.cpuLimit,
+          memoryMB: sandboxConfig.memoryMB,
+          timeoutSeconds: sandboxConfig.timeoutSeconds,
+        },
+        defaultNetworkMode: sandboxConfig.networkMode,
+        autoCleanupIntervalMs: sandboxConfig.autoCleanupMinutes * 60 * 1000,
+      });
+      sandboxStatus = await manager.getStatus();
+    } catch {
+      // Sandbox manager not available, continue without it
+    }
+
+    const response: HealthStatus & {
+      limits: typeof limits;
+      config: { ci: CIConfig; sandbox: SandboxConfig };
+      sandbox?: SandboxSystemStatus;
+    } = {
       status: 'ok',
       version: VERSION,
       timestamp: new Date().toISOString(),
       limits,
       config: {
         ci: ciConfig,
+        sandbox: sandboxConfig,
       },
     };
+
+    if (sandboxStatus) {
+      response.sandbox = sandboxStatus;
+    }
+
     return reply.send(createSuccessResponse(response, request.id));
   });
 

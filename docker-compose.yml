@@ -47,6 +47,14 @@ services:
       # Server config
       - NODE_ENV=production
 
+      # Sandbox configuration
+      - AGENTGATE_SANDBOX_PROVIDER=${AGENTGATE_SANDBOX_PROVIDER:-auto}
+      - AGENTGATE_SANDBOX_IMAGE=${AGENTGATE_SANDBOX_IMAGE:-agentgate/agent:latest}
+      - AGENTGATE_SANDBOX_NETWORK=${AGENTGATE_SANDBOX_NETWORK:-none}
+      - AGENTGATE_SANDBOX_CPU_LIMIT=${AGENTGATE_SANDBOX_CPU_LIMIT:-2}
+      - AGENTGATE_SANDBOX_MEMORY_MB=${AGENTGATE_SANDBOX_MEMORY_MB:-4096}
+      - AGENTGATE_SANDBOX_TIMEOUT=${AGENTGATE_SANDBOX_TIMEOUT:-3600}
+
     volumes:
       # Persistent data
       - agentgate-data:/data/agentgate
@@ -117,6 +125,19 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # AgentGate Agent Image Builder
+  # Build-only service for agent container image
+  # ---------------------------------------------------------------------------
+  agent-builder:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.agent
+    image: agentgate/agent:dev
+    # Not run directly - just for building the image
+    profiles:
+      - build
 
 # -----------------------------------------------------------------------------
 # Networks

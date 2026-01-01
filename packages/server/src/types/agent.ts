@@ -17,6 +17,23 @@ export interface AgentRequest {
   workOrderId?: string | null;
 }
 
+/**
+ * Information about sandbox execution.
+ */
+export interface SandboxInfo {
+  /** Provider used (docker, subprocess) */
+  provider: string;
+  /** Container ID if Docker was used */
+  containerId?: string;
+  /** Resource usage during execution */
+  resourceUsage?: {
+    cpuPercent: number;
+    memoryMB: number;
+  };
+  /** Sandbox execution duration in milliseconds */
+  durationMs: number;
+}
+
 // Agent Result
 export interface AgentResult {
   success: boolean;
@@ -27,6 +44,8 @@ export interface AgentResult {
   sessionId: string | null;
   tokensUsed: TokenUsage | null;
   durationMs: number;
+  /** Sandbox execution info (if sandbox was used) */
+  sandboxInfo?: SandboxInfo;
 }
 
 // Agent Structured Output

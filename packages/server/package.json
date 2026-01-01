@@ -27,6 +27,7 @@
   "dependencies": {
     "@agentgate/shared": "workspace:*",
     "@fastify/cors": "^11.2.0",
+    "dockerode": "^4.0.2",
     "@fastify/websocket": "^11.2.0",
     "@octokit/rest": "^22.0.1",
     "@openai/codex-sdk": "^0.77.0",
@@ -47,6 +48,7 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
+    "@types/dockerode": "^3.3.31",
     "@types/node": "^20.10.6",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.17.0",

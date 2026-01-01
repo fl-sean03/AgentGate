@@ -26,3 +26,25 @@ export {
 
 // Subprocess provider (fallback, no isolation)
 export { SubprocessProvider } from './subprocess-provider.js';
+
+// Docker provider (container isolation)
+export { DockerProvider } from './docker-provider.js';
+
+// Docker client utilities
+export {
+  DockerClient,
+  getDockerClient,
+  type ContainerCreateOptions,
+  type ContainerExecResult,
+  type ContainerStats,
+} from './docker-client.js';
+
+// Sandbox manager (handles provider selection and lifecycle)
+export {
+  SandboxManager,
+  getSandboxManager,
+  resetSandboxManager,
+  type SandboxSystemStatus,
+  type ProviderType,
+  type SandboxManagerConfig,
+} from './manager.js';
