@@ -6,12 +6,12 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits, getCIConfig, type CIConfig } from '../../config/index.js';
+import { getConfigLimits, getCIConfig, getSDKConfig, type CIConfig, type SDKConfig } from '../../config/index.js';
 
 /**
  * Package version - should match package.json
  */
-const VERSION = '0.2.12';
+const VERSION = '0.2.14';
 
 /**
  * Register health check routes
@@ -24,13 +24,25 @@ export function registerHealthRoutes(app: FastifyInstance): void {
   app.get('/health', async (request, reply) => {
     const limits = getConfigLimits();
     const ciConfig = getCIConfig();
-    const response: HealthStatus & { limits: typeof limits; config: { ci: CIConfig } } = {
+    const sdkConfig = getSDKConfig();
+    const response: HealthStatus & {
+      limits: typeof limits;
+      config: { ci: CIConfig; sdk: SDKConfig };
+      drivers: { sdk: { apiKeySet: boolean; sandboxEnabled: boolean } };
+    } = {
       status: 'ok',
       version: VERSION,
       timestamp: new Date().toISOString(),
       limits,
       config: {
         ci: ciConfig,
+        sdk: sdkConfig,
+      },
+      drivers: {
+        sdk: {
+          apiKeySet: !!process.env.ANTHROPIC_API_KEY,
+          sandboxEnabled: sdkConfig.enableSandbox,
+        },
       },
     };
     return reply.send(createSuccessResponse(response, request.id));

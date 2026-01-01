@@ -5,6 +5,7 @@
  * configurable constraints, tool restrictions, and output parsing.
  *
  * Available Drivers:
+ * - ClaudeAgentSDKDriver - Uses Claude Agent SDK with API key (direct API)
  * - ClaudeCodeDriver - Uses Claude Code CLI with API key
  * - ClaudeCodeSubscriptionDriver - Uses Claude Code CLI with Pro/Max subscription
  * - OpenAICodexDriver - Uses OpenAI Codex CLI
@@ -113,6 +114,62 @@ export {
   type OpenCodeResult,
 } from './opencode-driver.js';
 
+// Claude Agent SDK driver (direct API)
+export {
+  ClaudeAgentSDKDriver,
+  createClaudeAgentSDKDriver,
+  tryCreateSDKDriver,
+  SDK_DRIVER_CAPABILITIES,
+  type ClaudeAgentSDKDriverConfig,
+} from './claude-agent-sdk-driver.js';
+
+// SDK Message Parser
+export {
+  MessageCollector,
+  buildAgentResult,
+  buildSDKStructuredOutput,
+  isSystemMessage,
+  isAssistantMessage,
+  isToolUseMessage,
+  isToolResultMessage,
+  isResultMessage,
+  type SDKMessage,
+  type SDKSystemMessage,
+  type SDKAssistantMessage,
+  type SDKToolUseMessage,
+  type SDKToolResultMessage,
+  type SDKResultMessage,
+  type SDKStructuredOutput,
+  type ToolCallRecord,
+} from './sdk-message-parser.js';
+
+// SDK Options Builder
+export {
+  buildSDKOptions,
+  getRequiredConfig,
+  type SDKQueryOptions,
+  type SDKHooksConfig,
+  type HooksConfig,
+  type PreToolUseHook,
+  type PostToolUseHook,
+  type HookResult,
+  type HookFilter,
+} from './sdk-options-builder.js';
+
+// SDK Hooks
+export {
+  FileChangeTracker,
+  createToolLoggerHook,
+  createFileChangeTrackerHook,
+  createDangerousToolBlocker,
+  createPathRestrictionHook,
+  buildHooksConfig,
+  createGateIntegrationHooks,
+  mergeHooksConfig,
+  type FileChangeRecord,
+  type GateConfig,
+} from './sdk-hooks.js';
+
 // Subscription detection
 export {
   getCredentialsPath,
@@ -130,10 +187,15 @@ import { ClaudeCodeDriver } from './claude-code-driver.js';
 import { ClaudeCodeSubscriptionDriver } from './claude-code-subscription-driver.js';
 import { OpenAICodexDriver } from './openai-codex-driver.js';
 import { OpenCodeDriver } from './opencode-driver.js';
+import { ClaudeAgentSDKDriver } from './claude-agent-sdk-driver.js';
 import { register, setDefault } from './registry.js';
 
 // Auto-register all drivers
-// Claude Code API driver (uses ANTHROPIC_API_KEY for billing)
+// Claude Agent SDK driver (uses ANTHROPIC_API_KEY for billing via direct API)
+const sdkDriver = new ClaudeAgentSDKDriver();
+register(sdkDriver);
+
+// Claude Code API driver (uses ANTHROPIC_API_KEY for billing via CLI)
 const claudeCodeDriver = new ClaudeCodeDriver();
 register(claudeCodeDriver);
 
