@@ -182,6 +182,24 @@ export {
   getSubscriptionCredentials,
 } from './subscription-detector.js';
 
+// File watcher
+export {
+  FileWatcher,
+  createFileWatcher,
+  DEFAULT_IGNORE_PATTERNS,
+  type FileWatcherOptions,
+  type FileWatcherWithContext,
+} from './file-watcher.js';
+
+// Progress tracker
+export {
+  ProgressTracker,
+  createProgressTracker,
+  type ExecutionPhase,
+  type ProgressOptions,
+  type ProgressState,
+} from './progress-tracker.js';
+
 // Initialize and register drivers
 import { ClaudeCodeDriver } from './claude-code-driver.js';
 import { ClaudeCodeSubscriptionDriver } from './claude-code-subscription-driver.js';
