@@ -98,13 +98,17 @@ export async function listProfiles(): Promise<HarnessProfileInfo[]> {
 
       try {
         const content = await fs.readFile(profilePath, 'utf-8');
-        const parsed = YAML.parse(content);
+        const parsed = YAML.parse(content) as Record<string, unknown> | null;
+
+        // Extract metadata with type guards
+        const desc = parsed?.description;
+        const ext = parsed?.extends;
 
         profiles.push({
           name: profileName,
           path: profilePath,
-          description: typeof parsed?.description === 'string' ? parsed.description : null,
-          extends: typeof parsed?.extends === 'string' ? parsed.extends : null,
+          description: typeof desc === 'string' ? desc : null,
+          extends: typeof ext === 'string' ? ext : null,
         });
       } catch (err) {
         // Log but don't fail - include profile with minimal info
