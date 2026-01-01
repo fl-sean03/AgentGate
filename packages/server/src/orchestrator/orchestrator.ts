@@ -120,7 +120,7 @@ export class Orchestrator {
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
     const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
-    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, parseCIFailures } = await import('../workspace/github.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, convertDraftToReady, pollCIStatus, parseCIFailures } = await import('../workspace/github.js');
     const { captureBeforeState, captureAfterState } = await import(
       '../snapshot/snapshotter.js'
     );
@@ -487,6 +487,7 @@ ${workOrder.taskPrompt}
 ---
 *This PR was automatically created by AgentGate.*`;
 
+        // Create PR as draft initially - will be converted to ready after CI passes
         const pr = await createPullRequest(client, {
           owner,
           repo,
@@ -494,7 +495,7 @@ ${workOrder.taskPrompt}
           body: prBody,
           head: gitHubBranch,
           base: 'main',
-          draft: false,
+          draft: true,
         });
 
         return {
@@ -546,6 +547,17 @@ ${workOrder.taskPrompt}
             );
 
             if (ciStatus.allPassed) {
+              // Convert draft PR to ready for review now that CI has passed
+              if (run.gitHubPrNumber) {
+                try {
+                  log.info({ runId: run.id, prNumber: run.gitHubPrNumber }, 'Converting draft PR to ready for review');
+                  await convertDraftToReady(client, owner, repo, run.gitHubPrNumber);
+                  log.info({ runId: run.id, prNumber: run.gitHubPrNumber }, 'PR marked as ready for review');
+                } catch (error) {
+                  // Log but don't fail - PR is still valid even if we can't convert it
+                  log.warn({ runId: run.id, prNumber: run.gitHubPrNumber, error }, 'Failed to convert draft PR to ready');
+                }
+              }
               return { success: true };
             } else {
               // Generate feedback from CI failures
