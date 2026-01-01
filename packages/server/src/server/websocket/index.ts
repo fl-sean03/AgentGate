@@ -2,6 +2,17 @@
 export { EventBroadcaster } from './broadcaster.js';
 export { registerWebSocketRoutes } from './handler.js';
 export {
+  RateLimiter,
+  createRateLimiter,
+  type RateLimiterOptions,
+  type EventPriority,
+} from './rate-limiter.js';
+export {
+  EventBuffer,
+  createEventBuffer,
+  type EventBufferOptions,
+} from './event-buffer.js';
+export {
   // Client message types
   subscribeMessageSchema,
   unsubscribeMessageSchema,
