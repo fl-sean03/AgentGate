@@ -9,6 +9,11 @@ import { createLogger } from '../utils/index.js';
 import { buildClaudeCommand, buildCommandString } from './command-builder.js';
 import { CLAUDE_CODE_CAPABILITIES, DEFAULT_TIMEOUT_MS } from './defaults.js';
 import { extractSessionId, extractTokenUsage, parseOutput } from './output-parser.js';
+import {
+  StreamingExecutor,
+  type StreamingEventCallback,
+  type StreamingOptions,
+} from './streaming-executor.js';
 
 const logger = createLogger('agent:claude-code');
 
@@ -22,6 +27,20 @@ export interface ClaudeCodeDriverConfig {
   defaultTimeoutMs?: number;
   /** Additional environment variables */
   env?: Record<string, string>;
+}
+
+/**
+ * Options for execute method
+ */
+export interface ClaudeCodeExecuteOptions {
+  /** Callback for streaming events */
+  eventCallback?: StreamingEventCallback;
+  /** Streaming options */
+  streamingOptions?: StreamingOptions;
+  /** Work order ID for event tagging (required for streaming) */
+  workOrderId?: string;
+  /** Run ID for event tagging (required for streaming) */
+  runId?: string;
 }
 
 /**
@@ -75,8 +94,92 @@ export class ClaudeCodeDriver implements AgentDriver {
   /**
    * Executes an agent request using the Claude CLI
    * Uses child_process.spawn for reliable subprocess handling
+   *
+   * @param request - The agent request to execute
+   * @param options - Optional streaming options
    */
-  async execute(request: AgentRequest): Promise<AgentResult> {
+  async execute(
+    request: AgentRequest,
+    options?: ClaudeCodeExecuteOptions
+  ): Promise<AgentResult> {
+    // Use streaming executor if callback is provided
+    if (options?.eventCallback && options?.workOrderId && options?.runId) {
+      return this.executeWithStreaming(request, options);
+    }
+
+    return this.executeWithoutStreaming(request);
+  }
+
+  /**
+   * Execute with streaming support
+   */
+  private async executeWithStreaming(
+    request: AgentRequest,
+    options: ClaudeCodeExecuteOptions
+  ): Promise<AgentResult> {
+    const startTime = Date.now();
+    const args = buildClaudeCommand(request);
+    const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
+
+    logger.info(
+      {
+        workspace: request.workspacePath,
+        maxTurns: request.constraints.maxTurns,
+        hasSession: !!request.sessionId,
+        timeout,
+        streaming: true,
+      },
+      'Executing Claude Code request with streaming'
+    );
+
+    logger.debug({ command: buildCommandString(request) }, 'Full command');
+
+    const executor = new StreamingExecutor({
+      workOrderId: options.workOrderId!,
+      runId: options.runId!,
+      eventCallback: options.eventCallback,
+      options: options.streamingOptions,
+    });
+
+    const result = await executor.execute(this.config.binaryPath, args, {
+      cwd: request.workspacePath,
+      env: {
+        ...this.config.env,
+        NO_COLOR: '1',
+        FORCE_COLOR: '0',
+      },
+      timeout,
+    });
+
+    const durationMs = Date.now() - startTime;
+
+    logger.info(
+      {
+        exitCode: result.exitCode,
+        durationMs,
+        hasOutput: !!result.structuredOutput,
+        eventsEmitted: result.events.length,
+        cancelled: result.cancelled,
+      },
+      'Claude Code streaming execution completed'
+    );
+
+    return {
+      success: result.success,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      structuredOutput: result.structuredOutput,
+      sessionId: result.sessionId,
+      tokensUsed: result.tokensUsed,
+      durationMs,
+    };
+  }
+
+  /**
+   * Execute without streaming (original implementation)
+   */
+  private async executeWithoutStreaming(request: AgentRequest): Promise<AgentResult> {
     const startTime = Date.now();
     const args = buildClaudeCommand(request);
     const timeout = request.timeoutMs || this.config.defaultTimeoutMs;

@@ -21,6 +21,11 @@ import { buildClaudeCommand, buildCommandString } from './command-builder.js';
 import { DEFAULT_TIMEOUT_MS } from './defaults.js';
 import { extractSessionId, extractTokenUsage, parseOutput } from './output-parser.js';
 import { detectSubscription } from './subscription-detector.js';
+import {
+  StreamingExecutor,
+  type StreamingEventCallback,
+  type StreamingOptions,
+} from './streaming-executor.js';
 
 const logger = createLogger('agent:claude-code-subscription');
 
@@ -65,6 +70,20 @@ export interface ClaudeCodeSubscriptionDriverConfig {
   defaultTimeoutMs?: number;
   /** Additional environment variables to pass (API keys will still be excluded) */
   env?: Record<string, string>;
+}
+
+/**
+ * Options for execute method
+ */
+export interface ClaudeCodeSubscriptionExecuteOptions {
+  /** Callback for streaming events */
+  eventCallback?: StreamingEventCallback;
+  /** Streaming options */
+  streamingOptions?: StreamingOptions;
+  /** Work order ID for event tagging (required for streaming) */
+  workOrderId?: string;
+  /** Run ID for event tagging (required for streaming) */
+  runId?: string;
 }
 
 /**
@@ -177,8 +196,14 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
 
   /**
    * Execute agent request using subscription
+   *
+   * @param request - The agent request to execute
+   * @param options - Optional streaming options
    */
-  async execute(request: AgentRequest): Promise<AgentResult> {
+  async execute(
+    request: AgentRequest,
+    options?: ClaudeCodeSubscriptionExecuteOptions
+  ): Promise<AgentResult> {
     const startTime = Date.now();
 
     // Validate subscription before execution
@@ -202,6 +227,22 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
       };
     }
 
+    // Use streaming executor if callback is provided
+    if (options?.eventCallback && options?.workOrderId && options?.runId) {
+      return this.executeWithStreaming(request, options, startTime);
+    }
+
+    return this.executeWithoutStreaming(request, startTime);
+  }
+
+  /**
+   * Execute with streaming support
+   */
+  private async executeWithStreaming(
+    request: AgentRequest,
+    options: ClaudeCodeSubscriptionExecuteOptions,
+    startTime: number
+  ): Promise<AgentResult> {
     const args = buildClaudeCommand(request);
     const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
 
@@ -211,8 +252,83 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
         maxTurns: request.constraints.maxTurns,
         hasSession: !!request.sessionId,
         timeout,
-        subscriptionType: this.subscriptionStatus.subscriptionType,
-        rateLimitTier: this.subscriptionStatus.rateLimitTier,
+        subscriptionType: this.subscriptionStatus?.subscriptionType,
+        rateLimitTier: this.subscriptionStatus?.rateLimitTier,
+        billingMethod: 'subscription',
+        streaming: true,
+      },
+      'Executing Claude Code with subscription and streaming'
+    );
+
+    logger.debug({ command: buildCommandString(request) }, 'Full command');
+
+    // Create environment WITHOUT API keys
+    const env = this.createCleanEnvironment();
+
+    logger.debug(
+      {
+        excludedVars: EXCLUDED_ENV_VARS.filter(v => process.env[v] !== undefined),
+      },
+      'Excluded API key variables from environment'
+    );
+
+    const executor = new StreamingExecutor({
+      workOrderId: options.workOrderId!,
+      runId: options.runId!,
+      eventCallback: options.eventCallback,
+      options: options.streamingOptions,
+    });
+
+    const result = await executor.execute(this.config.binaryPath, args, {
+      cwd: request.workspacePath,
+      env,
+      timeout,
+    });
+
+    const durationMs = Date.now() - startTime;
+
+    logger.info(
+      {
+        exitCode: result.exitCode,
+        durationMs,
+        hasOutput: !!result.structuredOutput,
+        eventsEmitted: result.events.length,
+        cancelled: result.cancelled,
+        billingMethod: 'subscription',
+      },
+      'Claude Code streaming execution completed (subscription)'
+    );
+
+    return {
+      success: result.success,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      structuredOutput: result.structuredOutput,
+      sessionId: result.sessionId,
+      tokensUsed: result.tokensUsed,
+      durationMs,
+    };
+  }
+
+  /**
+   * Execute without streaming (original implementation)
+   */
+  private async executeWithoutStreaming(
+    request: AgentRequest,
+    startTime: number
+  ): Promise<AgentResult> {
+    const args = buildClaudeCommand(request);
+    const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
+
+    logger.info(
+      {
+        workspace: request.workspacePath,
+        maxTurns: request.constraints.maxTurns,
+        hasSession: !!request.sessionId,
+        timeout,
+        subscriptionType: this.subscriptionStatus?.subscriptionType,
+        rateLimitTier: this.subscriptionStatus?.rateLimitTier,
         billingMethod: 'subscription',
       },
       'Executing Claude Code with subscription'

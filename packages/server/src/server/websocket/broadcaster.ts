@@ -9,9 +9,35 @@ import type {
   RunIterationEvent,
   RunCompletedEvent,
   RunFailedEvent,
+  AgentToolCallEvent,
+  AgentToolResultEvent,
+  AgentOutputEvent,
+  FileChangedEvent,
+  ProgressUpdateEvent,
+  SubscriptionFilters,
+  AgentToolName,
+  FileChangeAction,
 } from './types.js';
 
 const logger = createLogger('websocket:broadcaster');
+
+/**
+ * Default subscription filters - all enabled
+ */
+const DEFAULT_FILTERS: SubscriptionFilters = {
+  includeToolCalls: true,
+  includeToolResults: true,
+  includeOutput: true,
+  includeFileChanges: true,
+  includeProgress: true,
+};
+
+/**
+ * Throttle configuration for high-frequency events
+ */
+interface ThrottleState {
+  lastEmitTime: Map<string, number>;
+}
 
 /**
  * EventBroadcaster manages WebSocket connections and broadcasts events
@@ -19,6 +45,12 @@ const logger = createLogger('websocket:broadcaster');
  */
 export class EventBroadcaster {
   private connections: Map<string, WebSocketConnection> = new Map();
+  private throttleState: ThrottleState = {
+    lastEmitTime: new Map(),
+  };
+
+  /** Debounce interval for output events in milliseconds */
+  private readonly outputDebounceMs = 100;
 
   /**
    * Add a new WebSocket connection
@@ -29,6 +61,7 @@ export class EventBroadcaster {
       id,
       socket,
       subscriptions: new Set(),
+      preferences: new Map(),
       connectedAt: new Date(),
     };
     this.connections.set(id, connection);
@@ -52,15 +85,27 @@ export class EventBroadcaster {
 
   /**
    * Subscribe a connection to a work order's updates
+   *
+   * @param connectionId - The connection ID
+   * @param workOrderId - The work order ID to subscribe to
+   * @param filters - Optional subscription filters (defaults to all enabled)
    */
-  subscribe(connectionId: string, workOrderId: string): boolean {
+  subscribe(
+    connectionId: string,
+    workOrderId: string,
+    filters?: SubscriptionFilters
+  ): boolean {
     const connection = this.connections.get(connectionId);
     if (!connection) {
       logger.warn({ connectionId }, 'Subscribe failed: connection not found');
       return false;
     }
     connection.subscriptions.add(workOrderId);
-    logger.debug({ connectionId, workOrderId }, 'Subscribed to work order');
+    connection.preferences.set(workOrderId, {
+      ...DEFAULT_FILTERS,
+      ...filters,
+    });
+    logger.debug({ connectionId, workOrderId, filters }, 'Subscribed to work order');
     return true;
   }
 
@@ -75,9 +120,21 @@ export class EventBroadcaster {
     }
     const removed = connection.subscriptions.delete(workOrderId);
     if (removed) {
+      connection.preferences.delete(workOrderId);
       logger.debug({ connectionId, workOrderId }, 'Unsubscribed from work order');
     }
     return removed;
+  }
+
+  /**
+   * Get subscription filters for a connection and work order
+   */
+  getFilters(connectionId: string, workOrderId: string): SubscriptionFilters {
+    const connection = this.connections.get(connectionId);
+    if (!connection) {
+      return DEFAULT_FILTERS;
+    }
+    return connection.preferences.get(workOrderId) ?? DEFAULT_FILTERS;
   }
 
   /**
@@ -299,5 +356,171 @@ export class EventBroadcaster {
       timestamp: new Date().toISOString(),
     };
     this.broadcast(event, workOrderId);
+  }
+
+  // ==========================================================================
+  // Agent Streaming Events (Thrust 4)
+  // ==========================================================================
+
+  /**
+   * Emit an agent tool call event to subscribers
+   * Respects per-connection subscription preferences
+   */
+  emitAgentToolCall(
+    workOrderId: string,
+    runId: string,
+    toolUseId: string,
+    tool: AgentToolName,
+    input: Record<string, unknown>
+  ): void {
+    const event: AgentToolCallEvent = {
+      type: 'agent_tool_call',
+      workOrderId,
+      runId,
+      toolUseId,
+      tool,
+      input,
+      timestamp: new Date().toISOString(),
+    };
+    this.broadcastWithFilter(event, workOrderId, 'includeToolCalls');
+  }
+
+  /**
+   * Emit an agent tool result event to subscribers
+   * Respects per-connection subscription preferences
+   */
+  emitAgentToolResult(
+    workOrderId: string,
+    runId: string,
+    toolUseId: string,
+    success: boolean,
+    contentPreview: string,
+    contentLength: number,
+    durationMs: number
+  ): void {
+    const event: AgentToolResultEvent = {
+      type: 'agent_tool_result',
+      workOrderId,
+      runId,
+      toolUseId,
+      success,
+      contentPreview,
+      contentLength,
+      durationMs,
+      timestamp: new Date().toISOString(),
+    };
+    this.broadcastWithFilter(event, workOrderId, 'includeToolResults');
+  }
+
+  /**
+   * Emit an agent output event to subscribers
+   * Respects per-connection subscription preferences
+   * Debounced to avoid flooding with rapid text output
+   */
+  emitAgentOutput(workOrderId: string, runId: string, content: string): void {
+    // Apply debouncing
+    const throttleKey = `output:${workOrderId}:${runId}`;
+    const now = Date.now();
+    const lastEmit = this.throttleState.lastEmitTime.get(throttleKey) ?? 0;
+
+    if (now - lastEmit < this.outputDebounceMs) {
+      // Skip this event due to throttling
+      return;
+    }
+
+    this.throttleState.lastEmitTime.set(throttleKey, now);
+
+    const event: AgentOutputEvent = {
+      type: 'agent_output',
+      workOrderId,
+      runId,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    this.broadcastWithFilter(event, workOrderId, 'includeOutput');
+  }
+
+  /**
+   * Emit a file changed event to subscribers
+   * Respects per-connection subscription preferences
+   */
+  emitFileChanged(
+    workOrderId: string,
+    runId: string,
+    path: string,
+    action: FileChangeAction,
+    sizeBytes?: number
+  ): void {
+    const event: FileChangedEvent = {
+      type: 'file_changed',
+      workOrderId,
+      runId,
+      path,
+      action,
+      ...(sizeBytes !== undefined && { sizeBytes }),
+      timestamp: new Date().toISOString(),
+    };
+    this.broadcastWithFilter(event, workOrderId, 'includeFileChanges');
+  }
+
+  /**
+   * Emit a progress update event to subscribers
+   * Respects per-connection subscription preferences
+   * Never throttled for error visibility
+   */
+  emitProgressUpdate(
+    workOrderId: string,
+    runId: string,
+    percentage: number,
+    currentPhase: string,
+    toolCallCount: number,
+    elapsedSeconds: number,
+    estimatedRemainingSeconds?: number
+  ): void {
+    const event: ProgressUpdateEvent = {
+      type: 'progress_update',
+      workOrderId,
+      runId,
+      percentage,
+      currentPhase,
+      toolCallCount,
+      elapsedSeconds,
+      ...(estimatedRemainingSeconds !== undefined && { estimatedRemainingSeconds }),
+      timestamp: new Date().toISOString(),
+    };
+    this.broadcastWithFilter(event, workOrderId, 'includeProgress');
+  }
+
+  /**
+   * Broadcast an event with filter checking
+   * Only sends to connections whose preferences allow this event type
+   */
+  private broadcastWithFilter(
+    event: ServerMessage,
+    workOrderId: string,
+    filterKey: keyof SubscriptionFilters
+  ): void {
+    const message = JSON.stringify(event);
+    let sentCount = 0;
+
+    for (const connection of this.connections.values()) {
+      if (!connection.subscriptions.has(workOrderId)) {
+        continue;
+      }
+
+      // Check subscription filter preferences
+      const filters = connection.preferences.get(workOrderId) ?? DEFAULT_FILTERS;
+      if (!filters[filterKey]) {
+        continue;
+      }
+
+      this.sendToConnection(connection, message);
+      sentCount++;
+    }
+
+    logger.debug(
+      { workOrderId, eventType: event.type, filterKey, sentCount },
+      'Broadcast with filter to subscribers'
+    );
   }
 }

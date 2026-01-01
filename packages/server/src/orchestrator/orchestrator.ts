@@ -13,11 +13,12 @@ import {
   WorkspaceTemplate,
 } from '../types/index.js';
 import { type SpawnLimits } from '../types/spawn.js';
-import { executeRun, type RunExecutorOptions } from './run-executor.js';
+import { executeRun, createStreamingCallback, type RunExecutorOptions } from './run-executor.js';
 import { loadRun, getRunStatus } from './run-store.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
 import { getConfig } from '../config/index.js';
+import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
 
 const log = createLogger('orchestrator');
 
@@ -46,6 +47,23 @@ export interface OrchestratorConfig {
    * Default: true
    */
   enableSpawning?: boolean;
+
+  /**
+   * Optional EventBroadcaster for streaming events.
+   * When provided, agent streaming events will be emitted to WebSocket clients.
+   */
+  broadcaster?: EventBroadcaster;
+}
+
+/**
+ * Internal configuration type with required fields
+ */
+interface InternalOrchestratorConfig {
+  maxConcurrentRuns: number;
+  defaultTimeoutSeconds: number;
+  spawnLimits: SpawnLimits;
+  enableSpawning: boolean;
+  broadcaster: EventBroadcaster | undefined;
 }
 
 /**
@@ -53,7 +71,7 @@ export interface OrchestratorConfig {
  * Manages work order execution and coordinates all modules.
  */
 export class Orchestrator {
-  private config: Required<OrchestratorConfig>;
+  private config: InternalOrchestratorConfig;
   private activeRuns: Map<string, Run> = new Map();
 
   constructor(config: OrchestratorConfig = {}) {
@@ -68,6 +86,7 @@ export class Orchestrator {
         maxTotalDescendants: globalConfig.maxTreeSize,
       },
       enableSpawning: config.enableSpawning ?? true,
+      broadcaster: config.broadcaster,
     };
 
     log.info(
@@ -75,9 +94,19 @@ export class Orchestrator {
         maxConcurrentRuns: this.config.maxConcurrentRuns,
         defaultTimeoutSeconds: this.config.defaultTimeoutSeconds,
         spawnLimits: this.config.spawnLimits,
+        streamingEnabled: !!this.config.broadcaster,
       },
       'Orchestrator initialized with configuration'
     );
+  }
+
+  /**
+   * Set the EventBroadcaster for streaming events.
+   * Can be called after construction to inject the broadcaster.
+   */
+  setBroadcaster(broadcaster: EventBroadcaster): void {
+    this.config.broadcaster = broadcaster;
+    log.info('EventBroadcaster set for streaming events');
   }
 
   /**
@@ -305,12 +334,16 @@ export class Orchestrator {
       log.info({ billingMethod: 'api' }, 'Using API-based billing');
     }
 
+    // Track current run ID for streaming callback
+    let currentRunId: string | null = null;
+
     // Set up run executor options
     const executorOptions: RunExecutorOptions = {
       workOrder,
       workspace,
       gatePlan,
       leaseId: lease.id, // Pass lease ID for periodic renewal (v0.2.10 - Thrust 12)
+      broadcaster: this.config.broadcaster, // Pass broadcaster for streaming events (v0.2.11 - Thrust 4)
 
       onCaptureBeforeState: async (ws) => {
         return captureBeforeState(ws);
@@ -341,7 +374,18 @@ export class Orchestrator {
             workOrderId: workOrder.id,
           };
 
-          const result = await driver.execute(request);
+          // Build streaming options if broadcaster is available
+          const streamingOptions = this.config.broadcaster && currentRunId ? {
+            eventCallback: createStreamingCallback(
+              this.config.broadcaster,
+              workOrder.id,
+              currentRunId
+            ),
+            workOrderId: workOrder.id,
+            runId: currentRunId,
+          } : undefined;
+
+          const result = await driver.execute(request, streamingOptions);
 
           const buildResult: { sessionId: string; success: boolean; error?: string } = {
             sessionId: result.sessionId ?? randomUUID(),
@@ -391,6 +435,8 @@ export class Orchestrator {
 
       onRunStarted: async (run) => {
         log.info({ runId: run.id, workOrderId: workOrder.id }, 'Run started, updating work order status to RUNNING');
+        // Store run ID for streaming callbacks (v0.2.11 - Thrust 4)
+        currentRunId = run.id;
         await workOrderService.markRunning(workOrder.id, run.id);
       },
 
@@ -614,7 +660,7 @@ ${workOrder.taskPrompt}
   /**
    * Get current configuration (for health endpoint)
    */
-  getConfiguration(): Required<OrchestratorConfig> {
+  getConfiguration(): InternalOrchestratorConfig {
     return { ...this.config };
   }
 

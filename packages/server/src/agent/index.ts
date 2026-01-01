@@ -85,7 +85,31 @@ export {
   ClaudeCodeDriver,
   createClaudeCodeDriver,
   type ClaudeCodeDriverConfig,
+  type ClaudeCodeExecuteOptions,
 } from './claude-code-driver.js';
+
+// Streaming executor
+export {
+  StreamingExecutor,
+  createStreamingExecutor,
+  type StreamingExecutorConfig,
+  type StreamingOptions,
+  type StreamingEventCallback,
+  type ExecuteOptions,
+  type ExecutionResult,
+} from './streaming-executor.js';
+
+// Stream parser
+export {
+  StreamParser,
+  type ParsedEvent,
+  type ParserOptions,
+  type ClaudeMessage,
+  type ClaudeSystemMessage,
+  type ClaudeAssistantTextMessage,
+  type ClaudeAssistantToolUseMessage,
+  type ClaudeToolResultMessage,
+} from './stream-parser.js';
 
 // Claude Code Subscription driver (uses Pro/Max subscription)
 export {
@@ -94,6 +118,7 @@ export {
   tryCreateSubscriptionDriver,
   SUBSCRIPTION_CAPABILITIES,
   type ClaudeCodeSubscriptionDriverConfig,
+  type ClaudeCodeSubscriptionExecuteOptions,
   type SubscriptionCapabilities,
 } from './claude-code-subscription-driver.js';
 

@@ -282,12 +282,22 @@ export type ServerMessage =
 // =============================================================================
 
 /**
+ * Per-workorder subscription preferences
+ */
+export interface WorkOrderSubscriptionPreferences {
+  workOrderId: string;
+  filters: SubscriptionFilters;
+}
+
+/**
  * WebSocket connection with metadata
  */
 export interface WebSocketConnection {
   id: string;
   socket: WebSocket;
   subscriptions: Set<string>;
+  /** Per-workorder subscription preferences */
+  preferences: Map<string, SubscriptionFilters>;
   connectedAt: Date;
   lastPingAt?: Date;
 }

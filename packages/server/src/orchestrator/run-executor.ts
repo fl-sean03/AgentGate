@@ -25,6 +25,8 @@ import {
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun } from './run-store.js';
 import { createLogger } from '../utils/logger.js';
+import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
+import type { StreamingEventCallback } from '../agent/streaming-executor.js';
 
 const log = createLogger('run-executor');
 
@@ -109,6 +111,57 @@ export interface RunExecutorOptions {
     prUrl: string,
     branchRef: string
   ) => Promise<{ success: boolean; feedback?: string }>;
+
+  // Streaming event support (v0.2.11 - Thrust 4)
+  broadcaster?: EventBroadcaster | undefined;
+}
+
+/**
+ * Create a streaming event callback that emits to the broadcaster
+ */
+export function createStreamingCallback(
+  broadcaster: EventBroadcaster,
+  workOrderId: string,
+  runId: string
+): StreamingEventCallback {
+  return (event) => {
+    switch (event.type) {
+      case 'agent_tool_call':
+        broadcaster.emitAgentToolCall(
+          workOrderId,
+          runId,
+          event.toolUseId,
+          event.tool,
+          event.input
+        );
+        break;
+      case 'agent_tool_result':
+        broadcaster.emitAgentToolResult(
+          workOrderId,
+          runId,
+          event.toolUseId,
+          event.success,
+          event.contentPreview,
+          event.contentLength,
+          event.durationMs
+        );
+        break;
+      case 'agent_output':
+        broadcaster.emitAgentOutput(workOrderId, runId, event.content);
+        break;
+      case 'progress_update':
+        broadcaster.emitProgressUpdate(
+          workOrderId,
+          runId,
+          event.percentage,
+          event.currentPhase,
+          event.toolCallCount,
+          event.elapsedSeconds,
+          event.estimatedRemainingSeconds
+        );
+        break;
+    }
+  };
 }
 
 /**
