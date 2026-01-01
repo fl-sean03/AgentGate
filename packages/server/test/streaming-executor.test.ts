@@ -327,7 +327,9 @@ describe('StreamingExecutor', () => {
       expect(result.stdout).toContain('test_value');
     });
 
-    it('should use working directory', async () => {
+    // Skip on Windows: 8.3 short paths (RUNNER~1) vs long paths (runneradmin)
+    // are equivalent but fs.realpath doesn't normalize them the same way
+    it.skipIf(process.platform === 'win32')('should use working directory', async () => {
       vi.useRealTimers();
 
       const executor = new StreamingExecutor({
@@ -339,7 +341,7 @@ describe('StreamingExecutor', () => {
       const os = await import('node:os');
       const tmpDir = os.tmpdir();
 
-      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+      // Use Node.js to print realpath of cwd (handles symlinks on macOS)
       const result = await executor.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))'], {
         cwd: tmpDir,
       });

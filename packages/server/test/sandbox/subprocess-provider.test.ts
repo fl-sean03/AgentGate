@@ -120,8 +120,10 @@ describe('SubprocessProvider', () => {
       expect(result.stdout.trim()).toBe('test output');
     });
 
-    it('should use workspace as cwd', async () => {
-      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+    // Skip on Windows: 8.3 short paths (RUNNER~1) vs long paths (runneradmin)
+    // are equivalent but fs.realpath doesn't normalize them the same way
+    it.skipIf(process.platform === 'win32')('should use workspace as cwd', async () => {
+      // Use Node.js to print realpath of cwd (handles symlinks on macOS)
       const result = await sandbox!.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))']);
 
       expect(result.exitCode).toBe(0);
@@ -130,12 +132,14 @@ describe('SubprocessProvider', () => {
       expect(result.stdout.trim()).toBe(expectedPath);
     });
 
-    it('should use custom cwd within workspace', async () => {
+    // Skip on Windows: 8.3 short paths (RUNNER~1) vs long paths (runneradmin)
+    // are equivalent but fs.realpath doesn't normalize them the same way
+    it.skipIf(process.platform === 'win32')('should use custom cwd within workspace', async () => {
       const subdir = 'subdir';
       const subdirPath = path.join(tempDir, subdir);
       await fs.mkdir(subdirPath);
 
-      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+      // Use Node.js to print realpath of cwd (handles symlinks on macOS)
       const result = await sandbox!.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))'], {
         cwd: subdir,
       });
