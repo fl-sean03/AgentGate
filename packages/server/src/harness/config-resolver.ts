@@ -166,7 +166,7 @@ export async function resolveInheritance(
 
   // Get current profile name for cycle detection
   const currentName = config.metadata?.name as string | undefined;
-  const profileId = currentName || `anonymous-${chain.length}`;
+  const profileId = currentName ?? `anonymous-${chain.length}`;
 
   // Check for circular inheritance
   if (chain.includes(profileId)) {
@@ -373,8 +373,8 @@ export function applyDefaults(config: HarnessConfig): ResolvedHarnessConfig {
   // Build resolved config with all defaults
   const resolved: ResolvedHarnessConfig = {
     version: '1.0',
-    loopStrategy: validated.loopStrategy || DEFAULT_LOOP_STRATEGY,
-    agentDriver: validated.agentDriver || DEFAULT_AGENT_DRIVER,
+    loopStrategy: validated.loopStrategy ?? DEFAULT_LOOP_STRATEGY,
+    agentDriver: validated.agentDriver ?? DEFAULT_AGENT_DRIVER,
     verification: {
       ...DEFAULT_VERIFICATION,
       ...validated.verification,
@@ -387,7 +387,7 @@ export function applyDefaults(config: HarnessConfig): ResolvedHarnessConfig {
       ...DEFAULT_EXECUTION_LIMITS,
       ...validated.executionLimits,
     },
-    metadata: validated.metadata || {},
+    metadata: validated.metadata ?? {},
   };
 
   return resolved;
@@ -401,13 +401,14 @@ export function applyDefaults(config: HarnessConfig): ResolvedHarnessConfig {
  */
 export function computeConfigHash(config: ResolvedHarnessConfig): string {
   // Sort keys recursively for deterministic serialization
-  const sortedJson = JSON.stringify(config, (_, value) => {
+  const sortedJson = JSON.stringify(config, (_, value: unknown) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return Object.keys(value)
+      const obj = value as Record<string, unknown>;
+      return Object.keys(obj)
         .sort()
         .reduce(
           (acc, key) => {
-            acc[key] = value[key];
+            acc[key] = obj[key];
             return acc;
           },
           {} as Record<string, unknown>

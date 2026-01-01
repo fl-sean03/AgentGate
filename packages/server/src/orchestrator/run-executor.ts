@@ -20,7 +20,7 @@ import {
   RunState,
 } from '../types/index.js';
 import type { ResolvedHarnessConfig } from '../types/harness-config.js';
-import type { LoopStrategy, LoopContext, LoopState, LoopDecision, LoopProgress, LoopDetectionData } from '../types/loop-strategy.js';
+import type { LoopStrategy, LoopContext, LoopState, LoopDecision } from '../types/loop-strategy.js';
 import {
   applyTransition,
   isTerminalState,
@@ -291,7 +291,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   }
 
   // Initialize loop state and strategy (v0.2.16 - Thrust 9)
-  let loopState = createInitialLoopState(run.maxIterations);
+  const loopState = createInitialLoopState(run.maxIterations);
   const previousSnapshots: Snapshot[] = [];
   const previousVerifications: VerificationReport[] = [];
 
