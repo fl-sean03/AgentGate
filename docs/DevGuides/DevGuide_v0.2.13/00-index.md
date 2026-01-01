@@ -120,6 +120,21 @@ This DevGuide implements Levels 0 and 1. Future DevGuides can add Levels 2-3.
 
 ---
 
+## Thrust Status
+
+| # | Thrust | Status | Notes |
+|---|--------|--------|-------|
+| 1 | Sandbox Provider Interface | ✅ Complete | PR #38 - `types.ts`, `provider.ts` |
+| 2 | Subprocess Provider | ✅ Complete | PR #38 - `subprocess-provider.ts` |
+| 3 | Docker Provider | ⬜ Not Started | - |
+| 4 | Sandbox Manager | ⬜ Not Started | - |
+| 5 | Driver Integration | ⬜ Not Started | - |
+| 6 | Container Image | ⬜ Not Started | - |
+| 7 | Configuration & Dashboard | ⬜ Not Started | - |
+| 8 | Testing & Validation | ⬜ Not Started | - |
+
+---
+
 ## File Map
 
 ### New Files
