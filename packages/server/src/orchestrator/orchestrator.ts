@@ -377,7 +377,7 @@ export class Orchestrator {
           iteration,
           cleanRoom: false, // TODO: Make configurable
           timeoutMs: 5 * 60 * 1000, // 5 minute timeout per verification
-          skip: workOrder.skipVerification || [], // v0.2.15: Allow skipping verification levels
+          skip: workOrder.skipVerification ?? [], // v0.2.15: Allow skipping verification levels
         });
         return report;
       },
