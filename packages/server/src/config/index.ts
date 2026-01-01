@@ -11,6 +11,26 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('config');
 
 /**
+ * CI configuration schema
+ */
+const ciConfigSchema = z.object({
+  /** Enable CI monitoring */
+  enabled: z.coerce.boolean().default(true),
+  /** Polling interval in milliseconds (5s - 5min) */
+  pollIntervalMs: z.coerce.number().int().min(5000).max(300000).default(30000),
+  /** Maximum wait time in milliseconds (1min - 2hours) */
+  timeoutMs: z.coerce.number().int().min(60000).max(7200000).default(1800000),
+  /** Maximum CI remediation attempts (1-10) */
+  maxIterations: z.coerce.number().int().min(1).max(10).default(3),
+  /** Skip CI check if no workflows are configured */
+  skipIfNoWorkflows: z.coerce.boolean().default(true),
+  /** Number of CI logs to retain per run */
+  logRetentionCount: z.coerce.number().int().min(1).max(20).default(5),
+});
+
+export type CIConfig = z.infer<typeof ciConfigSchema>;
+
+/**
  * Configuration schema with validation
  */
 const configSchema = z.object({
@@ -33,6 +53,9 @@ const configSchema = z.object({
   // Server
   port: z.coerce.number().int().min(1).max(65535).default(3001),
   host: z.string().default('0.0.0.0'),
+
+  // CI configuration
+  ci: ciConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -52,6 +75,15 @@ export function loadConfig(): AgentGateConfig {
     dataDir: process.env.AGENTGATE_DATA_DIR,
     port: process.env.AGENTGATE_PORT,
     host: process.env.AGENTGATE_HOST,
+    // CI configuration
+    ci: {
+      enabled: process.env.AGENTGATE_CI_ENABLED,
+      pollIntervalMs: process.env.AGENTGATE_CI_POLL_INTERVAL_MS,
+      timeoutMs: process.env.AGENTGATE_CI_TIMEOUT_MS,
+      maxIterations: process.env.AGENTGATE_CI_MAX_ITERATIONS,
+      skipIfNoWorkflows: process.env.AGENTGATE_CI_SKIP_IF_NO_WORKFLOWS,
+      logRetentionCount: process.env.AGENTGATE_CI_LOG_RETENTION_COUNT,
+    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -67,6 +99,8 @@ export function loadConfig(): AgentGateConfig {
       maxSpawnDepth: result.data.maxSpawnDepth,
       maxChildrenPerParent: result.data.maxChildrenPerParent,
       maxTreeSize: result.data.maxTreeSize,
+      ciEnabled: result.data.ci.enabled,
+      ciMaxIterations: result.data.ci.maxIterations,
     },
     'Configuration loaded'
   );
@@ -114,4 +148,12 @@ export function getConfigLimits(): {
     maxTreeSize: config.maxTreeSize,
     defaultTimeoutSeconds: config.defaultTimeoutSeconds,
   };
+}
+
+/**
+ * Get CI configuration for health endpoint
+ */
+export function getCIConfig(): CIConfig {
+  const config = getConfig();
+  return config.ci;
 }

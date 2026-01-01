@@ -39,6 +39,7 @@ export {
   type Run,
   type IterationData,
   type RunStatus,
+  type CIStatus,
 } from './run.js';
 
 // Snapshot Types

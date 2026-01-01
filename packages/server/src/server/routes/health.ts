@@ -6,12 +6,12 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits } from '../../config/index.js';
+import { getConfigLimits, getCIConfig, type CIConfig } from '../../config/index.js';
 
 /**
  * Package version - should match package.json
  */
-const VERSION = '0.2.6';
+const VERSION = '0.2.12';
 
 /**
  * Register health check routes
@@ -23,11 +23,15 @@ export function registerHealthRoutes(app: FastifyInstance): void {
    */
   app.get('/health', async (request, reply) => {
     const limits = getConfigLimits();
-    const response: HealthStatus & { limits: typeof limits } = {
+    const ciConfig = getCIConfig();
+    const response: HealthStatus & { limits: typeof limits; config: { ci: CIConfig } } = {
       status: 'ok',
       version: VERSION,
       timestamp: new Date().toISOString(),
       limits,
+      config: {
+        ci: ciConfig,
+      },
     };
     return reply.send(createSuccessResponse(response, request.id));
   });
