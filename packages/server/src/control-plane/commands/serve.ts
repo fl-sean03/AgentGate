@@ -9,6 +9,7 @@ import {
   bold,
   cyan,
 } from '../formatter.js';
+import { getConfig } from '../../config/index.js';
 
 /**
  * Schema for serve command options
@@ -70,12 +71,23 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     ? options.corsOrigin.split(',').map((o) => o.trim())
     : ['*'];
 
+  // Load configuration
+  const config = getConfig();
+
   print(`Starting AgentGate server...`);
   print('');
-  print(`${bold('Port:')} ${cyan(String(options.port))}`);
-  print(`${bold('Host:')} ${cyan(options.host)}`);
-  print(`${bold('CORS Origins:')} ${cyan(corsOrigins.join(', '))}`);
-  print(`${bold('API Key:')} ${cyan(options.apiKey ? '(configured)' : '(none - auth disabled)')}`);
+  print(`${bold('Server Configuration:')}`);
+  print(`  ${bold('Port:')} ${cyan(String(options.port))}`);
+  print(`  ${bold('Host:')} ${cyan(options.host)}`);
+  print(`  ${bold('CORS Origins:')} ${cyan(corsOrigins.join(', '))}`);
+  print(`  ${bold('API Key:')} ${cyan(options.apiKey ? '(configured)' : '(none - auth disabled)')}`);
+  print('');
+  print(`${bold('Limits Configuration:')}`);
+  print(`  ${bold('Max Concurrent Runs:')} ${cyan(String(config.maxConcurrentRuns))}`);
+  print(`  ${bold('Max Spawn Depth:')} ${cyan(String(config.maxSpawnDepth))}`);
+  print(`  ${bold('Max Children/Parent:')} ${cyan(String(config.maxChildrenPerParent))}`);
+  print(`  ${bold('Max Tree Size:')} ${cyan(String(config.maxTreeSize))}`);
+  print(`  ${bold('Default Timeout:')} ${cyan(String(config.defaultTimeoutSeconds) + 's')}`);
   print('');
 
   // Start the server - only include apiKey if it's set

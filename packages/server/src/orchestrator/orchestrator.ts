@@ -17,6 +17,7 @@ import { executeRun, type RunExecutorOptions } from './run-executor.js';
 import { loadRun, getRunStatus } from './run-store.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
+import { getConfig } from '../config/index.js';
 
 const log = createLogger('orchestrator');
 
@@ -56,16 +57,27 @@ export class Orchestrator {
   private activeRuns: Map<string, Run> = new Map();
 
   constructor(config: OrchestratorConfig = {}) {
+    const globalConfig = getConfig();
+
     this.config = {
-      maxConcurrentRuns: config.maxConcurrentRuns ?? 5,
-      defaultTimeoutSeconds: config.defaultTimeoutSeconds ?? 3600,
+      maxConcurrentRuns: config.maxConcurrentRuns ?? globalConfig.maxConcurrentRuns,
+      defaultTimeoutSeconds: config.defaultTimeoutSeconds ?? globalConfig.defaultTimeoutSeconds,
       spawnLimits: config.spawnLimits ?? {
-        maxDepth: 3,
-        maxChildren: 10,
-        maxTotalDescendants: 100,
+        maxDepth: globalConfig.maxSpawnDepth,
+        maxChildren: globalConfig.maxChildrenPerParent,
+        maxTotalDescendants: globalConfig.maxTreeSize,
       },
       enableSpawning: config.enableSpawning ?? true,
     };
+
+    log.info(
+      {
+        maxConcurrentRuns: this.config.maxConcurrentRuns,
+        defaultTimeoutSeconds: this.config.defaultTimeoutSeconds,
+        spawnLimits: this.config.spawnLimits,
+      },
+      'Orchestrator initialized with configuration'
+    );
   }
 
   /**
@@ -597,6 +609,23 @@ ${workOrder.taskPrompt}
    */
   getActiveRunCount(): number {
     return this.activeRuns.size;
+  }
+
+  /**
+   * Get current configuration (for health endpoint)
+   */
+  getConfiguration(): Required<OrchestratorConfig> {
+    return { ...this.config };
+  }
+
+  /**
+   * Get current stats (for health endpoint)
+   */
+  getStats(): { activeRuns: number; maxConcurrentRuns: number } {
+    return {
+      activeRuns: this.activeRuns.size,
+      maxConcurrentRuns: this.config.maxConcurrentRuns,
+    };
   }
 }
 
