@@ -58,6 +58,9 @@ export interface RunWarning {
   timestamp: Date;
 }
 
+// CI Status (v0.2.12 - Thrust 5)
+export type CIStatus = 'pending' | 'polling' | 'passed' | 'failed' | 'timeout' | null;
+
 // Run
 export interface Run {
   id: string;
@@ -80,6 +83,14 @@ export interface Run {
   gitHubPrNumber: number | null;
   // Warnings for non-fatal issues (v0.2.10 - Thrust 13)
   warnings: RunWarning[];
+  // CI integration (v0.2.12 - Thrust 5)
+  ciEnabled: boolean;
+  ciIterationCount: number;
+  maxCiIterations: number;
+  ciStatus: CIStatus;
+  ciPollingStartedAt: Date | null;
+  ciCompletedAt: Date | null;
+  ciWorkflowUrl: string | null;
 }
 
 // Iteration Data

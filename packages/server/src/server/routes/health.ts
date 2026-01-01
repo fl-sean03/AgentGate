@@ -6,12 +6,42 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits } from '../../config/index.js';
+import { getConfigLimits, getCIConfig, type CIConfig } from '../../config/index.js';
 
 /**
  * Package version - should match package.json
  */
-const VERSION = '0.2.6';
+const VERSION = '0.2.12';
+
+/**
+ * Active CI polling tracker (v0.2.12 - Thrust 6)
+ * Used to track which work orders are actively polling CI
+ */
+const activeCIPolling = new Set<string>();
+
+/**
+ * Register a work order as actively polling CI
+ */
+export function registerCIPolling(workOrderId: string): void {
+  activeCIPolling.add(workOrderId);
+}
+
+/**
+ * Unregister a work order from CI polling
+ */
+export function unregisterCIPolling(workOrderId: string): void {
+  activeCIPolling.delete(workOrderId);
+}
+
+/**
+ * Get active CI polling info
+ */
+export function getActiveCIPolling(): { count: number; workOrders: string[] } {
+  return {
+    count: activeCIPolling.size,
+    workOrders: Array.from(activeCIPolling),
+  };
+}
 
 /**
  * Register health check routes
@@ -23,11 +53,22 @@ export function registerHealthRoutes(app: FastifyInstance): void {
    */
   app.get('/health', async (request, reply) => {
     const limits = getConfigLimits();
-    const response: HealthStatus & { limits: typeof limits } = {
+    const ciConfig = getCIConfig();
+    const activePolling = getActiveCIPolling();
+
+    const response: HealthStatus & {
+      limits: typeof limits;
+      config: { ci: CIConfig };
+      activePolling: typeof activePolling;
+    } = {
       status: 'ok',
       version: VERSION,
       timestamp: new Date().toISOString(),
       limits,
+      config: {
+        ci: ciConfig,
+      },
+      activePolling,
     };
     return reply.send(createSuccessResponse(response, request.id));
   });
