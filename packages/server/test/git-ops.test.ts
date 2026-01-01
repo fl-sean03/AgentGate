@@ -327,11 +327,12 @@ describe('Git Operations', () => {
     });
 
     it('should delete a local branch', async () => {
+      // Save initial branch name before switching
+      const initialBranch = await getCurrentBranch(testDir);
+
       await createBranch(testDir, 'to-delete');
 
-      // Switch back to main
-      const mainBranch = await getCurrentBranch(testDir);
-      const initialBranch = mainBranch === 'to-delete' ? 'main' : 'master';
+      // Switch back to initial branch
       await checkout(testDir, initialBranch);
 
       // Delete branch

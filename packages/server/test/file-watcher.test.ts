@@ -58,7 +58,7 @@ describe('FileWatcher', () => {
 
   describe('start/stop', () => {
     it('should start and stop watching', () => {
-      watcher = new FileWatcher(tempDir);
+      watcher = new FileWatcher(tempDir, { recursive: false });
 
       expect(watcher.isRunning()).toBe(false);
 
@@ -70,7 +70,7 @@ describe('FileWatcher', () => {
     });
 
     it('should handle multiple start calls', () => {
-      watcher = new FileWatcher(tempDir);
+      watcher = new FileWatcher(tempDir, { recursive: false });
 
       watcher.start();
       watcher.start(); // Should log warning but not throw
