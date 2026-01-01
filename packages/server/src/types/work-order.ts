@@ -143,6 +143,8 @@ export interface WorkOrder {
   waitForCI?: boolean;
   // Skip verification levels (v0.2.15)
   skipVerification?: VerificationLevel[];
+  // Harness profile (v0.2.16 - Thrust 9)
+  harnessProfile?: string;
 }
 
 // Submit Request Schema
@@ -163,6 +165,8 @@ export const submitRequestSchema = z.object({
   waitForCI: z.boolean().default(false),
   // Skip verification levels (v0.2.15)
   skipVerification: z.array(z.nativeEnum(VerificationLevel)).optional(),
+  // Harness profile (v0.2.16 - Thrust 9)
+  harnessProfile: z.string().optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

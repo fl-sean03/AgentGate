@@ -12,6 +12,8 @@ import {
   type AgentRequest,
   WorkspaceTemplate,
 } from '../types/index.js';
+import type { HarnessConfig, ResolvedHarnessConfig } from '../types/harness-config.js';
+import type { LoopStrategy } from '../types/loop-strategy.js';
 import { type SpawnLimits } from '../types/spawn.js';
 import { executeRun, type RunExecutorOptions } from './run-executor.js';
 import { loadRun, getRunStatus } from './run-store.js';
@@ -46,6 +48,24 @@ export interface OrchestratorConfig {
    * Default: true
    */
   enableSpawning?: boolean;
+
+  /**
+   * Default harness configuration.
+   * Used when work order doesn't specify a profile.
+   * (v0.2.16 - Thrust 9)
+   */
+  defaultHarnessConfig?: Partial<HarnessConfig>;
+}
+
+/**
+ * Internal orchestrator config with resolved defaults.
+ */
+interface InternalOrchestratorConfig {
+  maxConcurrentRuns: number;
+  defaultTimeoutSeconds: number;
+  spawnLimits: SpawnLimits;
+  enableSpawning: boolean;
+  defaultHarnessConfig: Partial<HarnessConfig> | null;
 }
 
 /**
@@ -53,7 +73,7 @@ export interface OrchestratorConfig {
  * Manages work order execution and coordinates all modules.
  */
 export class Orchestrator {
-  private config: Required<OrchestratorConfig>;
+  private config: InternalOrchestratorConfig;
   private activeRuns: Map<string, Run> = new Map();
 
   constructor(config: OrchestratorConfig = {}) {
@@ -68,6 +88,7 @@ export class Orchestrator {
         maxTotalDescendants: globalConfig.maxTreeSize,
       },
       enableSpawning: config.enableSpawning ?? true,
+      defaultHarnessConfig: config.defaultHarnessConfig ?? null,
     };
 
     log.info(
@@ -75,6 +96,7 @@ export class Orchestrator {
         maxConcurrentRuns: this.config.maxConcurrentRuns,
         defaultTimeoutSeconds: this.config.defaultTimeoutSeconds,
         spawnLimits: this.config.spawnLimits,
+        hasDefaultHarnessConfig: !!this.config.defaultHarnessConfig,
       },
       'Orchestrator initialized with configuration'
     );
@@ -278,6 +300,66 @@ export class Orchestrator {
       throw error;
     }
 
+    // Resolve harness configuration and create loop strategy (v0.2.16 - Thrust 9)
+    let harnessConfig: ResolvedHarnessConfig;
+    let loopStrategy: LoopStrategy;
+    try {
+      const { resolveHarnessConfig, createDefaultConfig } = await import('../harness/config-resolver.js');
+      const { createStrategy } = await import('../harness/strategy-registry.js');
+
+      // Build CLI overrides from work order options
+      const cliOverrides: Partial<HarnessConfig> = {};
+      if (workOrder.maxIterations) {
+        cliOverrides.loopStrategy = {
+          mode: 'fixed' as const,
+          maxIterations: workOrder.maxIterations,
+          completionDetection: ['verification_pass'],
+        };
+      }
+
+      // Resolve harness config using:
+      // 1. Profile name from work order (if any)
+      // 2. Default harness config from orchestrator
+      // 3. CLI overrides from work order
+      const hasProfile = workOrder.harnessProfile != null;
+      const hasDefaultConfig = this.config.defaultHarnessConfig != null;
+      const hasOverrides = Object.keys(cliOverrides).length > 0;
+      if (hasProfile || hasDefaultConfig || hasOverrides) {
+        const resolveOptions: {
+          profileName?: string;
+          cliOverrides?: Partial<HarnessConfig>;
+        } = {
+          cliOverrides: {
+            ...(this.config.defaultHarnessConfig ?? {}),
+            ...cliOverrides,
+          },
+        };
+        if (workOrder.harnessProfile) {
+          resolveOptions.profileName = workOrder.harnessProfile;
+        }
+        harnessConfig = await resolveHarnessConfig(resolveOptions);
+      } else {
+        // No profile or overrides - use defaults
+        harnessConfig = createDefaultConfig();
+      }
+
+      // Create loop strategy from config
+      loopStrategy = await createStrategy(harnessConfig.loopStrategy);
+
+      log.info(
+        {
+          strategyMode: loopStrategy.mode,
+          strategyName: loopStrategy.name,
+          hasProfile: !!workOrder.harnessProfile,
+        },
+        'Harness configuration resolved and loop strategy created'
+      );
+    } catch (error) {
+      log.error({ error, workOrderId: workOrder.id }, 'Failed to resolve harness configuration');
+      await release(workspace.id);
+      throw error;
+    }
+
     // Create agent driver based on agent type
     let driver: InstanceType<typeof ClaudeCodeDriver> | InstanceType<typeof ClaudeCodeSubscriptionDriver>;
     if (workOrder.agentType === AgentType.CLAUDE_CODE_SUBSCRIPTION) {
@@ -310,6 +392,8 @@ export class Orchestrator {
       workOrder,
       workspace,
       gatePlan,
+      harnessConfig, // v0.2.16 - Thrust 9
+      loopStrategy,  // v0.2.16 - Thrust 9
       leaseId: lease.id, // Pass lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
       onCaptureBeforeState: async (ws) => {
@@ -627,7 +711,7 @@ ${workOrder.taskPrompt}
   /**
    * Get current configuration (for health endpoint)
    */
-  getConfiguration(): Required<OrchestratorConfig> {
+  getConfiguration(): InternalOrchestratorConfig {
     return { ...this.config };
   }
 
