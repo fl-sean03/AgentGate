@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@agentgate/shared": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.x",
     "@fastify/cors": "^11.2.0",
     "@fastify/websocket": "^11.2.0",
     "@octokit/rest": "^22.0.1",
