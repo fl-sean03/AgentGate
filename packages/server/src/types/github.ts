@@ -91,6 +91,8 @@ export const gitHubPullRequestSchema = z.object({
   head: z.string(),
   /** Target branch */
   base: z.string(),
+  /** Whether the PR is a draft */
+  draft: z.boolean().default(false),
 });
 
 export type GitHubPullRequest = z.infer<typeof gitHubPullRequestSchema>;

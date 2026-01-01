@@ -308,6 +308,7 @@ export async function createPullRequest(
       state: data.state as 'open' | 'closed' | 'merged',
       head: data.head.ref,
       base: data.base.ref,
+      draft: data.draft ?? false,
     };
   } catch (error) {
     if (error instanceof Error && 'status' in error) {
@@ -327,6 +328,96 @@ export async function createPullRequest(
           404
         );
       }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Convert a draft pull request to ready for review
+ *
+ * @throws GitHubError if conversion fails
+ */
+export async function convertDraftToReady(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<GitHubPullRequest> {
+  try {
+    // GitHub REST API doesn't have a direct endpoint for this,
+    // we need to use the GraphQL API
+    const mutation = `
+      mutation($pullRequestId: ID!) {
+        markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+          pullRequest {
+            number
+            url
+            title
+            state
+            headRefName
+            baseRefName
+            isDraft
+          }
+        }
+      }
+    `;
+
+    // First, get the node ID for the PR
+    const { data: prData } = await client.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+
+    const result = await client.graphql<{
+      markPullRequestReadyForReview: {
+        pullRequest: {
+          number: number;
+          url: string;
+          title: string;
+          state: string;
+          headRefName: string;
+          baseRefName: string;
+          isDraft: boolean;
+        };
+      };
+    }>(mutation, {
+      pullRequestId: prData.node_id,
+    });
+
+    const pr = result.markPullRequestReadyForReview.pullRequest;
+    return {
+      number: pr.number,
+      url: pr.url,
+      title: pr.title,
+      state: pr.state.toLowerCase() as 'open' | 'closed' | 'merged',
+      head: pr.headRefName,
+      base: pr.baseRefName,
+      draft: pr.isDraft,
+    };
+  } catch (error) {
+    if (error instanceof Error && 'status' in error) {
+      const status = (error as { status: number }).status;
+      if (status === 404) {
+        throw new GitHubError(
+          `Pull request #${pullNumber} not found in ${owner}/${repo}`,
+          GitHubErrorCode.NOT_FOUND,
+          404
+        );
+      }
+      if (status === 422) {
+        throw new GitHubError(
+          `Failed to convert draft PR: ${(error as Error).message}`,
+          GitHubErrorCode.VALIDATION_FAILED,
+          422
+        );
+      }
+    }
+    // Check for GraphQL errors
+    if (error instanceof Error && error.message.includes('not a draft')) {
+      // Already ready for review, return current state
+      return getPullRequest(client, owner, repo, pullNumber);
     }
     throw error;
   }
@@ -361,6 +452,7 @@ export async function getPullRequest(
       state,
       head: data.head.ref,
       base: data.base.ref,
+      draft: data.draft ?? false,
     };
   } catch (error) {
     if (error instanceof Error && 'status' in error) {
