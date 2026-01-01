@@ -175,3 +175,30 @@ export {
   type TreeNode,
   type TreeMetadata,
 } from './tree-metadata.js';
+
+// SDK Types (Claude Agent SDK integration)
+export {
+  type SDKMessage,
+  type SDKSystemMessage,
+  type SDKAssistantMessage,
+  type SDKUserMessage,
+  type SDKToolUseMessage,
+  type SDKToolResultMessage,
+  type SDKResultMessage,
+  type SDKToolCall,
+  type SDKHookMatcher,
+  type SDKQueryOptions,
+  type SDKQueryResult,
+  type PreToolValidator,
+  type PostToolHandler,
+  type SDKHooksConfig,
+  type ClaudeAgentSDKDriverConfig,
+  type ToolCallRecord,
+  type SDKExecutionResult,
+  isSDKSystemMessage,
+  isSDKAssistantMessage,
+  isSDKUserMessage,
+  isSDKToolUseMessage,
+  isSDKToolResultMessage,
+  isSDKResultMessage,
+} from './sdk.js';

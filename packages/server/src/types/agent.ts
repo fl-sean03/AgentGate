@@ -1,3 +1,5 @@
+import type { ToolCallRecord } from './sdk.js';
+
 // Agent Request
 export interface AgentRequest {
   workspacePath: string;
@@ -27,6 +29,11 @@ export interface AgentResult {
   sessionId: string | null;
   tokensUsed: TokenUsage | null;
   durationMs: number;
+  // SDK-specific fields (optional, populated by claude-agent-sdk driver)
+  totalCostUsd?: number;
+  toolCalls?: ToolCallRecord[];
+  model?: string;
+  turns?: number;
 }
 
 // Agent Structured Output
@@ -69,8 +76,13 @@ export interface DriverCapabilities {
   supportsStructuredOutput: boolean;
   supportsToolRestriction: boolean;
   supportsTimeout: boolean;
-  supportsHooks?: boolean;
   maxTurns: number;
+  // SDK-specific capabilities
+  supportsHooks?: boolean;
+  supportsSandbox?: boolean;
+  supportsStreaming?: boolean;
+  supportsCostTracking?: boolean;
+  billingMethod?: 'api-key' | 'subscription';
 }
 
 // Driver Interface
