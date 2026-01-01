@@ -8,6 +8,12 @@ export {
   createWorkOrderBodySchema,
   listRunsQuerySchema,
   runIdParamsSchema,
+  // Harness options schemas
+  apiLoopStrategyOptionsSchema,
+  apiVerificationOptionsSchema,
+  apiGitOpsOptionsSchema,
+  apiLimitsOptionsSchema,
+  apiHarnessOptionsSchema,
   // Types
   type PaginationQuery,
   type ListWorkOrdersQuery,
@@ -23,4 +29,10 @@ export {
   type VerificationSummary,
   type ListRunsQuery,
   type RunIdParams,
+  type ApiLoopStrategyOptions,
+  type ApiVerificationOptions,
+  type ApiGitOpsOptions,
+  type ApiLimitsOptions,
+  type ApiHarnessOptions,
+  type HarnessInfo,
 } from './api.js';

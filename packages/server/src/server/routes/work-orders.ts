@@ -12,11 +12,15 @@ import {
   type WorkOrderDetail,
   type PaginatedResponse,
   type RunSummary,
+  type HarnessInfo,
 } from '../types/api.js';
 import { workOrderService } from '../../control-plane/work-order-service.js';
 import { listRuns } from '../../orchestrator/run-store.js';
 import { WorkOrderStatus, type WorkOrder, type Run, RunState, type SubmitRequest } from '../../types/index.js';
 import { createLogger } from '../../utils/logger.js';
+import { resolveHarnessConfig, type ResolveOptions } from '../../harness/config-resolver.js';
+import { type HarnessConfig, type ResolvedHarnessConfig } from '../../types/harness-config.js';
+import { loadAuditRecord } from '../../harness/audit-trail.js';
 
 const logger = createLogger('routes:work-orders');
 
@@ -215,12 +219,40 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
       const runs = await getRunsForWorkOrder(id);
       const runSummaries = runs.map(toRunSummary);
 
+      // Resolve harness configuration for API response (v0.2.17 - Thrust 1)
+      let harnessInfo: HarnessInfo | undefined;
+      try {
+        // Build overrides from work order settings
+        const cliOverrides: Partial<HarnessConfig> | undefined = order.loopStrategyMode
+          ? { loopStrategy: { mode: order.loopStrategyMode } as HarnessConfig['loopStrategy'] }
+          : undefined;
+
+        const resolveOptions: ResolveOptions = {};
+        if (order.harnessProfile) {
+          resolveOptions.profileName = order.harnessProfile;
+        }
+        if (cliOverrides) {
+          resolveOptions.cliOverrides = cliOverrides;
+        }
+
+        const resolvedConfig = await resolveHarnessConfig(resolveOptions);
+        harnessInfo = toHarnessInfo(resolvedConfig, order.harnessProfile ?? null);
+      } catch (err) {
+        // If config resolution fails, log but continue without harness info
+        logger.warn({ err, workOrderId: id }, 'Failed to resolve harness config for work order detail');
+      }
+
       const detail: WorkOrderDetail = {
         ...toWorkOrderSummary(order, runs.length),
         maxIterations: order.maxIterations,
         maxTime: order.maxWallClockSeconds,
         runs: runSummaries,
       };
+
+      // Only include harness if resolved successfully
+      if (harnessInfo) {
+        detail.harness = harnessInfo;
+      }
 
       return reply.send(createSuccessResponse(detail, request.id));
     } catch (error) {
@@ -267,15 +299,54 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
         // Map API workspace source to internal format
         const workspaceSource = mapWorkspaceSource(body.workspaceSource);
 
+        // Extract harness options (v0.2.17 - Thrust 1)
+        const harness = body.harness;
+
+        // Determine max iterations - prefer harness.loopStrategy.maxIterations, fall back to legacy
+        let maxIterations = body.maxIterations;
+        if (harness?.loopStrategy?.maxIterations !== undefined) {
+          maxIterations = harness.loopStrategy.maxIterations;
+        } else if (harness?.loopStrategy?.baseIterations !== undefined) {
+          maxIterations = harness.loopStrategy.baseIterations;
+        }
+
+        // Determine max wall clock seconds - prefer harness.limits, fall back to legacy
+        let maxWallClockSeconds = body.maxTime ?? 3600;
+        if (harness?.limits?.maxWallClockSeconds !== undefined) {
+          maxWallClockSeconds = harness.limits.maxWallClockSeconds;
+        }
+
+        // Determine gatePlanSource from verification options
+        let gatePlanSource: SubmitRequest['gatePlanSource'] = 'auto';
+        if (harness?.verification?.gatePlanSource !== undefined) {
+          gatePlanSource = harness.verification.gatePlanSource as SubmitRequest['gatePlanSource'];
+        }
+
+        // Determine waitForCI from verification options
+        let waitForCI = false;
+        if (harness?.verification?.waitForCI !== undefined) {
+          waitForCI = harness.verification.waitForCI;
+        }
+
+        // Extract skip verification levels (filter to valid VerificationLevel values: L0, L1, L2, L3)
+        const skipVerification = harness?.verification?.skipLevels?.filter(
+          (level): level is 'L0' | 'L1' | 'L2' | 'L3' =>
+            ['L0', 'L1', 'L2', 'L3'].includes(level)
+        );
+
         // Submit work order - service applies defaults for optional fields
         const submitRequest: SubmitRequest = {
           taskPrompt: body.taskPrompt,
           workspaceSource,
           agentType: mapAgentType(body.agentType),
-          maxIterations: body.maxIterations,
-          maxWallClockSeconds: body.maxTime ?? 3600,
-          gatePlanSource: 'auto',
-          waitForCI: false,
+          maxIterations,
+          maxWallClockSeconds,
+          gatePlanSource,
+          waitForCI,
+          // Harness config options (v0.2.16/v0.2.17)
+          harnessProfile: harness?.profile,
+          loopStrategyMode: harness?.loopStrategy?.mode,
+          skipVerification,
         };
         const order = await workOrderService.submit(submitRequest);
 
@@ -391,6 +462,90 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
       }
     }
   );
+
+  /**
+   * GET /api/v1/work-orders/:id/audit - Get audit records for a work order
+   * (v0.2.17 - Thrust 3)
+   */
+  app.get<{
+    Params: WorkOrderIdParams;
+  }>('/api/v1/work-orders/:id/audit', async (request, reply) => {
+    try {
+      // Validate params
+      const paramsResult = workOrderIdParamsSchema.safeParse(request.params);
+      if (!paramsResult.success) {
+        return reply.status(400).send(
+          createErrorResponse(
+            ErrorCode.BAD_REQUEST,
+            'Invalid work order ID',
+            { errors: paramsResult.error.errors },
+            request.id
+          )
+        );
+      }
+
+      const { id } = paramsResult.data;
+
+      // Get work order
+      const order = await workOrderService.get(id);
+      if (!order) {
+        return reply.status(404).send(
+          createErrorResponse(
+            ErrorCode.NOT_FOUND,
+            `Work order not found: ${id}`,
+            undefined,
+            request.id
+          )
+        );
+      }
+
+      // Get all runs for this work order
+      const runs = await getRunsForWorkOrder(id);
+
+      // Get audit records for all runs
+      const auditRecords = await Promise.all(
+        runs.map(async (run) => {
+          const record = await loadAuditRecord(run.id);
+          if (!record) {
+            return null;
+          }
+          return {
+            runId: run.id,
+            iteration: run.iteration,
+            startedAt:
+              record.initialConfig.timestamp instanceof Date
+                ? record.initialConfig.timestamp.toISOString()
+                : String(record.initialConfig.timestamp),
+            configHash: record.initialConfig.configHash,
+            changesCount: record.iterationSnapshots.reduce(
+              (sum, s) => sum + (s.changesFromPrevious?.length ?? 0),
+              0
+            ),
+          };
+        })
+      );
+
+      return reply.send(
+        createSuccessResponse(
+          {
+            workOrderId: id,
+            runs: auditRecords.filter(Boolean),
+          },
+          request.id
+        )
+      );
+    } catch (error) {
+      logger.error({ err: error, requestId: request.id }, 'Failed to get work order audit');
+      return reply.status(500).send(
+        createErrorResponse(
+          ErrorCode.INTERNAL_ERROR,
+          'Failed to get work order audit',
+          undefined,
+          request.id
+        )
+      );
+    }
+  });
 }
 
 /**
@@ -449,4 +604,34 @@ function mapAgentType(apiType: CreateWorkOrderBody['agentType']): WorkOrder['age
     throw new Error(`Unknown agent type: ${apiType}`);
   }
   return mapped;
+}
+
+/**
+ * Convert resolved harness config to API HarnessInfo format
+ * (v0.2.17 - Thrust 1)
+ */
+function toHarnessInfo(config: ResolvedHarnessConfig, profileName: string | null): HarnessInfo {
+  // Get maxIterations - field name varies by strategy mode
+  let maxIterations = 3;
+  const strategy = config.loopStrategy;
+  if ('maxIterations' in strategy && typeof strategy.maxIterations === 'number') {
+    maxIterations = strategy.maxIterations;
+  } else if ('baseIterations' in strategy && typeof strategy.baseIterations === 'number') {
+    maxIterations = strategy.baseIterations;
+  }
+
+  return {
+    profile: profileName,
+    loopStrategy: {
+      mode: config.loopStrategy.mode,
+      maxIterations,
+    },
+    verification: {
+      waitForCI: config.gitOps.createPR, // waitForCI is tied to createPR functionality
+      skipLevels: config.verification.skipLevels,
+    },
+    gitOps: {
+      mode: config.gitOps.mode,
+    },
+  };
 }

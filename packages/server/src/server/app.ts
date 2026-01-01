@@ -11,6 +11,9 @@ import {
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkOrderRoutes } from './routes/work-orders.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { registerProfileRoutes } from './routes/profiles.js';
+import { registerAuditRoutes } from './routes/audit.js';
+import { registerStreamRoutes } from './routes/stream.js';
 import { registerAuthPlugin } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
@@ -131,6 +134,9 @@ export async function createApp(
   // Register API routes
   registerWorkOrderRoutes(app);
   registerRunRoutes(app);
+  registerProfileRoutes(app);
+  registerAuditRoutes(app);
+  registerStreamRoutes(app);
 
   // Register WebSocket routes
   registerWebSocketRoutes(app, broadcaster);

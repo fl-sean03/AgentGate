@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  LoopStrategyMode,
+  CompletionDetection,
+  ProgressTrackingMode,
+  GitOperationMode,
+} from '../../types/harness-config.js';
 
 /**
  * Pagination query parameters
@@ -51,6 +57,79 @@ export const workspaceSourceSchema = z.discriminatedUnion('type', [
 export type WorkspaceSource = z.infer<typeof workspaceSourceSchema>;
 
 /**
+ * API Harness Loop Strategy Options
+ */
+export const apiLoopStrategyOptionsSchema = z.object({
+  mode: z.nativeEnum(LoopStrategyMode).optional(),
+  maxIterations: z.number().int().min(1).max(100).optional(),
+  // Hybrid-specific options
+  baseIterations: z.number().int().min(1).max(100).optional(),
+  maxBonusIterations: z.number().int().min(0).max(100).optional(),
+  progressThreshold: z.number().min(0).max(1).optional(),
+  completionCriteria: z.array(z.nativeEnum(CompletionDetection)).optional(),
+  progressTracking: z.nativeEnum(ProgressTrackingMode).optional(),
+  // Ralph-specific options
+  minIterations: z.number().int().min(1).max(100).optional(),
+  convergenceThreshold: z.number().min(0).max(1).optional(),
+  windowSize: z.number().int().min(2).max(10).optional(),
+}).optional();
+
+export type ApiLoopStrategyOptions = z.infer<typeof apiLoopStrategyOptionsSchema>;
+
+/**
+ * API Verification Options
+ */
+export const apiVerificationOptionsSchema = z.object({
+  gatePlanSource: z.enum(['auto', 'inline', 'workspace', 'ci-workflow']).optional(),
+  waitForCI: z.boolean().optional(),
+  skipLevels: z.array(z.enum(['L0', 'L1', 'L2', 'L3', 'lint', 'typecheck', 'test', 'blackbox', 'contracts'])).optional(),
+  ci: z.object({
+    timeoutSeconds: z.number().int().min(60).max(7200).optional(),
+    pollIntervalSeconds: z.number().int().min(10).max(300).optional(),
+    maxIterations: z.number().int().min(1).max(10).optional(),
+  }).optional(),
+}).optional();
+
+export type ApiVerificationOptions = z.infer<typeof apiVerificationOptionsSchema>;
+
+/**
+ * API Git Ops Options
+ */
+export const apiGitOpsOptionsSchema = z.object({
+  mode: z.nativeEnum(GitOperationMode).optional(),
+  branchPattern: z.string().optional(),
+  draftPR: z.boolean().optional(),
+  prTitlePattern: z.string().optional(),
+  autoMerge: z.boolean().optional(),
+}).optional();
+
+export type ApiGitOpsOptions = z.infer<typeof apiGitOpsOptionsSchema>;
+
+/**
+ * API Execution Limits Options
+ */
+export const apiLimitsOptionsSchema = z.object({
+  maxWallClockSeconds: z.number().int().min(60).max(86400).optional(),
+  networkAllowed: z.boolean().optional(),
+  maxDiskMb: z.number().int().positive().optional(),
+}).optional();
+
+export type ApiLimitsOptions = z.infer<typeof apiLimitsOptionsSchema>;
+
+/**
+ * API Harness Options - all harness configuration options for API
+ */
+export const apiHarnessOptionsSchema = z.object({
+  profile: z.string().optional(),
+  loopStrategy: apiLoopStrategyOptionsSchema,
+  verification: apiVerificationOptionsSchema,
+  gitOps: apiGitOpsOptionsSchema,
+  limits: apiLimitsOptionsSchema,
+}).optional();
+
+export type ApiHarnessOptions = z.infer<typeof apiHarnessOptionsSchema>;
+
+/**
  * Create work order request body
  */
 export const createWorkOrderBodySchema = z.object({
@@ -61,8 +140,11 @@ export const createWorkOrderBodySchema = z.object({
     'openai-codex',
     'opencode',
   ]).default('claude-code-subscription'),
-  maxIterations: z.number().int().min(1).max(10).default(3),
-  maxTime: z.number().int().min(60).max(3600).optional(),
+  // Legacy options (kept for backwards compatibility)
+  maxIterations: z.number().int().min(1).max(100).default(3),
+  maxTime: z.number().int().min(60).max(86400).optional(),
+  // New: full harness configuration options
+  harness: apiHarnessOptionsSchema,
 });
 
 export type CreateWorkOrderBody = z.infer<typeof createWorkOrderBodySchema>;
@@ -93,12 +175,31 @@ export interface WorkOrderSummary {
 }
 
 /**
+ * Harness info in API response
+ */
+export interface HarnessInfo {
+  profile: string | null;
+  loopStrategy: {
+    mode: string;
+    maxIterations: number;
+  };
+  verification: {
+    waitForCI: boolean;
+    skipLevels: string[];
+  };
+  gitOps: {
+    mode: string;
+  };
+}
+
+/**
  * Work order detail response
  */
 export interface WorkOrderDetail extends WorkOrderSummary {
   maxIterations: number;
   maxTime?: number;
   runs: RunSummary[];
+  harness?: HarnessInfo;
 }
 
 /**

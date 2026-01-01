@@ -253,3 +253,24 @@ export async function ensureHarnessDir(): Promise<void> {
     }
   }
 }
+
+/**
+ * Deletes a profile from the HARNESS_DIR
+ * (v0.2.17 - Thrust 2)
+ *
+ * @param name - Profile name (without extension)
+ * @throws ProfileNotFoundError if the profile doesn't exist
+ */
+export async function deleteProfile(name: string): Promise<void> {
+  const profilePath = path.join(HARNESS_DIR, `${name}${PROFILE_EXTENSION}`);
+
+  try {
+    await fs.unlink(profilePath);
+    logger.info({ profilePath, name }, 'Profile deleted');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new ProfileNotFoundError(name, [profilePath]);
+    }
+    throw err;
+  }
+}
