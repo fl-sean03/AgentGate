@@ -69,3 +69,15 @@ export {
   type ResolveOptions,
   type CLIOptions,
 } from './config-resolver.js';
+
+// Audit Trail (v0.2.16 - Thrust 11)
+export {
+  AuditTrail,
+  createAuditTrail,
+  loadAuditRecord,
+  listAuditRecords,
+  deleteAuditRecord,
+  type ConfigChange,
+  type ConfigSnapshot,
+  type ConfigAuditRecord,
+} from './audit-trail.js';
