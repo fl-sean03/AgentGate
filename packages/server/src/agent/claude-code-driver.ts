@@ -215,7 +215,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       };
     } finally {
       // Always clean up sandbox
-      await sandbox.destroy().catch((err) => {
+      await sandbox.destroy().catch((err: unknown) => {
         logger.error({ err, sandboxId: sandbox.id }, 'Failed to destroy sandbox');
       });
     }

@@ -289,18 +289,18 @@ export class DockerClient {
 
       stream.on('data', demux);
 
-      stream.on('end', async () => {
+      stream.on('end', () => {
         if (timeoutId) clearTimeout(timeoutId);
 
-        try {
-          // Get exit code
-          const inspectResult = await exec.inspect();
-          const exitCode = inspectResult.ExitCode ?? -1;
-
-          resolve({ exitCode, stdout, stderr });
-        } catch (error) {
-          reject(error);
-        }
+        // Get exit code
+        exec.inspect()
+          .then((inspectResult) => {
+            const exitCode = inspectResult.ExitCode ?? -1;
+            resolve({ exitCode, stdout, stderr });
+          })
+          .catch((error: unknown) => {
+            reject(error);
+          });
       });
 
       stream.on('error', (error) => {
