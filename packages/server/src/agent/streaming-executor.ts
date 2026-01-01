@@ -8,7 +8,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline';
 import { createLogger } from '../utils/index.js';
-import { StreamParser, type ParsedEvent } from './stream-parser.js';
+import {
+  StreamParser,
+  type ParsedEvent,
+  type ClaudeAssistantToolUseMessage,
+  type ClaudeAssistantTextMessage,
+} from './stream-parser.js';
 import { parseOutput, extractSessionId, extractTokenUsage } from './output-parser.js';
 import type { AgentResult } from './driver.js';
 
@@ -337,18 +342,20 @@ export class StreamingExecutor {
 
     if (message.type === 'assistant') {
       if (message.message.type === 'tool_use') {
-        // Type narrowing ensures message has the correct shape
-        return this.parser.parseToolUse(message, this.workOrderId, this.runId);
+        // Explicitly cast to correct type since TypeScript can't narrow union members
+        const toolUseMessage = message as ClaudeAssistantToolUseMessage;
+        return this.parser.parseToolUse(toolUseMessage, this.workOrderId, this.runId);
       }
 
       if (message.message.type === 'text') {
-        // Type narrowing ensures message has the correct shape
-        return this.parser.parseText(message, this.workOrderId, this.runId);
+        // Explicitly cast to correct type since TypeScript can't narrow union members
+        const textMessage = message as ClaudeAssistantTextMessage;
+        return this.parser.parseText(textMessage, this.workOrderId, this.runId);
       }
     }
 
     if (message.type === 'user' && message.message.type === 'tool_result') {
-      // Type narrowing ensures message has the correct shape
+      // Type already narrowed to ClaudeToolResultMessage by the conditions above
       return this.parser.parseToolResult(message, this.workOrderId, this.runId);
     }
 
