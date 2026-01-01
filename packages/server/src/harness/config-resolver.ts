@@ -264,13 +264,21 @@ export function mergeConfigs(configs: HarnessConfig[]): HarnessConfig {
     return harnessConfigSchema.parse({});
   }
 
-  if (configs.length === 1) {
-    return configs[0];
+  const firstConfig = configs[0];
+  if (!firstConfig) {
+    return harnessConfigSchema.parse({});
   }
 
-  let result = configs[0];
+  if (configs.length === 1) {
+    return firstConfig;
+  }
+
+  let result: HarnessConfig = firstConfig;
   for (let i = 1; i < configs.length; i++) {
-    result = deepMerge(result, configs[i]);
+    const nextConfig = configs[i];
+    if (nextConfig) {
+      result = deepMerge(result, nextConfig);
+    }
   }
 
   return result;
