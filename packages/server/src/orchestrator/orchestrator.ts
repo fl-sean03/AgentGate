@@ -309,21 +309,26 @@ export class Orchestrator {
 
       // Build CLI overrides from work order options
       const cliOverrides: Partial<HarnessConfig> = {};
-      if (workOrder.maxIterations) {
+      // Handle loop strategy mode and max iterations (v0.2.16 - Thrust 10)
+      if (workOrder.loopStrategyMode ?? workOrder.maxIterations) {
+        const strategyMode = workOrder.loopStrategyMode ?? 'fixed';
         cliOverrides.loopStrategy = {
-          mode: 'fixed' as const,
-          maxIterations: workOrder.maxIterations,
+          mode: strategyMode,
+          // Pass maxIterations if specified - different strategies use different field names
+          ...(workOrder.maxIterations && strategyMode === 'fixed' ? { maxIterations: workOrder.maxIterations } : {}),
+          ...(workOrder.maxIterations && strategyMode === 'hybrid' ? { baseIterations: workOrder.maxIterations } : {}),
+          ...(workOrder.maxIterations && strategyMode === 'ralph' ? { maxIterations: workOrder.maxIterations } : {}),
           completionDetection: ['verification_pass'],
-        };
+        } as HarnessConfig['loopStrategy'];
       }
 
       // Resolve harness config using:
       // 1. Profile name from work order (if any)
       // 2. Default harness config from orchestrator
-      // 3. CLI overrides from work order
+      // 3. CLI overrides from work order (loopStrategyMode, maxIterations)
       const hasProfile = workOrder.harnessProfile != null;
       const hasDefaultConfig = this.config.defaultHarnessConfig != null;
-      const hasOverrides = Object.keys(cliOverrides).length > 0;
+      const hasOverrides = Object.keys(cliOverrides).length > 0 || workOrder.loopStrategyMode != null;
       if (hasProfile || hasDefaultConfig || hasOverrides) {
         const resolveOptions: {
           profileName?: string;

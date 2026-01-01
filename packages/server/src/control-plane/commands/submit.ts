@@ -17,7 +17,7 @@ import {
   bold,
   cyan,
 } from '../formatter.js';
-import { AgentType, GatePlanSource, WorkspaceTemplate, VerificationLevel, type SubmitRequest } from '../../types/index.js';
+import { AgentType, GatePlanSource, WorkspaceTemplate, VerificationLevel, LoopStrategyMode, type SubmitRequest } from '../../types/index.js';
 
 /**
  * Parse comma-separated verification levels.
@@ -58,6 +58,12 @@ export function createSubmitCommand(): Command {
       '--skip-verification <levels>',
       'Skip verification levels (comma-separated: L0,L1,L2,L3)',
       parseVerificationLevels
+    )
+    // Harness configuration (v0.2.16 - Thrust 10)
+    .option('--harness <profile>', 'Use a named harness profile from ~/.agentgate/harnesses/')
+    .option(
+      '--loop-strategy <mode>',
+      `Loop strategy mode (${Object.values(LoopStrategyMode).join(', ')})`
     )
     .option(
       '--agent <type>',
@@ -165,6 +171,9 @@ async function executeSubmit(rawOptions: Record<string, unknown>): Promise<void>
     gatePlanSource: options.gatePlan,
     waitForCI: options.waitForCi ?? false,
     skipVerification: options.skipVerification,
+    // Harness configuration (v0.2.16 - Thrust 10)
+    harnessProfile: options.harness,
+    loopStrategyMode: options.loopStrategy,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],

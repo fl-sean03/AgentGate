@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { VerificationLevel } from './verification.js';
+import { LoopStrategyMode } from './harness-config.js';
 
 // Work Order Status
 export const WorkOrderStatus = {
@@ -145,6 +146,8 @@ export interface WorkOrder {
   skipVerification?: VerificationLevel[];
   // Harness profile (v0.2.16 - Thrust 9)
   harnessProfile?: string;
+  // Loop strategy mode override (v0.2.16 - Thrust 10)
+  loopStrategyMode?: LoopStrategyMode;
 }
 
 // Submit Request Schema
@@ -167,6 +170,8 @@ export const submitRequestSchema = z.object({
   skipVerification: z.array(z.nativeEnum(VerificationLevel)).optional(),
   // Harness profile (v0.2.16 - Thrust 9)
   harnessProfile: z.string().optional(),
+  // Loop strategy mode override (v0.2.16 - Thrust 10)
+  loopStrategyMode: z.nativeEnum(LoopStrategyMode).optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;
