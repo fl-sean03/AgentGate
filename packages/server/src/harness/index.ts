@@ -27,6 +27,15 @@ export {
   BaseStrategy,
   FixedStrategy,
   createFixedStrategy,
+  HybridStrategy,
+  createHybridStrategy,
+  RalphStrategy,
+  createRalphStrategy,
+  CustomStrategy,
+  createCustomStrategy,
+  CustomStrategyLoadError,
+  CustomStrategyNotFoundError,
+  CustomStrategyInvalidError,
 } from './strategies/index.js';
 
 // Config Loader
@@ -44,3 +53,19 @@ export {
   ProfileValidationError,
   type HarnessProfileInfo,
 } from './config-loader.js';
+
+// Config Resolver
+export {
+  resolveHarnessConfig,
+  resolveInheritance,
+  mergeConfigs,
+  applyDefaults,
+  applyCLIOverrides,
+  cliOptionsToOverrides,
+  computeConfigHash,
+  createDefaultConfig,
+  CircularInheritanceError,
+  InheritanceDepthError,
+  type ResolveOptions,
+  type CLIOptions,
+} from './config-resolver.js';
