@@ -1,0 +1,55 @@
+name: valid-test-profile
+description: "A complete valid test profile for unit testing"
+extends: default
+
+loopStrategy:
+  mode: hybrid
+  baseIterations: 5
+  maxBonusIterations: 3
+  progressThreshold: 0.15
+  completionDetection:
+    - verification_pass
+    - no_changes
+  progressTracking: verification_levels
+
+agentDriver:
+  type: claude-code-subscription
+  model: claude-sonnet-4-20250514
+  maxTokens: 8192
+  temperature: 0.7
+
+verification:
+  skipLevels: []
+  timeoutMs: 600000
+  cleanRoom: true
+  parallelTests: true
+  retryFlaky: true
+  maxRetries: 2
+
+gitOps:
+  mode: github_pr
+  branchPrefix: "test/agentgate/"
+  commitMessagePrefix: "[Test]"
+  autoCommit: true
+  autoPush: true
+  createPR: true
+  prDraft: true
+  prReviewers:
+    - reviewer1
+    - reviewer2
+  prLabels:
+    - automated
+    - test
+
+executionLimits:
+  maxWallClockSeconds: 7200
+  maxIterationSeconds: 1200
+  maxTotalTokens: 100000
+  maxIterationTokens: 10000
+  maxDiskMb: 2048
+  maxMemoryMb: 4096
+  maxConcurrentAgents: 2
+
+metadata:
+  author: test-suite
+  createdAt: "2024-01-01"

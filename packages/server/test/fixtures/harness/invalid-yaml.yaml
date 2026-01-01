@@ -1,0 +1,8 @@
+name: invalid yaml profile
+loopStrategy:
+  mode: fixed
+  maxIterations: [unclosed bracket
+  some_key: value
+    bad_indentation: here
+- random: list
+  without proper: context
