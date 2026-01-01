@@ -141,7 +141,7 @@ export class CustomStrategy extends BaseStrategy {
     // Load the module dynamically
     let module: Record<string, unknown>;
     try {
-      module = await import(strategyName);
+      module = (await import(strategyName)) as Record<string, unknown>;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error({ strategyName, error: err.message }, 'Failed to load custom strategy module');
