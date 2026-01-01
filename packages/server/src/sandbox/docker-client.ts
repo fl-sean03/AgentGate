@@ -67,7 +67,7 @@ export class DockerClient {
   private constructor(socketPath?: string) {
     this.docker = new Docker({
       socketPath: socketPath ?? '/var/run/docker.sock',
-    }) as Docker;
+    });
   }
 
   /**
