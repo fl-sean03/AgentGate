@@ -105,8 +105,13 @@ export async function apiRequest<T>(
       return undefined as T;
     }
 
-    // Parse JSON response
-    return await response.json();
+    // Parse JSON response and unwrap data from { success, data } wrapper
+    const json = await response.json();
+    // Server wraps responses in { success: true, data: ... }
+    if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
+      return json.data as T;
+    }
+    return json as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;

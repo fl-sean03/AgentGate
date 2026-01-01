@@ -17,6 +17,7 @@ import {
   type Phase,
   RunEvent,
   RunResult,
+  RunState,
 } from '../types/index.js';
 import {
   applyTransition,
@@ -218,9 +219,12 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
 
     try {
       // BUILD PHASE
-      run = applyTransition(run, RunEvent.BUILD_STARTED);
-      await saveRun(run);
-      onStateChange?.(run);
+      // Only transition if not already in BUILDING state (happens when coming from FEEDBACK)
+      if (run.state !== RunState.BUILDING) {
+        run = applyTransition(run, RunEvent.BUILD_STARTED);
+        await saveRun(run);
+        onStateChange?.(run);
+      }
       onPhaseStart?.('build', iteration);
 
       const buildResult = await onBuild(
