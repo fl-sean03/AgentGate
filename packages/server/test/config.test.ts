@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadConfig, resetConfig, getConfig, getConfigLimits } from '../src/config/index.js';
+import { loadConfig, resetConfig, getConfig, getConfigLimits, getSDKConfig, buildSDKDriverConfig } from '../src/config/index.js';
 
 describe('Configuration Module', () => {
   // Store original env
@@ -393,6 +393,129 @@ describe('Configuration Module', () => {
       expect(limits.maxChildrenPerParent).toBe(10);
       expect(limits.maxTreeSize).toBe(100);
       expect(limits.defaultTimeoutSeconds).toBe(3600);
+    });
+  });
+
+  describe('SDK Configuration', () => {
+    describe('defaults', () => {
+      it('should return correct SDK defaults when no env vars set', () => {
+        const config = loadConfig();
+
+        expect(config.sdk.timeoutMs).toBe(300000);
+        expect(config.sdk.enableSandbox).toBe(true);
+        expect(config.sdk.logToolUse).toBe(true);
+        expect(config.sdk.trackFileChanges).toBe(true);
+        expect(config.sdk.maxTurns).toBe(100);
+      });
+    });
+
+    describe('environment variable parsing', () => {
+      it('should parse AGENTGATE_SDK_TIMEOUT_MS', () => {
+        process.env.AGENTGATE_SDK_TIMEOUT_MS = '600000';
+        const config = loadConfig();
+        expect(config.sdk.timeoutMs).toBe(600000);
+      });
+
+      it('should parse AGENTGATE_SDK_ENABLE_SANDBOX', () => {
+        process.env.AGENTGATE_SDK_ENABLE_SANDBOX = 'false';
+        const config = loadConfig();
+        expect(config.sdk.enableSandbox).toBe(false);
+      });
+
+      it('should parse AGENTGATE_SDK_LOG_TOOL_USE', () => {
+        process.env.AGENTGATE_SDK_LOG_TOOL_USE = 'false';
+        const config = loadConfig();
+        expect(config.sdk.logToolUse).toBe(false);
+      });
+
+      it('should parse AGENTGATE_SDK_TRACK_FILE_CHANGES', () => {
+        process.env.AGENTGATE_SDK_TRACK_FILE_CHANGES = 'false';
+        const config = loadConfig();
+        expect(config.sdk.trackFileChanges).toBe(false);
+      });
+
+      it('should parse AGENTGATE_SDK_MAX_TURNS', () => {
+        process.env.AGENTGATE_SDK_MAX_TURNS = '200';
+        const config = loadConfig();
+        expect(config.sdk.maxTurns).toBe(200);
+      });
+    });
+
+    describe('validation', () => {
+      describe('sdkTimeoutMs', () => {
+        it('should reject value below minimum (9999)', () => {
+          process.env.AGENTGATE_SDK_TIMEOUT_MS = '9999';
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should reject value above maximum (3600001)', () => {
+          process.env.AGENTGATE_SDK_TIMEOUT_MS = '3600001';
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should accept boundary values (10000 and 3600000)', () => {
+          process.env.AGENTGATE_SDK_TIMEOUT_MS = '10000';
+          expect(loadConfig().sdk.timeoutMs).toBe(10000);
+
+          resetConfig();
+          process.env.AGENTGATE_SDK_TIMEOUT_MS = '3600000';
+          expect(loadConfig().sdk.timeoutMs).toBe(3600000);
+        });
+      });
+
+      describe('sdkMaxTurns', () => {
+        it('should reject value below minimum (0)', () => {
+          process.env.AGENTGATE_SDK_MAX_TURNS = '0';
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should reject value above maximum (501)', () => {
+          process.env.AGENTGATE_SDK_MAX_TURNS = '501';
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should accept boundary values (1 and 500)', () => {
+          process.env.AGENTGATE_SDK_MAX_TURNS = '1';
+          expect(loadConfig().sdk.maxTurns).toBe(1);
+
+          resetConfig();
+          process.env.AGENTGATE_SDK_MAX_TURNS = '500';
+          expect(loadConfig().sdk.maxTurns).toBe(500);
+        });
+      });
+    });
+  });
+
+  describe('getSDKConfig', () => {
+    it('should return SDK configuration', () => {
+      process.env.AGENTGATE_SDK_TIMEOUT_MS = '120000';
+      process.env.AGENTGATE_SDK_MAX_TURNS = '50';
+
+      const sdkConfig = getSDKConfig();
+
+      expect(sdkConfig.timeoutMs).toBe(120000);
+      expect(sdkConfig.maxTurns).toBe(50);
+      expect(sdkConfig.enableSandbox).toBe(true);
+      expect(sdkConfig.logToolUse).toBe(true);
+      expect(sdkConfig.trackFileChanges).toBe(true);
+    });
+  });
+
+  describe('buildSDKDriverConfig', () => {
+    it('should build driver config from environment config', () => {
+      process.env.AGENTGATE_SDK_TIMEOUT_MS = '180000';
+      process.env.AGENTGATE_SDK_ENABLE_SANDBOX = 'false';
+      process.env.AGENTGATE_SDK_MAX_TURNS = '75';
+      process.env.AGENTGATE_SDK_LOG_TOOL_USE = 'true';
+      process.env.AGENTGATE_SDK_TRACK_FILE_CHANGES = 'false';
+
+      const driverConfig = buildSDKDriverConfig();
+
+      expect(driverConfig.timeoutMs).toBe(180000);
+      expect(driverConfig.enableSandbox).toBe(false);
+      expect(driverConfig.maxTurns).toBe(75);
+      expect(driverConfig.hooks.logToolUse).toBe(true);
+      expect(driverConfig.hooks.trackFileChanges).toBe(false);
     });
   });
 });

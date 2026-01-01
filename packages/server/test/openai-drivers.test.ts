@@ -122,18 +122,22 @@ describe('Driver Registry', () => {
     const drivers = driverRegistry.list();
     const names = drivers.map((d) => d.name);
 
-    // Should have exactly 4 drivers
+    // Should have exactly 5 drivers
+    expect(names).toContain('claude-agent-sdk');
     expect(names).toContain('claude-code-api');
     expect(names).toContain('claude-code-subscription');
     expect(names).toContain('openai-codex');
     expect(names).toContain('opencode');
 
     // Should NOT have removed drivers
-    expect(names).not.toContain('claude-agent-sdk');
     expect(names).not.toContain('openai-agents');
   });
 
   it('should get drivers by name', () => {
+    const sdkDriver = driverRegistry.get('claude-agent-sdk');
+    expect(sdkDriver).not.toBeNull();
+    expect(sdkDriver?.name).toBe('claude-agent-sdk');
+
     const claudeCode = driverRegistry.get('claude-code-api');
     expect(claudeCode).not.toBeNull();
     expect(claudeCode?.name).toBe('claude-code-api');

@@ -31,6 +31,36 @@ const ciConfigSchema = z.object({
 export type CIConfig = z.infer<typeof ciConfigSchema>;
 
 /**
+ * Boolean string parser that handles 'true', 'false', '1', '0' strings properly
+ */
+const booleanFromString = z
+  .union([z.boolean(), z.string()])
+  .transform((val) => {
+    if (typeof val === 'boolean') return val;
+    if (val === undefined || val === null || val === '') return undefined;
+    const lower = String(val).toLowerCase().trim();
+    return lower === 'true' || lower === '1';
+  });
+
+/**
+ * SDK Driver configuration schema
+ */
+const sdkConfigSchema = z.object({
+  /** SDK query timeout in milliseconds (10s - 1 hour) */
+  timeoutMs: z.coerce.number().int().min(10000).max(3600000).default(300000),
+  /** Enable SDK built-in sandboxing */
+  enableSandbox: booleanFromString.default(true),
+  /** Log all tool invocations */
+  logToolUse: booleanFromString.default(true),
+  /** Track file changes for verification */
+  trackFileChanges: booleanFromString.default(true),
+  /** Maximum conversation turns (1-500) */
+  maxTurns: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+export type SDKConfig = z.infer<typeof sdkConfigSchema>;
+
+/**
  * Configuration schema with validation
  */
 const configSchema = z.object({
@@ -56,6 +86,9 @@ const configSchema = z.object({
 
   // CI configuration
   ci: ciConfigSchema,
+
+  // SDK Driver configuration
+  sdk: sdkConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -84,6 +117,14 @@ export function loadConfig(): AgentGateConfig {
       skipIfNoWorkflows: process.env.AGENTGATE_CI_SKIP_IF_NO_WORKFLOWS,
       logRetentionCount: process.env.AGENTGATE_CI_LOG_RETENTION_COUNT,
     },
+    // SDK Driver configuration
+    sdk: {
+      timeoutMs: process.env.AGENTGATE_SDK_TIMEOUT_MS,
+      enableSandbox: process.env.AGENTGATE_SDK_ENABLE_SANDBOX,
+      logToolUse: process.env.AGENTGATE_SDK_LOG_TOOL_USE,
+      trackFileChanges: process.env.AGENTGATE_SDK_TRACK_FILE_CHANGES,
+      maxTurns: process.env.AGENTGATE_SDK_MAX_TURNS,
+    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -101,6 +142,8 @@ export function loadConfig(): AgentGateConfig {
       maxTreeSize: result.data.maxTreeSize,
       ciEnabled: result.data.ci.enabled,
       ciMaxIterations: result.data.ci.maxIterations,
+      sdkTimeoutMs: result.data.sdk.timeoutMs,
+      sdkMaxTurns: result.data.sdk.maxTurns,
     },
     'Configuration loaded'
   );
@@ -156,4 +199,36 @@ export function getConfigLimits(): {
 export function getCIConfig(): CIConfig {
   const config = getConfig();
   return config.ci;
+}
+
+/**
+ * Get SDK configuration
+ */
+export function getSDKConfig(): SDKConfig {
+  const config = getConfig();
+  return config.sdk;
+}
+
+/**
+ * Build SDK driver config from environment config
+ */
+export function buildSDKDriverConfig(): {
+  timeoutMs: number;
+  enableSandbox: boolean;
+  maxTurns: number;
+  hooks: {
+    logToolUse: boolean;
+    trackFileChanges: boolean;
+  };
+} {
+  const sdk = getSDKConfig();
+  return {
+    timeoutMs: sdk.timeoutMs,
+    enableSandbox: sdk.enableSandbox,
+    maxTurns: sdk.maxTurns,
+    hooks: {
+      logToolUse: sdk.logToolUse,
+      trackFileChanges: sdk.trackFileChanges,
+    },
+  };
 }
