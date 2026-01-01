@@ -6,7 +6,8 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
-import { getConfigLimits, getCIConfig, getSDKConfig, type CIConfig, type SDKConfig } from '../../config/index.js';
+import { getConfigLimits, getCIConfig, getSDKConfig, getSandboxConfig, type CIConfig, type SDKConfig, type SandboxConfig } from '../../config/index.js';
+import { getSandboxManager, type SandboxSystemStatus } from '../../sandbox/index.js';
 
 /**
  * Package version - should match package.json
@@ -25,10 +26,22 @@ export function registerHealthRoutes(app: FastifyInstance): void {
     const limits = getConfigLimits();
     const ciConfig = getCIConfig();
     const sdkConfig = getSDKConfig();
+    const sandboxConfig = getSandboxConfig();
+
+    // Get sandbox system status
+    let sandboxStatus: SandboxSystemStatus | null = null;
+    try {
+      const sandboxManager = getSandboxManager();
+      sandboxStatus = await sandboxManager.getStatus();
+    } catch {
+      // Sandbox manager not initialized yet or failed
+    }
+
     const response: HealthStatus & {
       limits: typeof limits;
-      config: { ci: CIConfig; sdk: SDKConfig };
+      config: { ci: CIConfig; sdk: SDKConfig; sandbox: SandboxConfig };
       drivers: { sdk: { apiKeySet: boolean; sandboxEnabled: boolean } };
+      sandbox: SandboxSystemStatus | null;
     } = {
       status: 'ok',
       version: VERSION,
@@ -37,6 +50,7 @@ export function registerHealthRoutes(app: FastifyInstance): void {
       config: {
         ci: ciConfig,
         sdk: sdkConfig,
+        sandbox: sandboxConfig,
       },
       drivers: {
         sdk: {
@@ -44,6 +58,7 @@ export function registerHealthRoutes(app: FastifyInstance): void {
           sandboxEnabled: sdkConfig.enableSandbox,
         },
       },
+      sandbox: sandboxStatus,
     };
     return reply.send(createSuccessResponse(response, request.id));
   });
@@ -58,6 +73,10 @@ export function registerHealthRoutes(app: FastifyInstance): void {
     // Check file system access
     const fsCheck = checkFileSystem();
     checks.push(fsCheck);
+
+    // Check sandbox system
+    const sandboxCheck = await checkSandbox();
+    checks.push(sandboxCheck);
 
     // Aggregate readiness
     const allHealthy = checks.every((c) => c.healthy);
@@ -102,4 +121,37 @@ function checkFileSystem(): ComponentCheck {
     message: 'File system accessible',
     latencyMs,
   };
+}
+
+/**
+ * Check sandbox system accessibility
+ */
+async function checkSandbox(): Promise<ComponentCheck> {
+  const start = Date.now();
+  try {
+    const sandboxManager = getSandboxManager();
+    const status = await sandboxManager.getStatus();
+    const latencyMs = Date.now() - start;
+
+    // Sandbox is healthy if we have a provider available
+    const healthy = status.provider !== 'none';
+    const message = healthy
+      ? `Sandbox ready (provider: ${status.provider}, docker: ${status.dockerAvailable ? 'available' : 'unavailable'})`
+      : 'No sandbox provider available';
+
+    return {
+      name: 'sandbox',
+      healthy,
+      message,
+      latencyMs,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - start;
+    return {
+      name: 'sandbox',
+      healthy: false,
+      message: `Sandbox check failed: ${error instanceof Error ? error.message : String(error)}`,
+      latencyMs,
+    };
+  }
 }
