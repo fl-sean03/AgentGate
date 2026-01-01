@@ -52,7 +52,7 @@ export class FixedStrategy extends BaseStrategy {
    *    - AGENT_SIGNAL: stop if agent signaled completion
    * 3. Otherwise continue
    */
-  async shouldContinue(context: LoopContext): Promise<LoopDecision> {
+  shouldContinue(context: LoopContext): Promise<LoopDecision> {
     const config = this.getConfig();
     const { state, currentVerification, currentSnapshot } = context;
 
@@ -66,10 +66,10 @@ export class FixedStrategy extends BaseStrategy {
         },
         'Max iterations reached'
       );
-      return this.stopDecision('Max iterations reached', {
+      return Promise.resolve(this.stopDecision('Max iterations reached', {
         iteration: state.iteration,
         maxIterations: config.maxIterations,
-      });
+      }));
     }
 
     // Check completion detection conditions
@@ -84,10 +84,10 @@ export class FixedStrategy extends BaseStrategy {
         { workOrderId: context.workOrderId, iteration: state.iteration },
         'Verification passed, stopping'
       );
-      return this.stopDecision('Verification passed', {
+      return Promise.resolve(this.stopDecision('Verification passed', {
         iteration: state.iteration,
         verificationId: currentVerification.id,
-      });
+      }));
     }
 
     // Check no changes
@@ -97,9 +97,9 @@ export class FixedStrategy extends BaseStrategy {
           { workOrderId: context.workOrderId, iteration: state.iteration },
           'No changes detected, stopping'
         );
-        return this.stopDecision('No changes detected', {
+        return Promise.resolve(this.stopDecision('No changes detected', {
           iteration: state.iteration,
-        });
+        }));
       }
     }
 
@@ -116,12 +116,12 @@ export class FixedStrategy extends BaseStrategy {
           },
           'Loop detected, stopping'
         );
-        return this.stopDecision('Loop detected', {
+        return Promise.resolve(this.stopDecision('Loop detected', {
           iteration: state.iteration,
           loopType: loopData.loopType,
           confidence: loopData.confidence,
           patterns: loopData.repeatPatterns,
-        });
+        }));
       }
     }
 
@@ -134,9 +134,9 @@ export class FixedStrategy extends BaseStrategy {
           { workOrderId: context.workOrderId, iteration: state.iteration },
           'CI equivalent (verification) passed, stopping'
         );
-        return this.stopDecision('CI passed', {
+        return Promise.resolve(this.stopDecision('CI passed', {
           iteration: state.iteration,
-        });
+        }));
       }
     }
 
@@ -151,11 +151,11 @@ export class FixedStrategy extends BaseStrategy {
       'Continuing to next iteration'
     );
 
-    return this.continueDecision('Iterations remaining', {
+    return Promise.resolve(this.continueDecision('Iterations remaining', {
       iteration: state.iteration,
       remainingIterations,
       maxIterations: config.maxIterations,
-    });
+    }));
   }
 
   /**

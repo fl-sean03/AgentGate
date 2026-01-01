@@ -45,7 +45,7 @@ export abstract class BaseStrategy implements LoopStrategy {
   /**
    * Initialize the strategy with configuration.
    */
-  async initialize(config: LoopStrategyConfig): Promise<void> {
+  initialize(config: LoopStrategyConfig): Promise<void> {
     if (this.initialized) {
       logger.warn({ strategy: this.name }, 'Strategy already initialized, reinitializing');
     }
@@ -55,24 +55,27 @@ export abstract class BaseStrategy implements LoopStrategy {
     this.reset();
 
     logger.debug({ strategy: this.name, config }, 'Strategy initialized');
+
+    return Promise.resolve();
   }
 
   /**
    * Called before the first iteration.
    * Override in subclasses for custom behavior.
    */
-  async onLoopStart(context: LoopContext): Promise<void> {
+  onLoopStart(context: LoopContext): Promise<void> {
     logger.info(
       { strategy: this.name, workOrderId: context.workOrderId, runId: context.runId },
       'Loop starting'
     );
+    return Promise.resolve();
   }
 
   /**
    * Called before each iteration.
    * Override in subclasses for custom behavior.
    */
-  async onIterationStart(context: LoopContext): Promise<void> {
+  onIterationStart(context: LoopContext): Promise<void> {
     logger.debug(
       {
         strategy: this.name,
@@ -81,6 +84,7 @@ export abstract class BaseStrategy implements LoopStrategy {
       },
       'Iteration starting'
     );
+    return Promise.resolve();
   }
 
   /**
@@ -93,7 +97,7 @@ export abstract class BaseStrategy implements LoopStrategy {
    * Called after each iteration completes.
    * Updates loop detection state.
    */
-  async onIterationEnd(context: LoopContext, decision: LoopDecision): Promise<void> {
+  onIterationEnd(context: LoopContext, decision: LoopDecision): Promise<void> {
     // Update fingerprints for loop detection
     if (context.currentSnapshot) {
       const fingerprint = this.createFingerprint(context);
@@ -114,13 +118,15 @@ export abstract class BaseStrategy implements LoopStrategy {
       },
       'Iteration ended'
     );
+
+    return Promise.resolve();
   }
 
   /**
    * Called when the loop terminates.
    * Override in subclasses for custom cleanup.
    */
-  async onLoopEnd(context: LoopContext, finalDecision: LoopDecision): Promise<void> {
+  onLoopEnd(context: LoopContext, finalDecision: LoopDecision): Promise<void> {
     logger.info(
       {
         strategy: this.name,
@@ -131,6 +137,7 @@ export abstract class BaseStrategy implements LoopStrategy {
       },
       'Loop ended'
     );
+    return Promise.resolve();
   }
 
   /**
@@ -160,13 +167,15 @@ export abstract class BaseStrategy implements LoopStrategy {
     // Calculate metrics from history
     const metrics = this.calculateMetrics(context);
 
+    const lastHistoryEntry = state.history.length > 0
+      ? state.history[state.history.length - 1]
+      : null;
+
     return {
       iteration: state.iteration,
       totalIterations: state.maxIterations,
       startedAt: state.startedAt,
-      lastIterationAt: state.history.length > 0
-        ? state.history[state.history.length - 1].completedAt
-        : null,
+      lastIterationAt: lastHistoryEntry?.completedAt ?? null,
       estimatedCompletion,
       progressPercent,
       trend,
@@ -370,10 +379,15 @@ export abstract class BaseStrategy implements LoopStrategy {
     // Detect oscillating patterns (A -> B -> A -> B)
     if (fingerprints.length >= 4) {
       const recent = fingerprints.slice(-4);
+      const r0 = recent[0];
+      const r1 = recent[1];
+      const r2 = recent[2];
+      const r3 = recent[3];
       if (
-        recent[0].sha === recent[2].sha &&
-        recent[1].sha === recent[3].sha &&
-        recent[0].sha !== recent[1].sha
+        r0 && r1 && r2 && r3 &&
+        r0.sha === r2.sha &&
+        r1.sha === r3.sha &&
+        r0.sha !== r1.sha
       ) {
         patterns.push({
           patternType: 'oscillating',
@@ -407,6 +421,10 @@ export abstract class BaseStrategy implements LoopStrategy {
 
     const first = errorCounts[0];
     const last = errorCounts[errorCounts.length - 1];
+
+    if (first === undefined || last === undefined) {
+      return 'unknown';
+    }
 
     if (last < first) {
       return 'improving';
@@ -446,16 +464,20 @@ export abstract class BaseStrategy implements LoopStrategy {
 
     if (previous.length > 0) {
       const lastPrevious = previous[previous.length - 1];
-      metrics.errorsFixed = Math.max(
-        0,
-        lastPrevious.diagnostics.length - (current?.diagnostics.length ?? 0)
-      );
+      if (lastPrevious) {
+        metrics.errorsFixed = Math.max(
+          0,
+          lastPrevious.diagnostics.length - (current?.diagnostics.length ?? 0)
+        );
+      }
     }
 
     // Calculate from history
     if (history.length > 0) {
       const latest = history[history.length - 1];
-      metrics.errorsRemaining = latest.errorsCount;
+      if (latest) {
+        metrics.errorsRemaining = latest.errorsCount;
+      }
     }
 
     // Calculate from snapshots

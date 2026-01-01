@@ -201,11 +201,12 @@ describe('FixedStrategy', () => {
       });
     });
 
-    it('should throw if not initialized', async () => {
+    it('should throw if not initialized', () => {
       const uninitializedStrategy = new FixedStrategy();
       const context = createTestContext();
 
-      await expect(uninitializedStrategy.shouldContinue(context)).rejects.toThrow(
+      // shouldContinue is synchronous now, so it throws directly (wrapped in Promise.resolve)
+      expect(() => uninitializedStrategy.shouldContinue(context)).toThrow(
         /not initialized/
       );
     });
