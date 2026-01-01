@@ -269,8 +269,8 @@ describe('WebSocketClient', () => {
       client.subscribe(handler);
 
       MockWebSocket.instances[0].simulateMessage({
-        type: 'workorder:updated',
-        // Missing 'data' field - intentionally invalid for testing
+        // Missing 'type' field - intentionally invalid for testing
+        data: { id: 'test' },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 

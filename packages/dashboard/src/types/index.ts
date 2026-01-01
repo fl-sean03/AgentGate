@@ -21,3 +21,6 @@ export type ApiResponse<T = unknown> = {
   data?: T
   error?: string
 }
+
+// Re-export agent event types
+export * from './agent-events'

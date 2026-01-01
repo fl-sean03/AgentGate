@@ -4,6 +4,14 @@
 
 import type { WorkOrder } from '../types/work-order';
 import type { Run } from '../types/run';
+import type {
+  AgentToolCallEvent,
+  AgentToolResultEvent,
+  AgentOutputEvent,
+  FileChangedEvent,
+  ProgressUpdateEvent,
+  SubscriptionFilters,
+} from '../types/agent-events';
 
 export type WebSocketEventType =
   | 'workorder:created'
@@ -27,10 +35,93 @@ export interface RunUpdatedEvent extends WebSocketEvent<Run> {
   type: 'run:updated';
 }
 
+// Subscription messages
+export interface SubscribeMessage {
+  type: 'subscribe';
+  workOrderId: string;
+  filters?: SubscriptionFilters;
+}
+
+export interface UnsubscribeMessage {
+  type: 'unsubscribe';
+  workOrderId: string;
+}
+
+export interface PingMessage {
+  type: 'ping';
+}
+
+export type ClientMessage = SubscribeMessage | UnsubscribeMessage | PingMessage;
+
+// Server confirmation messages
+export interface SubscriptionConfirmedEvent {
+  type: 'subscription_confirmed';
+  workOrderId: string;
+  timestamp: string;
+}
+
+export interface UnsubscriptionConfirmedEvent {
+  type: 'unsubscription_confirmed';
+  workOrderId: string;
+  timestamp: string;
+}
+
+export interface PongMessage {
+  type: 'pong';
+  timestamp: string;
+}
+
+export interface ServerErrorMessage {
+  type: 'error';
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
+}
+
+// Run lifecycle events
+export interface RunStartedServerEvent {
+  type: 'run_started';
+  workOrderId: string;
+  runId: string;
+  runNumber: number;
+  timestamp: string;
+}
+
+export interface RunCompletedServerEvent {
+  type: 'run_completed';
+  workOrderId: string;
+  runId: string;
+  prUrl?: string;
+  branchName?: string;
+  timestamp: string;
+}
+
+export interface RunFailedServerEvent {
+  type: 'run_failed';
+  workOrderId: string;
+  runId: string;
+  error: string;
+  iterationNumber?: number;
+  timestamp: string;
+}
+
 export type WebSocketMessage =
   | WorkOrderCreatedEvent
   | WorkOrderUpdatedEvent
-  | RunUpdatedEvent;
+  | RunUpdatedEvent
+  | SubscriptionConfirmedEvent
+  | UnsubscriptionConfirmedEvent
+  | PongMessage
+  | ServerErrorMessage
+  | RunStartedServerEvent
+  | RunCompletedServerEvent
+  | RunFailedServerEvent
+  | AgentToolCallEvent
+  | AgentToolResultEvent
+  | AgentOutputEvent
+  | FileChangedEvent
+  | ProgressUpdateEvent;
 
 export type WebSocketEventHandler = (event: WebSocketMessage) => void;
 
@@ -163,14 +254,30 @@ export class WebSocketClient {
   }
 
   /**
+   * Send a message to the WebSocket server
+   */
+  send(message: object): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    try {
+      this.ws.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Handle incoming WebSocket message
    */
   private handleMessage(data: string): void {
     try {
       const message = JSON.parse(data) as WebSocketMessage;
 
-      // Validate message has required fields
-      if (!message.type || !message.data) {
+      // Validate message has required type field
+      if (!message.type) {
         return;
       }
 
