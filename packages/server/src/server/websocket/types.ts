@@ -5,11 +5,25 @@ import { z } from 'zod';
 // =============================================================================
 
 /**
+ * Subscription filter options for granular event filtering
+ */
+export const subscriptionFiltersSchema = z.object({
+  includeToolCalls: z.boolean().optional().default(true),
+  includeToolResults: z.boolean().optional().default(true),
+  includeOutput: z.boolean().optional().default(true),
+  includeFileChanges: z.boolean().optional().default(true),
+  includeProgress: z.boolean().optional().default(true),
+});
+
+export type SubscriptionFilters = z.infer<typeof subscriptionFiltersSchema>;
+
+/**
  * Subscribe to updates for a specific work order
  */
 export const subscribeMessageSchema = z.object({
   type: z.literal('subscribe'),
   workOrderId: z.string().min(1),
+  filters: subscriptionFiltersSchema.optional(),
 });
 
 export type SubscribeMessage = z.infer<typeof subscribeMessageSchema>;
@@ -158,6 +172,91 @@ export interface UnsubscriptionConfirmedEvent extends BaseEvent {
   workOrderId: string;
 }
 
+// =============================================================================
+// Agent Activity Events
+// =============================================================================
+
+/**
+ * Tool names that can be invoked by the agent
+ */
+export type AgentToolName =
+  | 'Read'
+  | 'Write'
+  | 'Edit'
+  | 'Bash'
+  | 'Grep'
+  | 'Glob'
+  | 'WebFetch'
+  | 'WebSearch'
+  | 'Other';
+
+/**
+ * Event emitted when the agent invokes a tool
+ */
+export interface AgentToolCallEvent extends BaseEvent {
+  type: 'agent_tool_call';
+  workOrderId: string;
+  runId: string;
+  toolUseId: string;
+  tool: AgentToolName;
+  input: Record<string, unknown>;
+}
+
+/**
+ * Event emitted when a tool execution completes
+ */
+export interface AgentToolResultEvent extends BaseEvent {
+  type: 'agent_tool_result';
+  workOrderId: string;
+  runId: string;
+  toolUseId: string;
+  success: boolean;
+  contentPreview: string;
+  contentLength: number;
+  durationMs: number;
+}
+
+/**
+ * Event emitted when the agent produces text output
+ */
+export interface AgentOutputEvent extends BaseEvent {
+  type: 'agent_output';
+  workOrderId: string;
+  runId: string;
+  content: string;
+}
+
+/**
+ * File change action types
+ */
+export type FileChangeAction = 'created' | 'modified' | 'deleted';
+
+/**
+ * Event emitted when a file is changed in the workspace
+ */
+export interface FileChangedEvent extends BaseEvent {
+  type: 'file_changed';
+  workOrderId: string;
+  runId: string;
+  path: string;
+  action: FileChangeAction;
+  sizeBytes?: number;
+}
+
+/**
+ * Event emitted for progress updates during agent execution
+ */
+export interface ProgressUpdateEvent extends BaseEvent {
+  type: 'progress_update';
+  workOrderId: string;
+  runId: string;
+  percentage: number;
+  currentPhase: string;
+  toolCallCount: number;
+  elapsedSeconds: number;
+  estimatedRemainingSeconds?: number;
+}
+
 /**
  * Union of all server message types
  */
@@ -171,7 +270,12 @@ export type ServerMessage =
   | PongMessage
   | ErrorMessage
   | SubscriptionConfirmedEvent
-  | UnsubscriptionConfirmedEvent;
+  | UnsubscriptionConfirmedEvent
+  | AgentToolCallEvent
+  | AgentToolResultEvent
+  | AgentOutputEvent
+  | FileChangedEvent
+  | ProgressUpdateEvent;
 
 // =============================================================================
 // Connection Types
