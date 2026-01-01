@@ -261,7 +261,8 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
-| [v0.2.15](./DevGuide_v0.2.15/00-index.md) | **Production-Grade CI/CD System** | Not Started | Comprehensive CI system, test reliability, cross-platform support, release automation |
+| [v0.2.16](./DevGuide_v0.2.16/00-index.md) | **Work Order Harness Configuration** | Not Started | Configurable harness system with named profiles, pluggable loop strategies (fixed, hybrid, ralph, custom), audit trails |
+| [v0.2.15](./DevGuide_v0.2.15/00-index.md) | **Production-Grade CI/CD System** | Complete | Comprehensive CI system, test reliability, cross-platform support, release automation |
 | [v0.2.14](./DevGuide_v0.2.14/00-index.md) | **Claude Agent SDK Integration** | Complete | SDK driver for API-key billing, hooks system, streaming messages, built-in sandbox |
 | [v0.2.13](./DevGuide_v0.2.13/00-index.md) | **Per-Agent Container Sandboxing** | Complete | Docker container isolation per agent, filesystem/network/resource limits |
 | [v0.2.12](./DevGuide_v0.2.12/00-index.md) | **GitHub CI Feedback Loop** | Complete | Automated CI monitoring, failure log parsing, agent remediation loop |
