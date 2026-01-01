@@ -66,17 +66,14 @@ export function WorkOrders() {
     maxTime: number;
   }) => {
     try {
-      // Map form data to API request
+      // Map form data to API request (using camelCase to match server API)
       const request: CreateWorkOrderRequest = {
-        prompt: formData.prompt,
-        workspace_source: {
-          type: formData.workspaceSourceType === 'local' ? 'local' : 'git',
-          url: formData.sourceUrl,
-          branch: formData.sourceBranch,
-          path: formData.sourcePath,
-        },
-        max_iterations: formData.maxIterations,
-        max_time: formData.maxTime,
+        taskPrompt: formData.prompt,
+        workspaceSource: formData.workspaceSourceType === 'local'
+          ? { type: 'local', path: formData.sourcePath }
+          : { type: formData.workspaceSourceType, repo: formData.sourceUrl, branch: formData.sourceBranch },
+        maxIterations: formData.maxIterations,
+        maxTime: formData.maxTime,
       };
 
       await createWorkOrderMutation.mutateAsync(request);
