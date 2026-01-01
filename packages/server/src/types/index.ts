@@ -176,3 +176,16 @@ export {
   type TreeNode,
   type TreeMetadata,
 } from './tree-metadata.js';
+
+// Sandbox Types
+export type {
+  NetworkMode,
+  ResourceLimits,
+  SandboxConfig,
+  SandboxStatus,
+  ExecOptions,
+  ExecResult,
+  SandboxStats,
+  Sandbox,
+  SandboxProvider,
+} from '../sandbox/types.js';
