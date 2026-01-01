@@ -28,3 +28,19 @@ export {
   FixedStrategy,
   createFixedStrategy,
 } from './strategies/index.js';
+
+// Config Loader
+export {
+  listProfiles,
+  loadProfile,
+  profileExists,
+  saveProfile,
+  ensureHarnessDir,
+  HARNESS_DIR,
+  DEFAULT_PROFILE_NAME,
+  PROFILE_EXTENSION,
+  ProfileNotFoundError,
+  ProfileParseError,
+  ProfileValidationError,
+  type HarnessProfileInfo,
+} from './config-loader.js';
