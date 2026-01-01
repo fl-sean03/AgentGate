@@ -96,6 +96,20 @@ Currently, when an agent creates a PR:
 
 ---
 
+## Thrust Status
+
+| # | Thrust | Status | Notes |
+|---|--------|--------|-------|
+| 1 | GitHub Actions Client | ✅ Complete | `actions-client.ts` |
+| 2 | Workflow Run Monitor | ✅ Complete | `workflow-monitor.ts` |
+| 3 | CI Log Parser | ✅ Complete | `log-downloader.ts`, `log-parser.ts` |
+| 4 | Failure Summarizer | ✅ Complete | `failure-summarizer.ts` |
+| 5 | CI Feedback Integration | ⬜ Not Started | `ci-feedback.ts` needed |
+| 6 | Configuration & Dashboard | ⬜ Not Started | Config + dashboard components |
+| 7 | Draft PR Until Verified | ✅ Complete | In orchestrator.ts |
+
+---
+
 ## File Map
 
 ### New Files
