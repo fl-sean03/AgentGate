@@ -321,7 +321,10 @@ export class Orchestrator {
       // 1. Profile name from work order (if any)
       // 2. Default harness config from orchestrator
       // 3. CLI overrides from work order
-      if (workOrder.harnessProfile || this.config.defaultHarnessConfig || Object.keys(cliOverrides).length > 0) {
+      const hasProfile = workOrder.harnessProfile != null;
+      const hasDefaultConfig = this.config.defaultHarnessConfig != null;
+      const hasOverrides = Object.keys(cliOverrides).length > 0;
+      if (hasProfile || hasDefaultConfig || hasOverrides) {
         const resolveOptions: {
           profileName?: string;
           cliOverrides?: Partial<HarnessConfig>;
