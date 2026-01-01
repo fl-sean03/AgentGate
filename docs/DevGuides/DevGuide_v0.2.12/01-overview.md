@@ -1,173 +1,290 @@
-# 01: Overview
+# 01: Overview - GitHub CI Feedback Loop
 
 ## Current State
 
-AgentGate currently creates PRs on GitHub but has no visibility into CI status:
+### What Works
 
-1. **No CI awareness**: Agent completes, PR is created, but CI might fail
-2. **Manual intervention**: User must check GitHub for CI failures
-3. **Context lost**: When CI fails, agent context is already gone
-4. **No remediation**: Agent cannot fix issues it caused
+1. **PR Creation**: Agents can create PRs via GitHub API (v0.2.4)
+2. **State Machine**: CI_POLLING and CI_FAILED states exist
+3. **Feedback Loop**: Local verification failures trigger agent remediation
+4. **GitHub Integration**: Octokit client configured for repo operations
+
+### What's Missing
+
+1. **No CI Monitoring**: After PR creation, the system doesn't poll GitHub Actions
+2. **No Log Retrieval**: Cannot download workflow run logs programmatically
+3. **No Failure Parsing**: Cannot extract actionable info from CI failures
+4. **No CI Feedback**: CI failures don't trigger agent remediation
+5. **Manual Intervention**: Admin override required for failing PRs
+
+### Current Flow (Broken)
+
+```
+Agent builds → Verification passes → PR created → ???
+                                                   │
+                                                   ↓
+                                            (Nothing happens)
+                                                   │
+                                                   ↓
+                                        Human checks PR manually
+                                                   │
+                                                   ↓
+                                        Admin merge with override
+```
+
+---
 
 ## Target State
 
-Automated CI feedback loop with agent-driven remediation:
+### Complete CI Feedback Loop
 
-1. **CI monitoring**: Track workflow runs for PRs we create
-2. **Failure detection**: Parse logs to extract actionable errors
-3. **Context preservation**: Keep agent session for remediation
-4. **Automatic retry**: Feed failures back for agent to fix
-5. **Iteration tracking**: Limit retries to prevent loops
+```
+Agent builds → Verification passes → PR created
+                                          │
+                                          ↓
+                                   CI Monitor starts
+                                          │
+                                          ↓
+                              Poll GitHub Actions (every 30s)
+                                          │
+                            ┌─────────────┴─────────────┐
+                            │                           │
+                            ↓                           ↓
+                      CI PASSED                    CI FAILED
+                            │                           │
+                            ↓                           ↓
+                    Run SUCCEEDED              Download logs
+                            │                           │
+                            ↓                           ↓
+                    Ready for merge           Parse failures
+                                                        │
+                                                        ↓
+                                              Generate feedback
+                                                        │
+                                                        ↓
+                                              Agent remediates
+                                                        │
+                                                        ↓
+                                                New commit → Push
+                                                        │
+                                                        ↓
+                                              CI runs again...
+                                                        │
+                                                        └──→ (loop)
+```
+
+### Key Capabilities
+
+1. **Automatic Polling**: Start polling when PR is created
+2. **Smart Log Parsing**: Extract only relevant failure information
+3. **Actionable Feedback**: Format failures as agent-friendly instructions
+4. **Iteration Limits**: Max CI retries to prevent infinite loops
+5. **Timeout Handling**: Fail gracefully if CI takes too long
+6. **Dashboard Visibility**: Show CI status in real-time
+
+---
+
+## Design Decisions
+
+### 1. Polling vs Webhooks
+
+**Decision: Polling**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Polling** | Simple, no infrastructure, works anywhere | Latency, API rate limits |
+| **Webhooks** | Real-time, efficient | Requires public endpoint, webhook setup |
+
+**Rationale:**
+- AgentGate runs locally or in containers without guaranteed public endpoints
+- GitHub Actions have generous API rate limits (5000/hour with token)
+- 30-second polling interval is acceptable for CI runs that take minutes
+- Simpler to implement and maintain
+
+### 2. Log Storage
+
+**Decision: In-memory with optional persistence**
+
+- Keep last N CI logs in memory per work order
+- Optionally persist to `.agentgate/ci-logs/` for debugging
+- Don't persist full logs by default (can be large)
+- Always store parsed failure summaries
+
+### 3. Feedback Format
+
+**Decision: Structured markdown with actionable items**
+
+```markdown
+## CI Failure Report
+
+### Failed Jobs
+
+#### 1. Tests (Node 20)
+**Step:** Run tests
+**Error:**
+```
+FAIL test/git-ops.test.ts > Git Operations > merge operations
+Error: pathspec 'main' did not match any file(s) known to git
+```
+
+### Action Items
+
+1. The test assumes a 'main' branch exists but the test creates repos without one
+2. Update git-ops.test.ts to create 'main' branch in test setup
+3. Run `pnpm test` locally to verify fix
+
+### Full Log
+<details>
+<summary>Click to expand</summary>
+[truncated log content]
+</details>
+```
+
+### 4. Retry Strategy
+
+**Decision: Exponential backoff with max retries**
+
+- First CI failure: Immediate feedback
+- Subsequent failures: Agent gets full context of previous attempts
+- Max CI iterations: Configurable (default 3)
+- After max: Run fails with all CI feedback collected
+
+### 5. Branch Management
+
+**Decision: Push to same branch, no new PRs**
+
+- Agent fixes issues and pushes to the existing PR branch
+- GitHub Actions automatically re-run on new commits
+- Preserves PR conversation and review comments
+- Avoids PR proliferation
 
 ---
 
 ## Integration Points
 
-### With Run Executor
+### 1. Orchestrator
 
-The run executor currently:
-1. Executes agent with task prompt
-2. Runs verification (L0-L3)
-3. Creates PR on success
-4. Marks run complete
+**File:** `packages/server/src/orchestrator/orchestrator.ts`
 
-New flow:
-1. Execute agent with task prompt
-2. Run verification (L0-L3)
-3. Create PR on success
-4. **Monitor CI workflow**
-5. **If CI fails: parse logs, create remediation prompt**
-6. **Re-execute agent with remediation context**
-7. **Push to same branch (force push or new commit)**
-8. **Repeat until CI passes or max retries**
-9. Mark run complete
+The orchestrator needs to:
+- Start CI monitoring after PR creation
+- Handle CI results (pass/fail/timeout)
+- Generate CI feedback for agent remediation
+- Track CI iteration count separately from build iterations
 
-### With Agent Driver
+### 2. Run Executor
 
-The remediation prompt must be passed to the same agent session:
-- Use `--resume` with session ID to continue conversation
-- Provide structured failure information
-- Let agent decide how to fix
+**File:** `packages/server/src/orchestrator/run-executor.ts`
 
-### With WebSocket Broadcaster
+After the VERIFYING phase creates a PR:
+- Transition to CI_POLLING state
+- Start workflow monitor
+- Wait for CI completion
+- On failure: transition to FEEDBACK with CI context
+- On success: transition to SUCCEEDED
 
-Emit new event types for CI status:
-- `ci_workflow_started`: CI kicked off
-- `ci_workflow_completed`: CI finished (pass/fail)
-- `ci_remediation_started`: Agent is fixing CI failures
-- `ci_remediation_attempt`: Attempt number and context
+### 3. State Machine
 
----
+**File:** `packages/server/src/orchestrator/state-machine.ts`
 
-## Data Flow
+States already exist:
+- `PR_CREATED` → `CI_POLLING_STARTED` → `CI_POLLING`
+- `CI_POLLING` → `CI_PASSED` → `SUCCEEDED`
+- `CI_POLLING` → `CI_FAILED` → `FEEDBACK`
+- `CI_POLLING` → `CI_TIMEOUT` → `FAILED`
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Run Executor                               │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│   1. Agent executes task                                             │
-│   2. Verification passes                                             │
-│   3. PR created → prUrl, branchName                                  │
-│      │                                                               │
-│      ▼                                                               │
-│   4. Start CI monitoring loop                                        │
-│      │                                                               │
-│      └──► WorkflowMonitor.waitForCompletion(owner, repo, pr)        │
-│           │                                                          │
-│           ├─► Poll: GET /repos/{owner}/{repo}/actions/runs          │
-│           │   Filter: head_sha matches PR head                       │
-│           │                                                          │
-│           └─► Returns: WorkflowRunResult                             │
-│               │                                                      │
-│               ├── status: 'success' ──► Run complete!                │
-│               │                                                      │
-│               └── status: 'failure' ──► 5. Download logs             │
-│                   │                                                  │
-│                   └──► LogDownloader.download(run)                   │
-│                        │                                             │
-│                        └──► Returns: raw log text                    │
-│                             │                                        │
-│                             ▼                                        │
-│                        6. Parse logs                                 │
-│                        LogParser.parse(logs)                         │
-│                        │                                             │
-│                        └──► Returns: CIFailure[]                     │
-│                             │                                        │
-│                             ▼                                        │
-│                        7. Generate remediation prompt                │
-│                        FailureSummarizer.summarize(failures)         │
-│                        │                                             │
-│                        └──► Returns: remediationPrompt               │
-│                             │                                        │
-│                             ▼                                        │
-│                        8. Resume agent with remediation context      │
-│                        AgentDriver.execute({                         │
-│                          prompt: remediationPrompt,                  │
-│                          sessionId: originalSessionId                │
-│                        })                                            │
-│                        │                                             │
-│                        └──► Loop back to step 3                      │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+No state machine changes needed - only implementation.
+
+### 4. Configuration
+
+**File:** `packages/server/src/config/index.ts`
+
+New configuration options:
+- `AGENTGATE_CI_ENABLED`: Enable/disable CI monitoring
+- `AGENTGATE_CI_POLL_INTERVAL_MS`: Polling interval (default 30000)
+- `AGENTGATE_CI_TIMEOUT_MINUTES`: Max wait time (default 30)
+- `AGENTGATE_CI_MAX_RETRIES`: Max CI remediation attempts (default 3)
+- `AGENTGATE_CI_LOG_RETENTION`: Number of logs to keep (default 5)
+
+### 5. GitHub Client
+
+**File:** `packages/server/src/github/` (new module)
+
+New GitHub operations:
+- List workflow runs for a commit/branch
+- Get workflow run status
+- Download workflow run logs
+- Parse log archive (zip format)
 
 ---
 
-## Failure Categories
+## Error Handling
 
-### Build Failures
+### API Errors
 
-- TypeScript compilation errors
-- Missing dependencies
-- Import/export mismatches
+| Error | Response |
+|-------|----------|
+| Rate limited | Back off exponentially, log warning |
+| Network error | Retry with backoff |
+| Auth error | Fail run with clear message |
+| 404 (workflow not found) | Wait and retry (may not exist yet) |
 
-### Lint Failures
+### CI Errors
 
-- ESLint errors
-- Prettier formatting issues
-- Type checking errors
+| Scenario | Response |
+|----------|----------|
+| CI never starts | Timeout after configured duration |
+| CI cancelled externally | Treat as failure, include in feedback |
+| Workflow not found | Check if repo has workflows, fail with message |
+| Logs unavailable | Proceed with minimal feedback |
 
-### Test Failures
+### Feedback Errors
 
-- Jest/Vitest assertion failures
-- Test timeouts
-- Coverage thresholds not met
-
-### Other Failures
-
-- Docker build failures
-- E2E test failures
-- Custom validation scripts
-
----
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AGENTGATE_CI_ENABLED` | `true` | Enable CI monitoring |
-| `AGENTGATE_MAX_CI_RETRIES` | `3` | Max remediation attempts |
-| `AGENTGATE_CI_POLL_INTERVAL_MS` | `30000` | Poll interval (30s) |
-| `AGENTGATE_CI_TIMEOUT_MS` | `1800000` | Max wait time (30min) |
-| `AGENTGATE_CI_LOG_MAX_SIZE` | `5242880` | Max log size (5MB) |
-
-### Work Order Options
-
-The `verify.yaml` already has `useGitHubCI: true` option from v0.2.10 Thrust 16.
-
-This DevGuide implements the actual monitoring and remediation.
+| Scenario | Response |
+|----------|----------|
+| Log parsing fails | Include raw log snippet |
+| Summary generation fails | Use raw error messages |
+| Agent remediation fails | Count toward max iterations |
 
 ---
 
-## Success Metrics
+## Security Considerations
 
-| Metric | Target |
-|--------|--------|
-| CI pass rate after 1 remediation | > 60% |
-| CI pass rate after 3 remediations | > 85% |
-| Average CI check time | < 5 minutes |
-| Log parsing accuracy | > 90% |
-| False positive rate | < 5% |
+1. **Token Scope**: Requires `repo` and `actions` scopes
+2. **Log Content**: Logs may contain secrets if workflow leaks them
+3. **Rate Limiting**: Respect GitHub API limits
+4. **Repo Access**: Only access repos the token has access to
+
+---
+
+## Performance Considerations
+
+1. **Polling Overhead**: 30s interval = 2 API calls/minute per active PR
+2. **Log Size**: Workflow logs can be 10-100MB compressed
+3. **Memory**: Keep only parsed summaries in memory
+4. **Concurrent PRs**: Each PR polls independently
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+- Actions client: Mock Octokit responses
+- Log parser: Real log samples
+- Failure summarizer: Various failure patterns
+- Workflow monitor: State transitions
+
+### Integration Tests
+
+- Full CI feedback loop with mock GitHub
+- Timeout handling
+- Retry logic
+- Multiple concurrent PRs
+
+### E2E Tests (Manual)
+
+- Create PR that fails CI
+- Verify feedback generated
+- Verify agent fixes issue
+- Verify CI passes on retry
