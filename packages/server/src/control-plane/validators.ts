@@ -9,6 +9,7 @@ import {
   workspaceSourceSchema,
   executionPoliciesSchema,
   VerificationLevel,
+  LoopStrategyMode,
 } from '../types/index.js';
 
 /**
@@ -123,6 +124,9 @@ export const submitCommandOptionsSchema = z.object({
   public: z.boolean().default(false), // For github-new - repos are private by default
   waitForCi: z.boolean().default(false), // CI polling (Thrust 16)
   skipVerification: z.array(z.nativeEnum(VerificationLevel)).optional(), // Skip verification levels (v0.2.15)
+  // Harness configuration (v0.2.16 - Thrust 10)
+  harness: z.string().optional(), // Named harness profile
+  loopStrategy: z.nativeEnum(LoopStrategyMode).optional(), // Loop strategy mode override
   agent: z.nativeEnum(AgentType).default(AgentType.CLAUDE_CODE_SUBSCRIPTION),
   maxIterations: z.coerce.number().int().min(1).max(10).default(3),
   maxTime: z.coerce.number().int().min(60).max(86400).default(3600),
