@@ -237,11 +237,12 @@ describe('RalphStrategy', () => {
       });
     });
 
-    it('should throw if not initialized', async () => {
+    it('should throw if not initialized', () => {
       const uninitializedStrategy = new RalphStrategy();
       const context = createTestContext();
 
-      await expect(uninitializedStrategy.shouldContinue(context)).rejects.toThrow(/not initialized/);
+      // shouldContinue throws synchronously when not initialized
+      expect(() => uninitializedStrategy.shouldContinue(context)).toThrow(/not initialized/);
     });
 
     it('should stop when max iterations reached', async () => {

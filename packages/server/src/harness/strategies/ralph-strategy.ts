@@ -11,8 +11,6 @@
  * - Verification passes (if not skipped)
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { LoopDecision, LoopContext } from '../../types/loop-strategy.js';
 import {
   LoopStrategyMode,
@@ -35,12 +33,6 @@ const COMPLETION_SIGNALS = [
   '[TASK COMPLETE]',
   '[DONE]',
 ] as const;
-
-/**
- * State file names for persistence.
- */
-const STATE_FILE = 'loop-state.json';
-const METRICS_FILE = 'metrics.json';
 
 /**
  * Internal state for Ralph strategy.
@@ -101,7 +93,7 @@ export class RalphStrategy extends BaseStrategy {
    * 5. Check if minimum iterations reached
    * 6. Otherwise continue
    */
-  async shouldContinue(context: LoopContext): Promise<LoopDecision> {
+  shouldContinue(context: LoopContext): Promise<LoopDecision> {
     const config = this.getConfig();
     const { state, currentVerification } = context;
 
@@ -115,11 +107,13 @@ export class RalphStrategy extends BaseStrategy {
         },
         'Max iterations reached'
       );
-      return this.stopDecision('Max iterations reached', {
-        iteration: state.iteration,
-        maxIterations: config.maxIterations,
-        action: 'timeout',
-      });
+      return Promise.resolve(
+        this.stopDecision('Max iterations reached', {
+          iteration: state.iteration,
+          maxIterations: config.maxIterations,
+          action: 'timeout',
+        })
+      );
     }
 
     // Check for completion signal in agent output
@@ -130,11 +124,13 @@ export class RalphStrategy extends BaseStrategy {
         'Agent signaled completion'
       );
       this.internalState.completionSignalFound = true;
-      return this.stopDecision('Agent signaled completion', {
-        iteration: state.iteration,
-        signal: this.findCompletionSignal(agentOutput),
-        action: 'complete',
-      });
+      return Promise.resolve(
+        this.stopDecision('Agent signaled completion', {
+          iteration: state.iteration,
+          signal: this.findCompletionSignal(agentOutput),
+          action: 'complete',
+        })
+      );
     }
 
     // Check for similarity-based loop detection (if enabled)
@@ -148,12 +144,14 @@ export class RalphStrategy extends BaseStrategy {
           },
           'Similarity-based loop detected'
         );
-        return this.stopDecision('Loop detected via output similarity', {
-          iteration: state.iteration,
-          loopCount: this.internalState.loopCount,
-          threshold: config.convergenceThreshold,
-          action: 'loop_detected',
-        });
+        return Promise.resolve(
+          this.stopDecision('Loop detected via output similarity', {
+            iteration: state.iteration,
+            loopCount: this.internalState.loopCount,
+            threshold: config.convergenceThreshold,
+            action: 'loop_detected',
+          })
+        );
       }
     }
 
@@ -166,11 +164,13 @@ export class RalphStrategy extends BaseStrategy {
         { workOrderId: context.workOrderId, iteration: state.iteration },
         'Verification passed, stopping'
       );
-      return this.stopDecision('Verification passed', {
-        iteration: state.iteration,
-        verificationId: currentVerification.id,
-        action: 'complete',
-      });
+      return Promise.resolve(
+        this.stopDecision('Verification passed', {
+          iteration: state.iteration,
+          verificationId: currentVerification.id,
+          action: 'complete',
+        })
+      );
     }
 
     // Check minimum iterations
@@ -183,11 +183,13 @@ export class RalphStrategy extends BaseStrategy {
         },
         'Minimum iterations not reached, continuing'
       );
-      return this.continueDecision('Minimum iterations not reached', {
-        iteration: state.iteration,
-        minIterations: config.minIterations,
-        remainingMin: config.minIterations - state.iteration,
-      });
+      return Promise.resolve(
+        this.continueDecision('Minimum iterations not reached', {
+          iteration: state.iteration,
+          minIterations: config.minIterations,
+          remainingMin: config.minIterations - state.iteration,
+        })
+      );
     }
 
     // Continue to next iteration
@@ -201,11 +203,13 @@ export class RalphStrategy extends BaseStrategy {
       'Continuing to next iteration'
     );
 
-    return this.continueDecision('Waiting for completion signal', {
-      iteration: state.iteration,
-      remainingIterations,
-      maxIterations: config.maxIterations,
-    });
+    return Promise.resolve(
+      this.continueDecision('Waiting for completion signal', {
+        iteration: state.iteration,
+        remainingIterations,
+        maxIterations: config.maxIterations,
+      })
+    );
   }
 
   /**
@@ -217,7 +221,7 @@ export class RalphStrategy extends BaseStrategy {
     const config = this.getConfig();
 
     // Try to load persisted state if available
-    await this.loadState(context);
+    this.loadState(context);
 
     logger.info(
       {
@@ -252,7 +256,7 @@ export class RalphStrategy extends BaseStrategy {
     }
 
     // Persist state if configured
-    await this.persistState(context);
+    this.persistState(context);
   }
 
   /**
@@ -413,47 +417,32 @@ export class RalphStrategy extends BaseStrategy {
 
   /**
    * Persist state to disk for crash recovery.
+   * This is a placeholder for future enhancement.
    */
-  private async persistState(context: LoopContext): Promise<void> {
+  private persistState(context: LoopContext): void {
     // State persistence is optional - only persist if we have a workspace
     // In the current implementation, we don't have direct access to stateDir
-    // This is a placeholder for future enhancement
 
-    try {
-      // For now, just track that we would persist
-      this.internalState.persistedAt = new Date();
+    // For now, just track that we would persist
+    this.internalState.persistedAt = new Date();
 
-      logger.debug(
-        {
-          workOrderId: context.workOrderId,
-          iteration: context.state.iteration,
-        },
-        'State persistence checkpoint'
-      );
-    } catch (error) {
-      logger.warn(
-        { workOrderId: context.workOrderId, err: error },
-        'Failed to persist state (non-fatal)'
-      );
-    }
+    logger.debug(
+      {
+        workOrderId: context.workOrderId,
+        iteration: context.state.iteration,
+      },
+      'State persistence checkpoint'
+    );
   }
 
   /**
    * Load persisted state from disk.
+   * This is a placeholder for future enhancement.
    */
-  private async loadState(context: LoopContext): Promise<void> {
+  private loadState(context: LoopContext): void {
     // State loading is optional - only load if we have persisted state
-    // This is a placeholder for future enhancement
-
-    try {
-      logger.debug({ workOrderId: context.workOrderId }, 'Checking for persisted state');
-      // In a full implementation, we would check for state files and restore
-    } catch (error) {
-      logger.debug(
-        { workOrderId: context.workOrderId, err: error },
-        'No persisted state found (normal on first run)'
-      );
-    }
+    logger.debug({ workOrderId: context.workOrderId }, 'Checking for persisted state');
+    // In a full implementation, we would check for state files and restore
   }
 }
 
