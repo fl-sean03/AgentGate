@@ -165,7 +165,74 @@ describe('GitHubError', () => {
   });
 
   it('should have correct name', () => {
-    const error = new GitHubError('Test', GitHubErrorCode.UNKNOWN);
+    const error = new GitHubError('Test', GitHubErrorCode.NETWORK_ERROR);
     expect(error.name).toBe('GitHubError');
+  });
+});
+
+describe('Pull Request Schema', () => {
+  it('should include draft field with default false', async () => {
+    const { gitHubPullRequestSchema } = await import('../src/types/github.js');
+
+    const pr = {
+      number: 123,
+      url: 'https://github.com/owner/repo/pull/123',
+      title: 'Test PR',
+      state: 'open',
+      head: 'feature-branch',
+      base: 'main',
+    };
+
+    const result = gitHubPullRequestSchema.parse(pr);
+    expect(result.draft).toBe(false);
+  });
+
+  it('should accept explicit draft: true', async () => {
+    const { gitHubPullRequestSchema } = await import('../src/types/github.js');
+
+    const pr = {
+      number: 123,
+      url: 'https://github.com/owner/repo/pull/123',
+      title: 'Test PR',
+      state: 'open',
+      head: 'feature-branch',
+      base: 'main',
+      draft: true,
+    };
+
+    const result = gitHubPullRequestSchema.parse(pr);
+    expect(result.draft).toBe(true);
+  });
+});
+
+describe('Create Pull Request Options Schema', () => {
+  it('should include draft field with default false', async () => {
+    const { createPullRequestOptionsSchema } = await import('../src/types/github.js');
+
+    const options = {
+      owner: 'testowner',
+      repo: 'testrepo',
+      title: 'Test PR',
+      head: 'feature-branch',
+    };
+
+    const result = createPullRequestOptionsSchema.parse(options);
+    expect(result.draft).toBe(false);
+    expect(result.base).toBe('main'); // default
+  });
+
+  it('should accept explicit draft: true', async () => {
+    const { createPullRequestOptionsSchema } = await import('../src/types/github.js');
+
+    const options = {
+      owner: 'testowner',
+      repo: 'testrepo',
+      title: 'Test PR',
+      head: 'feature-branch',
+      draft: true,
+    };
+
+    const result = createPullRequestOptionsSchema.parse(options);
+    expect(result.draft).toBe(true);
   });
 });

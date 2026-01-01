@@ -413,3 +413,112 @@ Create mock server that simulates:
 5. **Timeout**: CI takes too long
 6. **No workflows**: Repo has no CI configured
 7. **Concurrent PRs**: Multiple runs polling simultaneously
+
+---
+
+## Thrust 7: Draft PR Until Verified
+
+### 7.1 Objective
+
+Implement a "Draft PR until verified" workflow where PRs are created as drafts initially and only converted to "Ready for Review" after CI verification passes.
+
+### 7.2 Background
+
+Previously, PRs were created as ready for review immediately after local verification passed. This caused issues:
+- PRs could have failing CI checks when reviewers looked at them
+- Failed work orders still created reviewable PRs
+- No clear signal of CI verification status
+
+**Solution:**
+- Create all PRs as drafts initially (`draft: true`)
+- After CI passes, convert the draft to "Ready for Review"
+- If CI fails, PR remains as draft until remediation succeeds
+
+### 7.3 Implementation
+
+#### 7.3.1 GitHub API for Draft Conversion
+
+GitHub's REST API doesn't have a direct endpoint to convert drafts to ready. Use GraphQL:
+
+```graphql
+mutation($pullRequestId: ID!) {
+  markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+    pullRequest {
+      number
+      url
+      title
+      state
+      headRefName
+      baseRefName
+      isDraft
+    }
+  }
+}
+```
+
+#### 7.3.2 New Function: convertDraftToReady
+
+Added to `packages/server/src/workspace/github.ts`:
+
+```typescript
+export async function convertDraftToReady(
+  client: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<GitHubPullRequest>
+```
+
+**Behavior:**
+- Uses GraphQL API to mark PR ready for review
+- Returns updated PR metadata with `draft: false`
+- Handles "not a draft" error gracefully (returns current state)
+- Throws on 404 (PR not found) or 422 (validation error)
+
+#### 7.3.3 Orchestrator Changes
+
+Modified `packages/server/src/orchestrator/orchestrator.ts`:
+
+1. **PR Creation**: Changed `draft: false` to `draft: true`
+2. **CI Polling**: After `ciStatus.allPassed`, call `convertDraftToReady`
+3. **Error Handling**: Log warning if conversion fails, but don't fail the run
+
+#### 7.3.4 Type Updates
+
+Added `draft` field to `GitHubPullRequest` schema:
+
+```typescript
+export const gitHubPullRequestSchema = z.object({
+  // ... existing fields
+  draft: z.boolean().default(false),
+});
+```
+
+### 7.4 Flow
+
+```
+1. Local verification passes
+2. PR created as DRAFT
+3. CI polling begins
+4. CI passes → convertDraftToReady() → PR is READY FOR REVIEW
+   CI fails → PR remains DRAFT → feedback loop → agent remediates
+5. After remediation, push to same branch triggers new CI
+6. Repeat until CI passes or max iterations
+```
+
+### 7.5 Verification Steps
+
+1. Run `pnpm typecheck` - no errors
+2. Run `pnpm test` - all tests pass
+3. Create work order with GitHub workspace and `waitForCI: true`
+4. Verify PR is created as draft
+5. Verify PR converts to ready after CI passes
+6. Verify failed CI leaves PR as draft
+
+### 7.6 Files Modified
+
+| File | Changes |
+|------|---------|
+| `packages/server/src/types/github.ts` | Added `draft` field to PR schema |
+| `packages/server/src/workspace/github.ts` | Added `convertDraftToReady` function, updated return types |
+| `packages/server/src/orchestrator/orchestrator.ts` | Create draft PRs, convert after CI passes |
