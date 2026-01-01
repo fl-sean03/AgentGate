@@ -15,6 +15,7 @@ import type {
   AgentResult,
   DriverCapabilities,
   SubscriptionStatus,
+  SandboxInfo,
 } from '../types/index.js';
 import { createLogger } from '../utils/index.js';
 import { buildClaudeCommand, buildCommandString } from './command-builder.js';
@@ -26,6 +27,7 @@ import {
   type StreamingEventCallback,
   type StreamingOptions,
 } from './streaming-executor.js';
+import { getSandboxManager, type SandboxConfig } from '../sandbox/index.js';
 
 const logger = createLogger('agent:claude-code-subscription');
 
@@ -70,6 +72,10 @@ export interface ClaudeCodeSubscriptionDriverConfig {
   defaultTimeoutMs?: number;
   /** Additional environment variables to pass (API keys will still be excluded) */
   env?: Record<string, string>;
+  /** Enable sandbox execution (default: false for backward compat) */
+  useSandbox?: boolean;
+  /** Sandbox configuration overrides */
+  sandboxConfig?: Partial<SandboxConfig>;
 }
 
 /**
@@ -96,7 +102,13 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
   readonly name = 'claude-code-subscription';
   readonly version = '1.0.0';
 
-  private readonly config: Required<ClaudeCodeSubscriptionDriverConfig>;
+  private readonly config: {
+    binaryPath: string;
+    defaultTimeoutMs: number;
+    env: Record<string, string>;
+    useSandbox: boolean;
+    sandboxConfig: Partial<SandboxConfig>;
+  };
   private subscriptionStatus: SubscriptionStatus | null = null;
 
   constructor(config: ClaudeCodeSubscriptionDriverConfig = {}) {
@@ -104,6 +116,8 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
       binaryPath: config.binaryPath ?? 'claude',
       defaultTimeoutMs: config.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS,
       env: config.env ?? {},
+      useSandbox: config.useSandbox ?? false,
+      sandboxConfig: config.sandboxConfig ?? {},
     };
   }
 
@@ -223,6 +237,130 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
       };
     }
 
+    // Try sandbox execution if enabled
+    if (this.config.useSandbox) {
+      try {
+        return await this.executeWithSandbox(request);
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          'Sandbox execution failed, falling back to direct spawn'
+        );
+        // Fall through to direct spawn
+      }
+    }
+
+    return this.executeDirectly(request);
+  }
+
+  /**
+   * Execute using sandbox isolation (subscription mode).
+   */
+  private async executeWithSandbox(request: AgentRequest): Promise<AgentResult> {
+    const startTime = Date.now();
+    const args = buildClaudeCommand(request);
+    const timeoutSeconds = Math.ceil((request.timeoutMs || this.config.defaultTimeoutMs) / 1000);
+
+    logger.info(
+      {
+        workspace: request.workspacePath,
+        maxTurns: request.constraints.maxTurns,
+        hasSession: !!request.sessionId,
+        timeoutSeconds,
+        subscriptionType: this.subscriptionStatus?.subscriptionType,
+        rateLimitTier: this.subscriptionStatus?.rateLimitTier,
+        billingMethod: 'subscription',
+        useSandbox: true,
+      },
+      'Executing Claude Code with subscription and sandbox'
+    );
+
+    logger.debug({ command: buildCommandString(request) }, 'Full command');
+
+    // Create clean environment (exclude API keys)
+    const cleanEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(this.config.env)) {
+      if (!EXCLUDED_ENV_VARS.includes(key)) {
+        cleanEnv[key] = value;
+      }
+    }
+    cleanEnv['NO_COLOR'] = '1';
+    cleanEnv['FORCE_COLOR'] = '0';
+
+    const sandboxManager = getSandboxManager();
+    const sandboxConfig: SandboxConfig = {
+      workspacePath: request.workspacePath,
+      env: cleanEnv,
+      resourceLimits: {
+        timeoutSeconds,
+        ...this.config.sandboxConfig.resourceLimits,
+      },
+      ...this.config.sandboxConfig,
+    };
+
+    const sandbox = await sandboxManager.createSandbox(sandboxConfig);
+    const sandboxStartTime = Date.now();
+
+    try {
+      const result = await sandbox.execute(this.config.binaryPath, args, {
+        timeout: timeoutSeconds,
+      });
+
+      const durationMs = Date.now() - startTime;
+      const structuredOutput = parseOutput(result.stdout);
+
+      // Get sandbox stats for info
+      const stats = await sandbox.getStats();
+      const sandboxInfo: SandboxInfo = {
+        provider: sandboxManager.getProviderName(),
+        durationMs: Date.now() - sandboxStartTime,
+      };
+      // Add optional properties only if defined
+      if (sandbox.containerId) {
+        sandboxInfo.containerId = sandbox.containerId;
+      }
+      if (stats.cpuPercent !== undefined) {
+        sandboxInfo.resourceUsage = {
+          cpuPercent: stats.cpuPercent,
+          memoryMB: (stats.memoryBytes ?? 0) / (1024 * 1024),
+        };
+      }
+
+      logger.info(
+        {
+          exitCode: result.exitCode,
+          durationMs,
+          hasOutput: !!structuredOutput,
+          billingMethod: 'subscription',
+          sandboxProvider: sandboxInfo.provider,
+        },
+        'Claude Code subscription sandbox execution completed'
+      );
+
+      return {
+        success: result.exitCode === 0 && !result.timedOut,
+        exitCode: result.timedOut ? 124 : result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        structuredOutput,
+        sessionId: structuredOutput ? extractSessionId(structuredOutput) : null,
+        tokensUsed: structuredOutput ? extractTokenUsage(structuredOutput) : null,
+        durationMs,
+        sandboxInfo,
+      };
+    } finally {
+      // Always clean up sandbox
+      await sandbox.destroy().catch((err: unknown) => {
+        logger.error({ err, sandboxId: sandbox.id }, 'Failed to destroy sandbox');
+      });
+    }
+  }
+
+  /**
+   * Execute directly using child_process.spawn (no sandbox).
+   */
+  private async executeDirectly(request: AgentRequest): Promise<AgentResult> {
+    const startTime = Date.now();
     const args = buildClaudeCommand(request);
     const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
 
@@ -232,8 +370,8 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
         maxTurns: request.constraints.maxTurns,
         hasSession: !!request.sessionId,
         timeout,
-        subscriptionType: this.subscriptionStatus.subscriptionType,
-        rateLimitTier: this.subscriptionStatus.rateLimitTier,
+        subscriptionType: this.subscriptionStatus?.subscriptionType,
+        rateLimitTier: this.subscriptionStatus?.rateLimitTier,
         billingMethod: 'subscription',
       },
       'Executing Claude Code with subscription'

@@ -92,6 +92,7 @@ export {
   type ContextPointers,
   type DriverCapabilities,
   type AgentDriver,
+  type SandboxInfo,
 } from './agent.js';
 
 // Feedback Types

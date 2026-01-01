@@ -20,6 +20,23 @@ export interface AgentRequest {
   workOrderId?: string | null;
 }
 
+/**
+ * Sandbox execution information
+ */
+export interface SandboxInfo {
+  /** Provider used (docker, subprocess) */
+  provider: string;
+  /** Container ID (if using Docker) */
+  containerId?: string;
+  /** Resource usage during execution */
+  resourceUsage?: {
+    cpuPercent: number;
+    memoryMB: number;
+  };
+  /** Sandbox execution duration in ms */
+  durationMs: number;
+}
+
 // Agent Result
 export interface AgentResult {
   success: boolean;
@@ -38,6 +55,8 @@ export interface AgentResult {
   model?: string;
   /** Number of conversation turns (SDK-specific) */
   turns?: number;
+  /** Sandbox execution info (if sandbox was used) */
+  sandboxInfo?: SandboxInfo;
 }
 
 // Agent Structured Output
