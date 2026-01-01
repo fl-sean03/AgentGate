@@ -1,0 +1,92 @@
+# =============================================================================
+# AgentGate Agent Container
+#
+# Container image for isolated agent execution.
+# Includes Node.js, Claude CLI, and common development tools.
+#
+# Build:
+#   docker build -f docker/Dockerfile.agent -t agentgate/agent:latest .
+#
+# Usage:
+#   This image is used automatically by the Docker sandbox provider.
+#   It runs Claude Code CLI in an isolated environment.
+# =============================================================================
+
+FROM node:20-bookworm-slim
+
+LABEL org.opencontainers.image.title="AgentGate Agent"
+LABEL org.opencontainers.image.description="Isolated execution environment for AI agents"
+LABEL org.opencontainers.image.vendor="AgentGate"
+LABEL org.opencontainers.image.version="0.2.13"
+
+# Environment configuration
+ENV NODE_ENV=production
+ENV HOME=/home/agentgate
+ENV WORKSPACE=/workspace
+ENV PATH="/home/agentgate/.npm-global/bin:/home/agentgate/.local/bin:${PATH}"
+ENV NPM_CONFIG_PREFIX=/home/agentgate/.npm-global
+ENV NO_COLOR=1
+ENV FORCE_COLOR=0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Essential tools
+    ca-certificates \
+    curl \
+    git \
+    openssh-client \
+    # Build tools (for native npm packages)
+    build-essential \
+    python3 \
+    # Common dev tools
+    jq \
+    ripgrep \
+    tree \
+    unzip \
+    vim-tiny \
+    wget \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for agent execution
+RUN groupadd --gid 1000 agentgate \
+    && useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home agentgate
+
+# Create workspace and set permissions
+RUN mkdir -p /workspace \
+    && chown -R agentgate:agentgate /workspace
+
+# Switch to non-root user for remaining setup
+USER agentgate
+WORKDIR /home/agentgate
+
+# Create npm global directory
+RUN mkdir -p ~/.npm-global ~/.local/bin
+
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Install Claude Code CLI
+# Note: This assumes Claude CLI is available via npm or pre-installed
+# For production, you may need to copy the binary from a build stage
+RUN npm install -g @anthropic-ai/claude-code || echo "Claude CLI will be mounted"
+
+# Create directories for Claude configuration
+RUN mkdir -p ~/.claude
+
+# Copy entrypoint script
+COPY --chown=agentgate:agentgate docker/agent-entrypoint.sh /home/agentgate/entrypoint.sh
+RUN chmod +x /home/agentgate/entrypoint.sh
+
+# Set working directory to workspace
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node --version || exit 1
+
+# Default command keeps container running for exec
+CMD ["sleep", "infinity"]
+
+# Entrypoint for initialization
+ENTRYPOINT ["/home/agentgate/entrypoint.sh"]

@@ -35,6 +35,7 @@
     "adm-zip": "^0.5.16",
     "ajv": "^8.12.0",
     "commander": "^12.0.0",
+    "dockerode": "^4.0.2",
     "dotenv": "^17.2.3",
     "execa": "^8.0.1",
     "fast-glob": "^3.3.2",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
+    "@types/dockerode": "^3.3.31",
     "@types/node": "^20.10.6",
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.17.0",

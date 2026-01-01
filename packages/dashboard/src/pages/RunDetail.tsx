@@ -1,8 +1,19 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Container, Cpu, HardDrive, Clock } from 'lucide-react';
 import { useRun } from '../hooks';
 import { LoadingSpinner, ErrorDisplay } from '../components/common';
 import { VerificationBadge } from '../components/runs';
+
+// Type for sandbox info from iteration data
+interface SandboxInfo {
+  provider: string;
+  containerId?: string;
+  resourceUsage?: {
+    cpuPercent: number;
+    memoryMB: number;
+  };
+  durationMs: number;
+}
 
 export function RunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -145,22 +156,67 @@ export function RunDetail() {
             <div>
               <label className="text-sm font-medium text-gray-700">Iterations</label>
               <div className="mt-2 space-y-2">
-                {run.iterations.map((iteration) => (
-                  <div key={iteration.id} className="bg-gray-50 p-3 rounded border border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-900">
-                        Iteration #{iteration.iteration_number}
-                      </span>
-                      <span className={`text-xs px-2 py-1 rounded capitalize ${
-                        iteration.status === 'succeeded' ? 'bg-green-100 text-green-800' :
-                        iteration.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {iteration.status}
-                      </span>
+                {run.iterations.map((iteration) => {
+                  // Extract sandbox info if present
+                  const sandboxInfo = (iteration as { sandbox_info?: SandboxInfo }).sandbox_info;
+
+                  return (
+                    <div key={iteration.id} className="bg-gray-50 p-3 rounded border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-900">
+                          Iteration #{iteration.iteration_number}
+                        </span>
+                        <span className={`text-xs px-2 py-1 rounded capitalize ${
+                          iteration.status === 'succeeded' ? 'bg-green-100 text-green-800' :
+                          iteration.status === 'failed' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {iteration.status}
+                        </span>
+                      </div>
+
+                      {/* Sandbox Info */}
+                      {sandboxInfo && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                            <Container className="w-3 h-3" />
+                            <span className="font-medium">Sandbox</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="flex items-center gap-1 text-gray-600">
+                              <span className="text-gray-400">Provider:</span>
+                              <span className="font-mono">{sandboxInfo.provider}</span>
+                            </div>
+                            {sandboxInfo.containerId && (
+                              <div className="flex items-center gap-1 text-gray-600">
+                                <span className="text-gray-400">Container:</span>
+                                <span className="font-mono truncate" title={sandboxInfo.containerId}>
+                                  {sandboxInfo.containerId.substring(0, 12)}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 text-gray-600">
+                              <Clock className="w-3 h-3 text-gray-400" />
+                              <span>{(sandboxInfo.durationMs / 1000).toFixed(1)}s</span>
+                            </div>
+                            {sandboxInfo.resourceUsage && (
+                              <>
+                                <div className="flex items-center gap-1 text-gray-600">
+                                  <Cpu className="w-3 h-3 text-gray-400" />
+                                  <span>{sandboxInfo.resourceUsage.cpuPercent.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-gray-600">
+                                  <HardDrive className="w-3 h-3 text-gray-400" />
+                                  <span>{sandboxInfo.resourceUsage.memoryMB.toFixed(0)} MB</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

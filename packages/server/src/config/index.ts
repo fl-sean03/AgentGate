@@ -61,6 +61,28 @@ const sdkConfigSchema = z.object({
 export type SDKConfig = z.infer<typeof sdkConfigSchema>;
 
 /**
+ * Sandbox configuration schema
+ */
+const sandboxConfigSchema = z.object({
+  /** Provider selection mode: auto, docker, subprocess */
+  provider: z.enum(['auto', 'docker', 'subprocess']).default('auto'),
+  /** Default Docker image for agent containers */
+  image: z.string().default('agentgate/agent:latest'),
+  /** Network mode for sandboxes: none, bridge, host */
+  networkMode: z.enum(['none', 'bridge', 'host']).default('none'),
+  /** Default CPU limit per sandbox */
+  cpuCount: z.coerce.number().min(1).max(16).default(2),
+  /** Default memory limit in MB per sandbox */
+  memoryMB: z.coerce.number().int().min(256).max(32768).default(4096),
+  /** Default timeout in seconds per sandbox execution */
+  timeoutSeconds: z.coerce.number().int().min(60).max(86400).default(3600),
+  /** Cleanup interval in milliseconds (0 to disable) */
+  cleanupIntervalMs: z.coerce.number().int().min(0).max(3600000).default(300000),
+});
+
+export type SandboxConfig = z.infer<typeof sandboxConfigSchema>;
+
+/**
  * Configuration schema with validation
  */
 const configSchema = z.object({
@@ -89,6 +111,9 @@ const configSchema = z.object({
 
   // SDK Driver configuration
   sdk: sdkConfigSchema,
+
+  // Sandbox configuration
+  sandbox: sandboxConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -125,6 +150,16 @@ export function loadConfig(): AgentGateConfig {
       trackFileChanges: process.env.AGENTGATE_SDK_TRACK_FILE_CHANGES,
       maxTurns: process.env.AGENTGATE_SDK_MAX_TURNS,
     },
+    // Sandbox configuration
+    sandbox: {
+      provider: process.env.AGENTGATE_SANDBOX_PROVIDER,
+      image: process.env.AGENTGATE_SANDBOX_IMAGE,
+      networkMode: process.env.AGENTGATE_SANDBOX_NETWORK_MODE,
+      cpuCount: process.env.AGENTGATE_SANDBOX_CPU_COUNT,
+      memoryMB: process.env.AGENTGATE_SANDBOX_MEMORY_MB,
+      timeoutSeconds: process.env.AGENTGATE_SANDBOX_TIMEOUT_SECONDS,
+      cleanupIntervalMs: process.env.AGENTGATE_SANDBOX_CLEANUP_INTERVAL_MS,
+    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -144,6 +179,8 @@ export function loadConfig(): AgentGateConfig {
       ciMaxIterations: result.data.ci.maxIterations,
       sdkTimeoutMs: result.data.sdk.timeoutMs,
       sdkMaxTurns: result.data.sdk.maxTurns,
+      sandboxProvider: result.data.sandbox.provider,
+      sandboxImage: result.data.sandbox.image,
     },
     'Configuration loaded'
   );
@@ -230,5 +267,41 @@ export function buildSDKDriverConfig(): {
       logToolUse: sdk.logToolUse,
       trackFileChanges: sdk.trackFileChanges,
     },
+  };
+}
+
+/**
+ * Get sandbox configuration
+ */
+export function getSandboxConfig(): SandboxConfig {
+  const config = getConfig();
+  return config.sandbox;
+}
+
+/**
+ * Build sandbox manager config from environment config
+ */
+export function buildSandboxManagerConfig(): {
+  provider: 'auto' | 'docker' | 'subprocess';
+  defaultImage: string;
+  defaultNetworkMode: 'none' | 'bridge' | 'host';
+  defaultResourceLimits: {
+    cpuCount: number;
+    memoryMB: number;
+    timeoutSeconds: number;
+  };
+  cleanupIntervalMs: number;
+} {
+  const sandbox = getSandboxConfig();
+  return {
+    provider: sandbox.provider,
+    defaultImage: sandbox.image,
+    defaultNetworkMode: sandbox.networkMode,
+    defaultResourceLimits: {
+      cpuCount: sandbox.cpuCount,
+      memoryMB: sandbox.memoryMB,
+      timeoutSeconds: sandbox.timeoutSeconds,
+    },
+    cleanupIntervalMs: sandbox.cleanupIntervalMs,
   };
 }
