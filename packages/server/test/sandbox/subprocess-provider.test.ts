@@ -124,19 +124,24 @@ describe('SubprocessProvider', () => {
       const result = await sandbox!.execute('pwd', []);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe(tempDir);
+      // Normalize path to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
+      const expectedPath = await fs.realpath(tempDir);
+      expect(result.stdout.trim()).toBe(expectedPath);
     });
 
     it('should use custom cwd within workspace', async () => {
       const subdir = 'subdir';
-      await fs.mkdir(path.join(tempDir, subdir));
+      const subdirPath = path.join(tempDir, subdir);
+      await fs.mkdir(subdirPath);
 
       const result = await sandbox!.execute('pwd', [], {
         cwd: subdir,
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe(path.join(tempDir, subdir));
+      // Normalize path to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
+      const expectedPath = await fs.realpath(subdirPath);
+      expect(result.stdout.trim()).toBe(expectedPath);
     });
 
     it('should pass environment variables', async () => {

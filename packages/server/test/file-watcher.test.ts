@@ -16,13 +16,6 @@ import {
 } from '../src/agent/file-watcher.js';
 import type { FileChangedEvent } from '../src/server/websocket/types.js';
 
-/**
- * Helper to wait for a specified duration
- */
-function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 describe('FileWatcher', () => {
   let tempDir: string;
   let watcher: FileWatcher;
@@ -110,9 +103,15 @@ describe('FileWatcher', () => {
       watcher.start();
 
       await writeFile(join(tempDir, 'test.txt'), 'hello');
-      await wait(200);
 
-      expect(events.length).toBeGreaterThanOrEqual(1);
+      // Use vi.waitFor for reliable async expectations
+      await vi.waitFor(
+        () => {
+          expect(events.length).toBeGreaterThanOrEqual(1);
+        },
+        { timeout: 2000, interval: 50 }
+      );
+
       const createEvent = events.find(e => e.path === 'test.txt' && e.action === 'created');
       expect(createEvent).toBeDefined();
     });
@@ -129,9 +128,15 @@ describe('FileWatcher', () => {
 
       // Modify the file
       await writeFile(join(tempDir, 'existing.txt'), 'modified');
-      await wait(200);
 
-      expect(events.length).toBeGreaterThanOrEqual(1);
+      // Use vi.waitFor for reliable async expectations
+      await vi.waitFor(
+        () => {
+          expect(events.length).toBeGreaterThanOrEqual(1);
+        },
+        { timeout: 2000, interval: 50 }
+      );
+
       const modifyEvent = events.find(e => e.path === 'existing.txt' && e.action === 'modified');
       expect(modifyEvent).toBeDefined();
     });
@@ -149,9 +154,15 @@ describe('FileWatcher', () => {
 
       // Delete the file
       await unlink(filePath);
-      await wait(200);
 
-      expect(events.length).toBeGreaterThanOrEqual(1);
+      // Use vi.waitFor for reliable async expectations
+      await vi.waitFor(
+        () => {
+          expect(events.length).toBeGreaterThanOrEqual(1);
+        },
+        { timeout: 2000, interval: 50 }
+      );
+
       const deleteEvent = events.find(e => e.path === 'to-delete.txt' && e.action === 'deleted');
       expect(deleteEvent).toBeDefined();
     });
@@ -164,10 +175,17 @@ describe('FileWatcher', () => {
 
       const content = 'hello world';
       await writeFile(join(tempDir, 'sized.txt'), content);
-      await wait(200);
+
+      // Use vi.waitFor for reliable async expectations
+      await vi.waitFor(
+        () => {
+          const createEvent = events.find(e => e.path === 'sized.txt');
+          expect(createEvent).toBeDefined();
+        },
+        { timeout: 2000, interval: 50 }
+      );
 
       const createEvent = events.find(e => e.path === 'sized.txt');
-      expect(createEvent).toBeDefined();
       expect(createEvent?.sizeBytes).toBe(content.length);
     });
   });
@@ -181,7 +199,9 @@ describe('FileWatcher', () => {
 
       await mkdir(join(tempDir, '.git'), { recursive: true });
       await writeFile(join(tempDir, '.git', 'config'), 'test');
-      await wait(200);
+
+      // Wait a bit for any potential events
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const gitEvents = events.filter(e => e.path.includes('.git'));
       expect(gitEvents.length).toBe(0);
@@ -195,7 +215,9 @@ describe('FileWatcher', () => {
 
       await mkdir(join(tempDir, 'node_modules'), { recursive: true });
       await writeFile(join(tempDir, 'node_modules', 'package.json'), '{}');
-      await wait(200);
+
+      // Wait a bit for any potential events
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const nmEvents = events.filter(e => e.path.includes('node_modules'));
       expect(nmEvents.length).toBe(0);
@@ -208,7 +230,9 @@ describe('FileWatcher', () => {
       watcher.start();
 
       await writeFile(join(tempDir, 'debug.log'), 'log content');
-      await wait(200);
+
+      // Wait a bit for any potential events
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const logEvents = events.filter(e => e.path.endsWith('.log'));
       expect(logEvents.length).toBe(0);
@@ -226,7 +250,9 @@ describe('FileWatcher', () => {
 
       await mkdir(join(tempDir, 'custom-ignore'), { recursive: true });
       await writeFile(join(tempDir, 'custom-ignore', 'file.txt'), 'test');
-      await wait(200);
+
+      // Wait a bit for any potential events
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const customEvents = events.filter(e => e.path.includes('custom-ignore'));
       expect(customEvents.length).toBe(0);
@@ -246,7 +272,14 @@ describe('FileWatcher', () => {
       await writeFile(filePath, 'v1');
       await writeFile(filePath, 'v2');
       await writeFile(filePath, 'v3');
-      await wait(300);
+
+      // Use vi.waitFor for reliable async expectations
+      await vi.waitFor(
+        () => {
+          expect(events.filter(e => e.path === 'rapid.txt').length).toBeGreaterThanOrEqual(1);
+        },
+        { timeout: 2000, interval: 50 }
+      );
 
       // Should have at most a couple of events, not 3
       expect(events.filter(e => e.path === 'rapid.txt').length).toBeLessThanOrEqual(2);
@@ -301,11 +334,17 @@ describe('createFileWatcher', () => {
     ctx.start();
 
     await writeFile(join(tempDir, 'context-test.txt'), 'content');
-    await wait(200);
+
+    // Use vi.waitFor for reliable async expectations
+    await vi.waitFor(
+      () => {
+        expect(events.length).toBeGreaterThanOrEqual(1);
+      },
+      { timeout: 2000, interval: 50 }
+    );
 
     ctx.stop();
 
-    expect(events.length).toBeGreaterThanOrEqual(1);
     const event = events.find(e => e.path === 'context-test.txt');
     expect(event?.workOrderId).toBe('wo-123');
     expect(event?.runId).toBe('run-456');

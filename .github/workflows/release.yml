@@ -20,6 +20,9 @@ env:
   NODE_VERSION: '20'
   PNPM_VERSION: '9'
 
+permissions:
+  contents: read
+
 jobs:
   # ============================================================================
   # Validate Release
@@ -27,14 +30,18 @@ jobs:
   validate:
     name: Validate Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      channel: ${{ steps.version.outputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Full history for changelog
 
       - name: Determine version
         id: version
@@ -44,24 +51,49 @@ jobs:
           else
             VERSION="${GITHUB_REF#refs/tags/v}"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-          echo "Releasing version: $VERSION"
 
-      - name: Validate version format
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          # Validate semver format
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format: $VERSION"
             exit 1
           fi
 
-      - name: Check package.json version matches
+          # Determine if prerelease and channel
+          if [[ "$VERSION" =~ -alpha ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "channel=alpha" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" =~ -beta ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "channel=beta" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" =~ -rc ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "channel=rc" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "channel=latest" >> $GITHUB_OUTPUT
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+      - name: Check version consistency
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           RELEASE_VERSION="${{ steps.version.outputs.version }}"
+
           if [[ "$PKG_VERSION" != "$RELEASE_VERSION" ]]; then
-            echo "::warning::package.json version ($PKG_VERSION) differs from release version ($RELEASE_VERSION)"
+            echo "::error::package.json version ($PKG_VERSION) doesn't match release ($RELEASE_VERSION)"
+            echo "::error::Update package.json first: pnpm version $RELEASE_VERSION --no-git-tag-version"
+            exit 1
+          fi
+
+      - name: Check tag doesn't already exist
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Tag ${{ steps.version.outputs.tag }} already exists"
+            exit 1
           fi
 
   # ============================================================================
@@ -71,6 +103,8 @@ jobs:
     name: Build Release
     runs-on: ubuntu-latest
     needs: validate
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,7 +115,7 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
@@ -90,27 +124,51 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run all checks
+      - name: Run full validation
         run: |
           pnpm typecheck
           pnpm lint
           git config --global user.email "ci@agentgate.dev"
           git config --global user.name "AgentGate CI"
+          pnpm --filter @agentgate/shared build
           pnpm test
 
-      - name: Build
+      - name: Build all packages
         run: pnpm build
 
-      - name: Create package tarball
-        run: pnpm pack
+      - name: Verify build output
+        run: |
+          # Check server build
+          test -f packages/server/dist/index.js || exit 1
+
+          # Check dashboard build
+          test -d packages/dashboard/dist || exit 1
+
+          # Check shared build
+          test -f packages/shared/dist/index.js || exit 1
+
+          echo "All build outputs verified"
+
+      - name: Create package tarballs
+        run: |
+          cd packages/server && pnpm pack && mv *.tgz ../../
+          cd ../shared && pnpm pack && mv *.tgz ../../
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          output-file: sbom.spdx.json
+          format: spdx-json
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: release-${{ needs.validate.outputs.version }}
           path: |
-            dist/
+            packages/*/dist/
             *.tgz
+            sbom.spdx.json
           retention-days: 30
 
   # ============================================================================
@@ -120,7 +178,9 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     needs: [validate, build]
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
     permissions:
       contents: write
     steps:
@@ -130,37 +190,64 @@ jobs:
           fetch-depth: 0
 
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: release-${{ needs.validate.outputs.version }}
           path: release/
 
       - name: Generate changelog
-        id: changelog
         run: |
           # Get previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
+          cat > changelog.md << 'CHANGELOG_HEADER'
+          ## AgentGate ${{ needs.validate.outputs.tag }}
+
+          ### Installation
+
+          ```bash
+          npm install -g @agentgate/server@${{ needs.validate.outputs.version }}
+          ```
+
+          ### What's Changed
+
+          CHANGELOG_HEADER
+
           if [[ -n "$PREV_TAG" ]]; then
-            echo "Generating changelog from $PREV_TAG to ${{ needs.validate.outputs.tag }}"
-            CHANGES=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD)
+            echo "#### Features" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD | grep "^- feat:" >> changelog.md || echo "_No new features_" >> changelog.md
+            echo "" >> changelog.md
+            echo "" >> changelog.md
+
+            echo "#### Bug Fixes" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD | grep "^- fix:" >> changelog.md || echo "_No bug fixes_" >> changelog.md
+            echo "" >> changelog.md
+            echo "" >> changelog.md
+
+            echo "#### Other Changes" >> changelog.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG"..HEAD | grep -v "^- feat:\|^- fix:" >> changelog.md || echo "_No other changes_" >> changelog.md
+            echo "" >> changelog.md
+            echo "" >> changelog.md
           else
-            echo "No previous tag found, using all commits"
-            CHANGES=$(git log --pretty=format:"- %s (%h)" --max-count=50)
+            echo "Initial release" >> changelog.md
+            echo "" >> changelog.md
           fi
 
-          # Write to file for multiline handling
-          echo "$CHANGES" > changelog.txt
+          echo "---" >> changelog.md
+          echo "" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-HEAD~10}...${{ needs.validate.outputs.tag }}" >> changelog.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           name: AgentGate ${{ needs.validate.outputs.tag }}
-          body_path: changelog.txt
+          body_path: changelog.md
           draft: false
-          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
-          files: release/*.tgz
+          prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}
+          files: |
+            release/*.tgz
+            release/sbom.spdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -171,7 +258,11 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     needs: [validate, build, github-release]
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -182,45 +273,74 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Publish to npm
+      - name: Install and build
         run: |
-          if [[ "${{ contains(needs.validate.outputs.version, '-') }}" == "true" ]]; then
-            pnpm publish --tag next --no-git-checks
-          else
-            pnpm publish --no-git-checks
-          fi
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Publish shared package
+        run: |
+          cd packages/shared
+          pnpm publish --tag ${{ needs.validate.outputs.channel }} --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish server package
+        run: |
+          cd packages/server
+          pnpm publish --tag ${{ needs.validate.outputs.channel }} --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
   # ============================================================================
-  # Notify
+  # Release Summary
   # ============================================================================
   notify:
     name: Release Summary
     runs-on: ubuntu-latest
     needs: [validate, build, github-release, npm-publish]
     if: always()
+    permissions:
+      contents: read
     steps:
-      - name: Create release summary
+      - name: Create summary
         run: |
-          echo "## Release Summary: v${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Validation | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| GitHub Release | ${{ needs.github-release.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| npm Publish | ${{ needs.npm-publish.result }} |" >> $GITHUB_STEP_SUMMARY
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## Release Summary: ${{ needs.validate.outputs.tag }}
+
+          | Component | Status |
+          |-----------|--------|
+          | Validation | ${{ needs.validate.result }} |
+          | Build | ${{ needs.build.result }} |
+          | GitHub Release | ${{ needs.github-release.result }} |
+          | npm Publish | ${{ needs.npm-publish.result }} |
+
+          ### Release Details
+
+          - **Version**: ${{ needs.validate.outputs.version }}
+          - **Tag**: ${{ needs.validate.outputs.tag }}
+          - **Channel**: ${{ needs.validate.outputs.channel }}
+          - **Prerelease**: ${{ needs.validate.outputs.prerelease }}
+
+          ### Links
+
+          - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.tag }})
+          - [npm Package](https://www.npmjs.com/package/@agentgate/server/v/${{ needs.validate.outputs.version }})
+          EOF
+
+      - name: Check for failures
+        if: |
+          needs.validate.result == 'failure' ||
+          needs.build.result == 'failure' ||
+          needs.github-release.result == 'failure'
+        run: |
+          echo "::error::Release workflow had failures"
+          exit 1

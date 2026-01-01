@@ -52,6 +52,8 @@ export class WorkOrderService {
           '**/service-account*.json',
         ],
       },
+      // v0.2.15: Pass through skip verification levels (only if defined)
+      ...(request.skipVerification && { skipVerification: request.skipVerification }),
       createdAt: now,
       status: WorkOrderStatus.QUEUED,
     };

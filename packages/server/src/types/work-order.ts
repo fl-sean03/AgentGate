@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VerificationLevel } from './verification.js';
 
 // Work Order Status
 export const WorkOrderStatus = {
@@ -140,6 +141,8 @@ export interface WorkOrder {
   integrationWorkOrderId?: string;
   // CI polling (Thrust 16)
   waitForCI?: boolean;
+  // Skip verification levels (v0.2.15)
+  skipVerification?: VerificationLevel[];
 }
 
 // Submit Request Schema
@@ -158,6 +161,8 @@ export const submitRequestSchema = z.object({
   siblingIndex: z.number().int().nonnegative().optional(),
   // CI polling (Thrust 16)
   waitForCI: z.boolean().default(false),
+  // Skip verification levels (v0.2.15)
+  skipVerification: z.array(z.nativeEnum(VerificationLevel)).optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

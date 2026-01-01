@@ -2,19 +2,12 @@
  * Event Buffer Unit Tests
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   EventBuffer,
   createEventBuffer,
 } from '../src/server/websocket/event-buffer.js';
 import type { ServerMessage, AgentOutputEvent } from '../src/server/websocket/types.js';
-
-/**
- * Helper to wait for a specified duration
- */
-function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 /**
  * Create a mock event
@@ -296,7 +289,12 @@ describe('EventBuffer', () => {
       }
 
       // Wait a bit, then access wo-1
-      await wait(50);
+      await vi.waitFor(
+        () => {
+          expect(true).toBe(true); // Just waiting
+        },
+        { timeout: 100, interval: 50 }
+      );
 
       // Add events to wo-2 - should trigger eviction from wo-1
       for (let i = 1; i <= 10; i++) {

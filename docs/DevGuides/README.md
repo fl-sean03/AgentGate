@@ -261,10 +261,11 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
-| [v0.2.14](./DevGuide_v0.2.14/00-index.md) | **Claude Agent SDK Integration** | Not Started | SDK driver for API-key billing, hooks system, streaming messages, built-in sandbox |
-| [v0.2.13](./DevGuide_v0.2.13/00-index.md) | **Per-Agent Container Sandboxing** | Not Started | Docker container isolation per agent, filesystem/network/resource limits |
-| [v0.2.12](./DevGuide_v0.2.12/00-index.md) | **GitHub CI Feedback Loop** | Not Started | Automated CI monitoring, failure log parsing, agent remediation loop |
-| [v0.2.11](./DevGuide_v0.2.11/00-index.md) | **Real-Time Agent Streaming** | Not Started | WebSocket streaming of agent activity, live dashboard view, progress indicators |
+| [v0.2.15](./DevGuide_v0.2.15/00-index.md) | **Production-Grade CI/CD System** | Not Started | Comprehensive CI system, test reliability, cross-platform support, release automation |
+| [v0.2.14](./DevGuide_v0.2.14/00-index.md) | **Claude Agent SDK Integration** | Complete | SDK driver for API-key billing, hooks system, streaming messages, built-in sandbox |
+| [v0.2.13](./DevGuide_v0.2.13/00-index.md) | **Per-Agent Container Sandboxing** | Complete | Docker container isolation per agent, filesystem/network/resource limits |
+| [v0.2.12](./DevGuide_v0.2.12/00-index.md) | **GitHub CI Feedback Loop** | Complete | Automated CI monitoring, failure log parsing, agent remediation loop |
+| [v0.2.11](./DevGuide_v0.2.11/00-index.md) | **Real-Time Agent Streaming** | Complete | WebSocket streaming of agent activity, live dashboard view, progress indicators |
 | [v0.2.10](./DevGuide_v0.2.10/00-index.md) | **Recursive Agent Spawning** | Complete | Child agent spawning, tree execution, Docker deployment, configurable limits |
 | [v0.2.9](./DevGuide_v0.2.9/00-index.md) | **Integration Testing** | Complete | E2E test infrastructure, contract testing |
 | [v0.2.8](./DevGuide_v0.2.8/00-index.md) | **Monorepo Restructuring** | Complete | pnpm workspaces, shared types package, integration tests |
