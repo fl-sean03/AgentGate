@@ -9,6 +9,7 @@ import type { LoopStrategy, LoopStrategyFactory } from '../types/loop-strategy.j
 import type { LoopStrategyConfig, LoopStrategyMode } from '../types/harness-config.js';
 import { LoopStrategyMode as Modes } from '../types/harness-config.js';
 import { FixedStrategy } from './strategies/fixed-strategy.js';
+import { HybridStrategy } from './strategies/hybrid-strategy.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('strategy-registry');
@@ -178,14 +179,21 @@ export class StrategyRegistry {
    * Register all built-in strategies.
    */
   private registerBuiltInStrategies(): void {
-    // Fixed strategy (default)
+    // Fixed strategy
     this.register(
       Modes.FIXED,
       () => new FixedStrategy(),
       'Fixed iteration count strategy. Runs exactly N iterations unless early termination conditions are met.'
     );
 
-    // Placeholder for future strategies (ralph, hybrid, custom)
+    // Hybrid strategy (recommended default)
+    this.register(
+      Modes.HYBRID,
+      () => new HybridStrategy(),
+      'Hybrid strategy combining progress tracking with multiple completion criteria. Recommended default for most tasks.'
+    );
+
+    // Placeholder for future strategies (ralph, custom)
     // These will be implemented in future thrusts
 
     logger.debug(
