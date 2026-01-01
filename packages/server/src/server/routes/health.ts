@@ -6,6 +6,7 @@ import {
   type LivenessResponse,
   type ComponentCheck,
 } from '../types.js';
+import { getConfigLimits } from '../../config/index.js';
 
 /**
  * Package version - should match package.json
@@ -18,13 +19,15 @@ const VERSION = '0.2.6';
 export function registerHealthRoutes(app: FastifyInstance): void {
   /**
    * GET /health - Basic health check
-   * Returns service status and version
+   * Returns service status, version, and configuration limits
    */
   app.get('/health', async (request, reply) => {
-    const response: HealthStatus = {
+    const limits = getConfigLimits();
+    const response: HealthStatus & { limits: typeof limits } = {
       status: 'ok',
       version: VERSION,
       timestamp: new Date().toISOString(),
+      limits,
     };
     return reply.send(createSuccessResponse(response, request.id));
   });

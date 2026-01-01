@@ -1,0 +1,42 @@
+# =============================================================================
+# AgentGate Docker Compose - Development Override
+#
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
+version: '3.8'
+
+services:
+  server:
+    build:
+      target: builder  # Use builder stage for dev
+
+    environment:
+      - NODE_ENV=development
+      - AGENTGATE_MAX_CONCURRENT_RUNS=3
+      - LOG_LEVEL=debug
+
+    volumes:
+      # Mount source for hot reload
+      - ./packages/server/src:/app/packages/server/src:ro
+      - ./packages/shared/src:/app/packages/shared/src:ro
+
+    command: ["pnpm", "--filter", "@agentgate/server", "dev"]
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  dashboard:
+    build:
+      target: builder
+
+    volumes:
+      - ./packages/dashboard/src:/app/packages/dashboard/src:ro
+
+    command: ["pnpm", "--filter", "@agentgate/dashboard", "dev", "--host"]
+
+    ports:
+      - "5173:5173"

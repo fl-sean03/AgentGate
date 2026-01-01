@@ -81,6 +81,28 @@ describe('Health Routes', () => {
       expect(body.requestId).toBeDefined();
       expect(typeof body.requestId).toBe('string');
     });
+
+    it('should include configuration limits', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.limits).toBeDefined();
+      expect(body.data.limits).toHaveProperty('maxConcurrentRuns');
+      expect(body.data.limits).toHaveProperty('maxSpawnDepth');
+      expect(body.data.limits).toHaveProperty('maxChildrenPerParent');
+      expect(body.data.limits).toHaveProperty('maxTreeSize');
+      expect(body.data.limits).toHaveProperty('defaultTimeoutSeconds');
+      // Verify default values
+      expect(body.data.limits.maxConcurrentRuns).toBe(5);
+      expect(body.data.limits.maxSpawnDepth).toBe(3);
+      expect(body.data.limits.maxChildrenPerParent).toBe(10);
+      expect(body.data.limits.maxTreeSize).toBe(100);
+      expect(body.data.limits.defaultTimeoutSeconds).toBe(3600);
+    });
   });
 
   describe('GET /health/ready', () => {

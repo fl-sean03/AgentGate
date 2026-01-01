@@ -1,0 +1,85 @@
+# =============================================================================
+# AgentGate Server Dockerfile
+# Multi-stage build for production deployment
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# Installs dependencies and builds TypeScript
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Install build dependencies
+RUN apk add --no-cache git python3 make g++
+
+WORKDIR /app
+
+# Copy package files first (better layer caching)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/server/package.json ./packages/server/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source files
+COPY packages/shared/ ./packages/shared/
+COPY packages/server/ ./packages/server/
+COPY tsconfig.json ./
+
+# Build all packages
+RUN pnpm build
+
+# Prune dev dependencies for production
+RUN pnpm prune --prod
+
+# -----------------------------------------------------------------------------
+# Stage 2: Production
+# Minimal runtime image
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS production
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    git \
+    openssh-client \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user for security
+RUN addgroup -g 1001 agentgate && \
+    adduser -u 1001 -G agentgate -s /bin/sh -D agentgate
+
+WORKDIR /app
+
+# Copy built artifacts from builder
+COPY --from=builder --chown=agentgate:agentgate /app/node_modules ./node_modules
+COPY --from=builder --chown=agentgate:agentgate /app/packages/shared/dist ./packages/shared/dist
+COPY --from=builder --chown=agentgate:agentgate /app/packages/shared/package.json ./packages/shared/
+COPY --from=builder --chown=agentgate:agentgate /app/packages/server/dist ./packages/server/dist
+COPY --from=builder --chown=agentgate:agentgate /app/packages/server/package.json ./packages/server/
+COPY --from=builder --chown=agentgate:agentgate /app/package.json ./
+
+# Create data and workspace directories
+RUN mkdir -p /data/agentgate /workspaces && \
+    chown -R agentgate:agentgate /data /workspaces
+
+# Set environment
+ENV NODE_ENV=production
+ENV AGENTGATE_DATA_DIR=/data/agentgate
+
+# Switch to non-root user
+USER agentgate
+
+# Expose port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3001/health/ready || exit 1
+
+# Start server
+CMD ["node", "packages/server/dist/index.js", "serve"]
