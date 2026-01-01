@@ -9,6 +9,11 @@ import { createLogger } from '../utils/index.js';
 import { buildClaudeCommand, buildCommandString } from './command-builder.js';
 import { CLAUDE_CODE_CAPABILITIES, DEFAULT_TIMEOUT_MS } from './defaults.js';
 import { extractSessionId, extractTokenUsage, parseOutput } from './output-parser.js';
+import {
+  StreamingExecutor,
+  type StreamingEventCallback,
+  type StreamingOptions,
+} from './streaming-executor.js';
 
 const logger = createLogger('agent:claude-code');
 
@@ -22,6 +27,22 @@ export interface ClaudeCodeDriverConfig {
   defaultTimeoutMs?: number;
   /** Additional environment variables */
   env?: Record<string, string>;
+}
+
+/**
+ * Options for execution with streaming
+ */
+export interface ExecuteWithStreamingOptions {
+  /** Work order ID for event context */
+  workOrderId: string;
+  /** Run ID for event context */
+  runId: string;
+  /** Callback for streaming events */
+  onEvent?: StreamingEventCallback | undefined;
+  /** Streaming options */
+  streamingOptions?: StreamingOptions | undefined;
+  /** AbortSignal for cancellation */
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -218,6 +239,69 @@ export class ClaudeCodeDriver implements AgentDriver {
         });
       });
     });
+  }
+
+  /**
+   * Executes an agent request with streaming events.
+   * This method provides real-time events as the subprocess runs.
+   */
+  async executeWithStreaming(
+    request: AgentRequest,
+    options: ExecuteWithStreamingOptions
+  ): Promise<AgentResult> {
+    const args = buildClaudeCommand(request);
+    const timeout = request.timeoutMs || this.config.defaultTimeoutMs;
+
+    logger.info(
+      {
+        workspace: request.workspacePath,
+        maxTurns: request.constraints.maxTurns,
+        hasSession: !!request.sessionId,
+        timeout,
+        streaming: true,
+        workOrderId: options.workOrderId,
+        runId: options.runId,
+      },
+      'Executing Claude Code request with streaming'
+    );
+
+    logger.debug({ command: buildCommandString(request) }, 'Full command');
+
+    // Create streaming executor
+    const executor = new StreamingExecutor({
+      workOrderId: options.workOrderId,
+      runId: options.runId,
+      onEvent: options.onEvent,
+      options: options.streamingOptions,
+    });
+
+    // Build environment
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      ...this.config.env,
+      NO_COLOR: '1',
+      FORCE_COLOR: '0',
+    };
+
+    // Execute with streaming
+    const result = await executor.execute(this.config.binaryPath, args, {
+      cwd: request.workspacePath,
+      env,
+      timeout,
+      signal: options.signal,
+    });
+
+    // Convert to AgentResult
+    return {
+      success: result.success,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      structuredOutput: result.structuredOutput,
+      sessionId: result.sessionId,
+      tokensUsed: result.tokensUsed,
+      durationMs: result.durationMs,
+    };
   }
 }
 

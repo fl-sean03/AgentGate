@@ -282,12 +282,41 @@ export type ServerMessage =
 // =============================================================================
 
 /**
+ * Per-subscription preferences for filtering events
+ */
+export interface SubscriptionPreferences {
+  /** Include tool call events (default: true) */
+  includeToolCalls: boolean;
+  /** Include tool result events (default: true) */
+  includeToolResults: boolean;
+  /** Include agent output events (default: true) */
+  includeOutput: boolean;
+  /** Include file change events (default: true) */
+  includeFileChanges: boolean;
+  /** Include progress update events (default: true) */
+  includeProgress: boolean;
+}
+
+/**
+ * Default subscription preferences
+ */
+export const DEFAULT_SUBSCRIPTION_PREFERENCES: SubscriptionPreferences = {
+  includeToolCalls: true,
+  includeToolResults: true,
+  includeOutput: true,
+  includeFileChanges: true,
+  includeProgress: true,
+};
+
+/**
  * WebSocket connection with metadata
  */
 export interface WebSocketConnection {
   id: string;
   socket: WebSocket;
   subscriptions: Set<string>;
+  /** Per-subscription preferences (key is workOrderId) */
+  subscriptionPreferences: Map<string, SubscriptionPreferences>;
   connectedAt: Date;
   lastPingAt?: Date;
 }
