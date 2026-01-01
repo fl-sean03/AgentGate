@@ -121,8 +121,8 @@ describe('SubprocessProvider', () => {
     });
 
     it('should use workspace as cwd', async () => {
-      // Use Node.js to print cwd instead of pwd (cross-platform)
-      const result = await sandbox!.execute('node', ['-e', 'console.log(process.cwd())']);
+      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+      const result = await sandbox!.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))']);
 
       expect(result.exitCode).toBe(0);
       // Normalize path to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
@@ -135,8 +135,8 @@ describe('SubprocessProvider', () => {
       const subdirPath = path.join(tempDir, subdir);
       await fs.mkdir(subdirPath);
 
-      // Use Node.js to print cwd instead of pwd (cross-platform)
-      const result = await sandbox!.execute('node', ['-e', 'console.log(process.cwd())'], {
+      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+      const result = await sandbox!.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))'], {
         cwd: subdir,
       });
 

@@ -339,8 +339,8 @@ describe('StreamingExecutor', () => {
       const os = await import('node:os');
       const tmpDir = os.tmpdir();
 
-      // Use Node.js to print cwd instead of pwd (cross-platform)
-      const result = await executor.execute('node', ['-e', 'console.log(process.cwd())'], {
+      // Use Node.js to print realpath of cwd (handles Windows 8.3 short paths)
+      const result = await executor.execute('node', ['-e', 'console.log(require("fs").realpathSync(process.cwd()))'], {
         cwd: tmpDir,
       });
 
