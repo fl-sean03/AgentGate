@@ -12,3 +12,12 @@ export { FixedStrategy, createFixedStrategy } from './fixed-strategy.js';
 
 // Hybrid strategy (recommended default)
 export { HybridStrategy, createHybridStrategy } from './hybrid-strategy.js';
+
+// Custom strategy
+export {
+  CustomStrategy,
+  createCustomStrategy,
+  CustomStrategyLoadError,
+  CustomStrategyNotFoundError,
+  CustomStrategyInvalidError,
+} from './custom-strategy.js';
