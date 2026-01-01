@@ -56,8 +56,8 @@ Currently, AgentGate provides only high-level status updates (queued → running
 |---|--------|--------|-----------|
 | 1 | Agent Event Types | ✅ Complete | PR #32 |
 | 2 | Stream Parser | ✅ Complete | PR #32 |
-| 3 | Agent Driver Streaming | ⬜ Not Started | - |
-| 4 | WebSocket Emission | ⬜ Not Started | - |
+| 3 | Agent Driver Streaming | ✅ Complete | PR #36 |
+| 4 | WebSocket Emission | ✅ Complete | PR #36 |
 | 5 | Live Activity Panel | ⬜ Not Started | - |
 | 6 | Run Detail Streaming | ⬜ Not Started | - |
 | 7 | File Change Events | ⬜ Not Started | - |
