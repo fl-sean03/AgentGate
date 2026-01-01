@@ -104,19 +104,18 @@ export class HybridStrategy extends BaseStrategy {
 
     // 1. Check max iterations
     if (state.iteration >= maxIterations) {
-      const action = this.determinePartialAction(context);
-      const reason =
-        action === 'stop' && this.isProgressMade()
-          ? 'Max iterations reached with progress'
-          : 'Max iterations reached';
+      const partialAccept = this.shouldAcceptPartial(context);
+      const reason = partialAccept
+        ? 'Max iterations reached with progress'
+        : 'Max iterations reached';
 
       logger.info(
         {
           workOrderId: context.workOrderId,
           iteration: state.iteration,
           maxIterations,
-          action,
           progressMade: this.isProgressMade(),
+          partialAccept,
         },
         reason
       );
@@ -125,8 +124,7 @@ export class HybridStrategy extends BaseStrategy {
         this.stopDecision(reason, {
           iteration: state.iteration,
           maxIterations,
-          action,
-          partialAccept: action === 'stop' && this.isProgressMade(),
+          partialAccept,
           highestLevel: this.highestVerificationLevel,
         })
       );
@@ -159,13 +157,13 @@ export class HybridStrategy extends BaseStrategy {
     // 3. Check loop detection
     const loopDetected = this.detectContentLoop(context);
     if (loopDetected) {
-      const action = this.determinePartialAction(context);
+      const partialAccept = this.shouldAcceptPartial(context);
       logger.warn(
         {
           workOrderId: context.workOrderId,
           iteration: state.iteration,
           loopCount: this.loopCount,
-          action,
+          partialAccept,
         },
         'Loop detected via hash comparison'
       );
@@ -173,8 +171,7 @@ export class HybridStrategy extends BaseStrategy {
         this.stopDecision('Loop detected', {
           iteration: state.iteration,
           loopCount: this.loopCount,
-          action,
-          partialAccept: action === 'stop' && this.isProgressMade(),
+          partialAccept,
         })
       );
     }
@@ -476,19 +473,15 @@ export class HybridStrategy extends BaseStrategy {
   }
 
   /**
-   * Determine the action for partial completion.
-   * Returns 'stop' if accepting partial results, 'stop' with fail indication otherwise.
+   * Determine if partial results should be accepted.
+   * Returns true if we've exceeded base iterations and made progress.
    */
-  private determinePartialAction(context: LoopContext): 'stop' | 'stop' {
+  private shouldAcceptPartial(context: LoopContext): boolean {
     const config = this.getHybridConfig();
     const { state } = context;
 
     // If we've used base iterations and made progress, accept partial
-    if (state.iteration >= config.baseIterations && this.isProgressMade()) {
-      return 'stop'; // partial accept
-    }
-
-    return 'stop'; // fail
+    return state.iteration >= config.baseIterations && this.isProgressMade();
   }
 
   /**
