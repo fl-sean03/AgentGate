@@ -41,6 +41,9 @@ export * as controlPlane from './control-plane/index.js';
 // HTTP Server
 export * as server from './server/index.js';
 
+// Harness (Loop Strategy)
+export * as harness from './harness/index.js';
+
 // Utilities
 export { createLogger, logger } from './utils/logger.js';
 export { createTempDir, removeTempDir } from './utils/temp.js';
