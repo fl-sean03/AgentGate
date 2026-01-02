@@ -60,13 +60,18 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 ## Open Issues Mapping
 
-| Issue | Title | Resolution |
-|-------|-------|------------|
-| #68 | Accept repoUrl in workspaceSource | **PR #77** (Wave 1.8) |
-| #66 | Sandbox not enabled by default | **FIXED MANUALLY** |
-| #67 | Empty error objects | v0.2.22 Observability (Thrust 6) |
-| #65 | Runs marked failed despite passing | v0.2.22 State Machine (Thrust 2) |
-| #71 | waitForCI parameter ignored | **v0.2.22 State Machine (Thrust 2)** |
+| Issue | Title | Resolution | GitHub Status |
+|-------|-------|------------|---------------|
+| #68 | Accept repoUrl in workspaceSource | **PR #77** (Wave 1.8) | Should close |
+| #66 | Sandbox not enabled by default | **NEEDS VERIFICATION** | OPEN - verify fix |
+| #67 | Empty error objects | v0.2.22 Observability (Thrust 6) | OPEN |
+| #65 | Runs marked failed despite passing | v0.2.22 State Machine (Thrust 2) | OPEN |
+| #71 | waitForCI parameter ignored | v0.2.22 State Machine (Thrust 2) | OPEN |
+
+### Action Items for Issue Hygiene
+- [x] Close #68 (fixed in PR #77) - Already closed
+- [ ] Verify #66 is actually fixed, then close OR reopen tracking
+- [ ] Confirm #65, #67, #71 are addressed by v0.2.22 DevGuide
 
 ### Issue #71 Investigation Notes
 
