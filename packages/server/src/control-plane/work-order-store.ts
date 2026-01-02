@@ -330,6 +330,32 @@ export class WorkOrderStore {
 
     return count;
   }
+
+  /**
+   * Get all work order IDs.
+   * Returns a Set of all work order IDs for efficient lookup.
+   * (v0.2.23 - Wave 1.6: Orphan cleanup)
+   */
+  async getAllIds(): Promise<Set<string>> {
+    await this.init();
+    const dir = getWorkOrdersDir();
+
+    let files: string[];
+    try {
+      files = await readdir(dir);
+    } catch {
+      return new Set();
+    }
+
+    const ids = new Set<string>();
+    for (const file of files.filter(f => f.endsWith('.json'))) {
+      // Extract ID from filename (remove .json extension)
+      const id = file.slice(0, -5);
+      ids.add(id);
+    }
+
+    return ids;
+  }
 }
 
 // Default singleton instance
