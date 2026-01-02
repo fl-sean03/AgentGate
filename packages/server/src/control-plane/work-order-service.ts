@@ -13,6 +13,7 @@ import {
   type KillResult,
   getAgentProcessManager,
 } from './agent-process-manager.js';
+import { getQueueManager } from './queue-manager.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('work-order-service');
@@ -143,8 +144,8 @@ export class WorkOrderService {
   /**
    * Cancel a work order.
    *
-   * Only queued work orders can be canceled. Running work
-   * orders must be stopped through the execution layer.
+   * Supports canceling both QUEUED and RUNNING work orders.
+   * For RUNNING work orders, sends an abort signal to the agent process.
    *
    * @throws Error if work order not found or not cancelable.
    */
@@ -155,17 +156,41 @@ export class WorkOrderService {
       throw new Error(`Work order not found: ${id}`);
     }
 
-    if (order.status !== WorkOrderStatus.QUEUED) {
+    // Check if in a cancelable state
+    const cancelableStatuses: WorkOrderStatus[] = [
+      WorkOrderStatus.QUEUED,
+      WorkOrderStatus.RUNNING,
+      WorkOrderStatus.WAITING_FOR_CHILDREN,
+      WorkOrderStatus.INTEGRATING,
+    ];
+
+    if (!cancelableStatuses.includes(order.status)) {
       throw new Error(
-        `Cannot cancel work order in status '${order.status}'. Only queued orders can be canceled.`
+        `Cannot cancel work order in status '${order.status}'. Only queued or running orders can be canceled.`
       );
+    }
+
+    // If running, abort the agent process via queue manager
+    if (order.status === WorkOrderStatus.RUNNING) {
+      const queueManager = getQueueManager();
+      const aborted = queueManager.cancelRunning(id);
+      if (aborted) {
+        log.info({ id }, 'Running work order aborted');
+      } else {
+        // Work order may have completed between status check and abort
+        log.warn({ id }, 'Work order was running but not found in queue manager');
+      }
+    } else if (order.status === WorkOrderStatus.QUEUED) {
+      // Remove from queue if still queued
+      const queueManager = getQueueManager();
+      queueManager.cancel(id);
     }
 
     await this.store.updateStatus(id, WorkOrderStatus.CANCELED, {
       completedAt: new Date(),
     });
 
-    log.info({ id }, 'Work order canceled');
+    log.info({ id, previousStatus: order.status }, 'Work order canceled');
   }
 
   /**
