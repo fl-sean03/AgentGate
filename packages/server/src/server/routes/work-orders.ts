@@ -819,6 +819,19 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
 }
 
 /**
+ * Parse owner/repo from a combined repo string
+ * Returns { owner, repoName } where owner may be from the string or default
+ */
+function parseRepoString(repo: string, defaultOwner: string): { owner: string; repoName: string } {
+  const parts = repo.split('/');
+  const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+  return {
+    owner: hasExplicitOwner ? parts[0]! : defaultOwner,
+    repoName: hasExplicitOwner ? parts[1]! : repo,
+  };
+}
+
+/**
  * Map API workspace source to internal format
  * Uses exhaustive switch for type safety (v0.2.10 - Thrust 14)
  *
@@ -833,22 +846,20 @@ function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): Wor
     case 'local':
       return { type: 'local', path: source.path };
     case 'github': {
-      const parts = source.repo.split('/');
-      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+      const { owner, repoName } = parseRepoString(source.repo, defaultOwner);
       return {
         type: 'github',
-        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
-        repo: hasExplicitOwner ? (parts[1] as string) : source.repo,
+        owner,
+        repo: repoName,
         branch: source.branch,
       };
     }
     case 'github-new': {
-      const parts = source.repo.split('/');
-      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+      const { owner, repoName } = parseRepoString(source.repo, defaultOwner);
       return {
         type: 'github-new',
-        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
-        repoName: hasExplicitOwner ? (parts[1] as string) : source.repo,
+        owner,
+        repoName,
         template: source.template as 'minimal' | 'typescript' | 'python' | undefined,
       };
     }
