@@ -233,7 +233,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   const runId = randomUUID();
   const config = getConfig();
   const ciOptions: CreateRunOptions = {
-    ciEnabled: workOrder.waitForCI ?? false,
+    ciEnabled: workOrder.waitForCI ?? config.ci.waitByDefault,
     maxCiIterations: config.ci.maxIterations,
   };
   let run = createRun(runId, workOrder.id, workspace.id, workOrder.maxIterations, ciOptions);
@@ -569,12 +569,16 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
                     // Set feedback for next iteration
                     feedback = ciResult.feedback ?? 'CI checks failed. Please review and fix the issues.';
 
-                    // Check if we have more iterations
-                    if (iteration >= run.maxIterations) {
-                      log.warn({ runId, iteration }, 'Max iterations reached after CI failure');
+                    // Check if CI retry is enabled and we have more iterations
+                    // v0.2.19: ciRetryEnabled config controls whether to retry on CI failure
+                    if (!config.verification.ciRetryEnabled || iteration >= run.maxIterations) {
+                      const reason = !config.verification.ciRetryEnabled
+                        ? 'CI retry disabled'
+                        : 'Max iterations reached';
+                      log.warn({ runId, iteration, ciRetryEnabled: config.verification.ciRetryEnabled }, `${reason} after CI failure`);
                       run = applyTransition(run, RunEvent.VERIFY_FAILED_TERMINAL);
                       run.result = RunResult.FAILED_VERIFICATION;
-                      run.error = 'Max iterations reached - CI checks did not pass';
+                      run.error = `${reason} - CI checks did not pass`;
                       await saveRun(run);
                       onStateChange?.(run);
                       break;
@@ -633,8 +637,9 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         }
       }
 
-      // Check if we have more iterations (strategy may override)
-      let shouldStop = iteration >= run.maxIterations;
+      // Check if local retry is enabled and we have more iterations (strategy may override)
+      // v0.2.19: localRetryEnabled config controls whether to retry on L0-L3 verification failure
+      let shouldStop = !config.verification.localRetryEnabled || iteration >= run.maxIterations;
       let strategyDecision: LoopDecision | null = null;
 
       // Consult strategy for continue/stop decision (v0.2.16 - Thrust 9)
@@ -678,7 +683,11 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
 
       if (shouldStop) {
-        log.warn({ runId, iteration }, 'Max iterations reached, verification failed');
+        // Determine reason for stopping (v0.2.19: localRetryEnabled config)
+        const stopReason = !config.verification.localRetryEnabled
+          ? 'Local verification retry disabled'
+          : 'Max iterations reached';
+        log.warn({ runId, iteration, localRetryEnabled: config.verification.localRetryEnabled }, `${stopReason}, verification failed`);
 
         // Create structured BuildError from verification (v0.2.19 - Thrust 4)
         const verificationError = currentVerification
@@ -686,10 +695,13 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
           : null;
 
         // Set error fields in iteration data (v0.2.19 - Thrust 3)
+        const defaultErrorMessage = !config.verification.localRetryEnabled
+          ? 'Local verification retry disabled - verification failed on first attempt'
+          : 'Max iterations reached without passing verification';
         iterationData.errorType = IterationErrorType.VERIFICATION_FAILED;
         iterationData.errorMessage = verificationError?.message ??
           strategyDecision?.reason ??
-          'Max iterations reached without passing verification';
+          defaultErrorMessage;
         iterationData.errorDetails = {
           buildErrorType: verificationError?.type,
           iteration,
@@ -723,7 +735,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         // Use structured error message (v0.2.19 - Thrust 4)
         run.error = verificationError?.message ??
           strategyDecision?.reason ??
-          'Max iterations reached without passing verification';
+          defaultErrorMessage;
         await saveRun(run);
         onStateChange?.(run);
         break;
