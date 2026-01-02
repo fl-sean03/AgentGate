@@ -307,6 +307,7 @@ export class RetryPolicyEngine {
           await this.sleep(evaluation.delayMs);
         } else {
           log.warn({ attempt, reason: evaluation.reason }, 'No more retries, failing');
+          break; // Exit loop when retry is not allowed
         }
       }
     }

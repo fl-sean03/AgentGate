@@ -265,7 +265,10 @@ describe('RetryPolicyEngine', () => {
     it('should not retry non-retryable errors', async () => {
       const engine = createRetryPolicyEngine({
         maxRetries: 3,
+        backoffMs: 10,
         retryableErrors: [BuildErrorType.SYSTEM_ERROR],
+        retryOnTimeout: false,
+        jitter: false,
       });
 
       const operation = vi.fn().mockRejectedValue(new Error('Code error'));

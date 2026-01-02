@@ -430,15 +430,31 @@ describe('QueueManager', () => {
   });
 
   describe('wait time estimation', () => {
-    it('should return null when no history', () => {
+    it('should return 0 when can start immediately with no history', () => {
       queue.enqueue('wo-1');
       const position = queue.getPosition('wo-1');
 
-      // With no wait time history, estimate should be null
+      // First in queue and capacity available, so can start immediately
+      // Even with no history, estimatedWaitMs should be 0 when position is ahead=0
+      expect(position!.estimatedWaitMs).toBe(0);
+    });
+
+    it('should return null when waiting with no history', () => {
+      // Fill capacity
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+      queue.enqueue('wo-2');
+      queue.markStarted('wo-2');
+
+      // Now add one that must wait
+      queue.enqueue('wo-3');
+      const position = queue.getPosition('wo-3');
+
+      // At capacity, must wait, but no history to estimate from
       expect(position!.estimatedWaitMs).toBeNull();
     });
 
-    it('should return 0 when can start immediately', () => {
+    it('should return 0 when can start immediately with history', () => {
       queue.enqueue('wo-1');
       queue.markStarted('wo-1');
       queue.markCompleted('wo-1');
