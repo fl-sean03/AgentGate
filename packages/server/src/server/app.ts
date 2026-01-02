@@ -8,6 +8,7 @@ import {
   ErrorCode,
   type ServerConfig,
 } from './types.js';
+import { registerOpenAPI } from './openapi.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkOrderRoutes } from './routes/work-orders.js';
 import { registerRunRoutes } from './routes/runs.js';
@@ -127,6 +128,10 @@ export async function createApp(
 
   // Register auth plugin with API key
   registerAuthPlugin(app, apiKey);
+
+  // Register OpenAPI/Swagger documentation (v0.2.17 - Thrust 5)
+  // Must be registered before routes to capture all route schemas
+  await registerOpenAPI(app);
 
   // Register health routes
   registerHealthRoutes(app);

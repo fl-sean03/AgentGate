@@ -13,14 +13,16 @@ import {
   type PaginatedResponse,
   type RunSummary,
   type HarnessInfo,
+  type StartRunResponse,
 } from '../types/api.js';
 import { workOrderService } from '../../control-plane/work-order-service.js';
 import { listRuns } from '../../orchestrator/run-store.js';
-import { WorkOrderStatus, type WorkOrder, type Run, RunState, type SubmitRequest } from '../../types/index.js';
+import { WorkOrderStatus, type WorkOrder, type Run, RunState, RunResult, type SubmitRequest } from '../../types/index.js';
 import { createLogger } from '../../utils/logger.js';
 import { resolveHarnessConfig, type ResolveOptions } from '../../harness/config-resolver.js';
 import { type HarnessConfig, type ResolvedHarnessConfig } from '../../types/harness-config.js';
 import { loadAuditRecord } from '../../harness/audit-trail.js';
+import { createOrchestrator } from '../../orchestrator/orchestrator.js';
 
 const logger = createLogger('routes:work-orders');
 
@@ -546,6 +548,128 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
       );
     }
   });
+
+  /**
+   * POST /api/v1/work-orders/:id/runs - Start a new run for a work order
+   * (v0.2.17 - Thrust 7)
+   * Requires authentication
+   * Returns 404 if work order not found
+   * Returns 409 if work order is not in queued or failed state
+   */
+  app.post<{
+    Params: WorkOrderIdParams;
+  }>(
+    '/api/v1/work-orders/:id/runs',
+    {
+      preHandler: [apiKeyAuth],
+    },
+    async (request, reply) => {
+      try {
+        // Validate params
+        const paramsResult = workOrderIdParamsSchema.safeParse(request.params);
+        if (!paramsResult.success) {
+          return reply.status(400).send(
+            createErrorResponse(
+              ErrorCode.BAD_REQUEST,
+              'Invalid work order ID',
+              { errors: paramsResult.error.errors },
+              request.id
+            )
+          );
+        }
+
+        const { id } = paramsResult.data;
+
+        // Get work order
+        const order = await workOrderService.get(id);
+        if (!order) {
+          return reply.status(404).send(
+            createErrorResponse(
+              ErrorCode.NOT_FOUND,
+              `Work order not found: ${id}`,
+              undefined,
+              request.id
+            )
+          );
+        }
+
+        // Verify work order is in queued or failed state
+        const runnableStatuses: WorkOrderStatus[] = [
+          WorkOrderStatus.QUEUED,
+          WorkOrderStatus.FAILED,
+        ];
+
+        if (!runnableStatuses.includes(order.status)) {
+          return reply.status(409).send(
+            createErrorResponse(
+              ErrorCode.CONFLICT,
+              `Cannot start run for work order in status '${order.status}'. Only queued or failed work orders can be run.`,
+              undefined,
+              request.id
+            )
+          );
+        }
+
+        logger.info(
+          { workOrderId: id, status: order.status, requestId: request.id },
+          'Starting run for work order via API'
+        );
+
+        // Create orchestrator and execute in background
+        const orchestrator = createOrchestrator();
+        const startedAt = new Date();
+
+        // Execute the work order asynchronously
+        // We don't await this - it runs in the background
+        orchestrator.execute(order).then(async (run) => {
+          // Update work order status based on result
+          if (run.result === RunResult.PASSED) {
+            await workOrderService.markSucceeded(id);
+          } else {
+            const errorMessage = run.error ?? `Run failed with result: ${run.result}`;
+            await workOrderService.markFailed(id, errorMessage);
+          }
+          logger.info(
+            { workOrderId: id, runId: run.id, result: run.result },
+            'Run completed for work order'
+          );
+        }).catch(async (error: unknown) => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          await workOrderService.markFailed(id, errorMessage);
+          logger.error(
+            { workOrderId: id, err: error as Error },
+            'Run failed for work order'
+          );
+        });
+
+        // Get the run ID from the most recent run (just created)
+        // Since execute is async, we wait a short time for run creation
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const runs = await getRunsForWorkOrder(id);
+        const latestRun = runs.sort((a, b) =>
+          b.startedAt.getTime() - a.startedAt.getTime()
+        )[0];
+
+        const response: StartRunResponse = {
+          runId: latestRun?.id ?? `run-${id}-${Date.now()}`,
+          status: 'building',
+          startedAt: (latestRun?.startedAt ?? startedAt).toISOString(),
+        };
+
+        return reply.status(202).send(createSuccessResponse(response, request.id));
+      } catch (error) {
+        logger.error({ err: error, requestId: request.id }, 'Failed to start run');
+        return reply.status(500).send(
+          createErrorResponse(
+            ErrorCode.INTERNAL_ERROR,
+            'Failed to start run',
+            undefined,
+            request.id
+          )
+        );
+      }
+    }
+  );
 }
 
 /**
