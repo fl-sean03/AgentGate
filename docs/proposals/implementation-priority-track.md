@@ -43,16 +43,16 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
-| 2.1 | - | NOT STARTED | Auto-Queue Processing |
-| 2.2 | - | NOT STARTED | Stale Work Order Detection |
+| 2.1 | - | ✅ DIRECT COMMIT | Auto-Queue Processing |
+| 2.2 | ydsR1nuVGqGG | 🏃 RUNNING | Stale Work Order Detection |
 
-**Dependencies:** Requires Wave 1 merged (specifically 1.1, 1.3, 1.4)
+**Dependencies:** Requires Wave 1 merged (specifically 1.1, 1.3, 1.4) - ✅ MET
 
-### Wave 3: CLI (Parallel with Wave 2) - PENDING
+### Wave 3: CLI (Parallel with Wave 2) - IN PROGRESS
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
-| 3.1 | - | NOT STARTED | Queue Management CLI |
+| 3.1 | zCBtDxBdOMUU | 🏃 RUNNING | Queue Management CLI |
 
 ---
 
