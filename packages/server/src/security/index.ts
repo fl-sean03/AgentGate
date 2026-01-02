@@ -46,3 +46,12 @@ export * from './policy/index.js';
 
 // Detectors module
 export * from './detectors/index.js';
+
+// Enforcement module
+export * from './enforcement/index.js';
+
+// Audit module
+export * from './audit/index.js';
+
+// Integration module
+export * from './integration/index.js';
