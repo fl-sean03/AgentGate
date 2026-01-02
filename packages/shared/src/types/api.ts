@@ -85,14 +85,12 @@ export const createWorkOrderBodySchema = z.object({
     }),
     z.object({
       type: z.literal('github'),
-      owner: z.string().min(1),
-      repo: z.string().min(1),
+      repo: z.string().min(1), // Format: "owner/repo" or just "repo" (uses default owner)
       branch: z.string().optional(),
     }),
     z.object({
       type: z.literal('github-new'),
-      owner: z.string().min(1),
-      repoName: z.string().min(1),
+      repo: z.string().min(1), // Format: "owner/repo" or just "repo" (uses default owner)
       private: z.boolean().optional(),
       template: z.string().optional(),
     }),
