@@ -372,6 +372,7 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
   /**
    * DELETE /api/v1/work-orders/:id - Cancel a work order
    * Requires authentication
+   * Supports canceling both queued and running work orders (v0.2.23)
    * Returns 409 if work order is already completed
    */
   app.delete<{
@@ -429,12 +430,25 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           );
         }
 
-        // Cancel the work order
+        // Log if canceling a running work order (v0.2.23)
+        if (order.status === WorkOrderStatus.RUNNING) {
+          logger.info(
+            { workOrderId: id, status: order.status, requestId: request.id },
+            'Canceling running work order via API'
+          );
+        }
+
+        // Cancel the work order (handles both queued and running)
         await workOrderService.cancel(id);
 
         return reply.send(
           createSuccessResponse(
-            { id, status: 'canceled', message: 'Work order canceled successfully' },
+            {
+              id,
+              status: 'canceled',
+              message: 'Work order canceled successfully',
+              wasRunning: order.status === WorkOrderStatus.RUNNING,
+            },
             request.id
           )
         );
