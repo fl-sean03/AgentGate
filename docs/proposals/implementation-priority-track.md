@@ -1,7 +1,7 @@
 # Implementation Priority Track
 
 **Last Updated:** 2026-01-02
-**Current Focus:** v0.2.23 Queue Robustness Tactical Fixes
+**Current Focus:** v0.2.22 Queue Architecture Refactor
 
 ---
 
@@ -9,16 +9,39 @@
 
 ```
 v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
-   ↑
-   └── CURRENT FOCUS
+             ↑
+             └── CURRENT FOCUS
 ```
 
 | Priority | Version | Focus | Status |
 |----------|---------|-------|--------|
 | 1 | **v0.2.23** | Queue Tactical Fixes | **✅ COMPLETE** |
-| 2 | v0.2.22 | Queue Architecture Refactor | **NEXT** |
+| 2 | **v0.2.22** | Queue Architecture Refactor | **IN PROGRESS** |
 | 3 | v0.2.20 | Dashboard Enhancement | Planning |
 | 4 | v0.2.21 | Terminal UI (TUI) | Planning |
+
+---
+
+## v0.2.22 Quick Start
+
+**Next Session:** Start v0.2.22 implementation
+
+1. Read DevGuide: `docs/DevGuides/DevGuide_v0.2.22/00-index.md`
+2. Review 6 Thrusts in order:
+   - Thrust 2: State Machine (fixes #65, #71)
+   - Thrust 3: Scheduler
+   - Thrust 4: Execution Manager (fixes #66)
+   - Thrust 5: Retry Manager
+   - Thrust 6: Observability (fixes #67)
+   - Thrust 7: Migration
+
+**Issues to Fix:**
+| Issue | Thrust |
+|-------|--------|
+| #65 Runs marked failed despite passing | Thrust 2 |
+| #66 Sandbox not enabled by default | Thrust 4 |
+| #67 Empty error objects | Thrust 6 |
+| #71 waitForCI parameter ignored | Thrust 2 |
 
 ---
 
