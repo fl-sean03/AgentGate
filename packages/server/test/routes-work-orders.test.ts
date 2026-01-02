@@ -63,6 +63,38 @@ vi.mock('../src/control-plane/work-order-service.js', () => {
         [WorkOrderStatus.FAILED]: 0,
         [WorkOrderStatus.CANCELED]: 0,
       })),
+      purge: vi.fn(async (options: any) => {
+        const orders = Array.from(mockOrders.values()) as any[];
+        let matching = orders;
+
+        // Filter by status
+        if (options.statuses && options.statuses.length > 0) {
+          matching = matching.filter((o) => options.statuses.includes(o.status));
+        }
+
+        // Filter by age
+        if (options.olderThan) {
+          matching = matching.filter((o) => o.createdAt < options.olderThan);
+        }
+
+        if (options.dryRun) {
+          return {
+            deletedCount: 0,
+            deletedIds: [],
+            wouldDelete: matching.length,
+          };
+        }
+
+        const deletedIds = matching.map((o) => o.id);
+        for (const id of deletedIds) {
+          mockOrders.delete(id);
+        }
+
+        return {
+          deletedCount: deletedIds.length,
+          deletedIds,
+        };
+      }),
     },
     _mockOrders: mockOrders,
   };
@@ -520,6 +552,64 @@ describe('Work Orders Routes', () => {
       const body = response.json();
       expect(body.error.code).toBe('CONFLICT');
     });
+
+    it('should cancel running work order (v0.2.23)', async () => {
+      const { _mockOrders, workOrderService } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'running-order-cancel',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.RUNNING,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/work-orders/${order.id}`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('canceled');
+      expect(body.data.wasRunning).toBe(true);
+      expect(workOrderService.cancel).toHaveBeenCalledWith(order.id);
+    });
+
+    it('should indicate wasRunning=false for queued orders', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'queued-order-cancel',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.QUEUED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/work-orders/${order.id}`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.wasRunning).toBe(false);
+    });
   });
 
   describe('POST /api/v1/work-orders/:id/runs', () => {
@@ -690,6 +780,234 @@ describe('Work Orders Routes', () => {
       expect(response.statusCode).toBe(409);
       const body = response.json();
       expect(body.error.code).toBe('CONFLICT');
+    });
+  });
+
+  describe('POST /api/v1/work-orders/purge', () => {
+    it('should purge work orders with valid auth', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+
+      // Create some work orders
+      const order1 = {
+        id: 'purge-test-1',
+        taskPrompt: 'Test task 1',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+      };
+      const order2 = {
+        id: 'purge-test-2',
+        taskPrompt: 'Test task 2',
+        status: WorkOrderStatus.SUCCEEDED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+      };
+      _mockOrders.set(order1.id, order1);
+      _mockOrders.set(order2.id, order2);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['failed'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.deletedCount).toBe(1);
+      expect(body.data.deletedIds).toContain('purge-test-1');
+    });
+
+    it('should return 401 without auth header', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['failed'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should support dry run mode', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+
+      const order = {
+        id: 'dry-run-test',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['failed'],
+          dryRun: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.deletedCount).toBe(0);
+      expect(body.data.wouldDelete).toBe(1);
+      // Order should still exist
+      expect(_mockOrders.has('dry-run-test')).toBe(true);
+    });
+
+    it('should support olderThanDays filter', async () => {
+      const { _mockOrders, workOrderService } = await import('../src/control-plane/work-order-service.js');
+
+      const oldOrder = {
+        id: 'old-order',
+        taskPrompt: 'Old task',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+      };
+      const newOrder = {
+        id: 'new-order',
+        taskPrompt: 'New task',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(), // Now
+      };
+      _mockOrders.set(oldOrder.id, oldOrder);
+      _mockOrders.set(newOrder.id, newOrder);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['failed'],
+          olderThanDays: 7, // Older than 7 days
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(workOrderService.purge).toHaveBeenCalled();
+    });
+
+    it('should support multiple status filters', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+
+      const failedOrder = {
+        id: 'failed-order-purge',
+        taskPrompt: 'Failed task',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      const canceledOrder = {
+        id: 'canceled-order-purge',
+        taskPrompt: 'Canceled task',
+        status: WorkOrderStatus.CANCELED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(failedOrder.id, failedOrder);
+      _mockOrders.set(canceledOrder.id, canceledOrder);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['failed', 'canceled'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.deletedCount).toBe(2);
+    });
+
+    it('should reject invalid status values', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          statuses: ['invalid_status'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error.code).toBe('BAD_REQUEST');
+    });
+
+    it('should accept empty body for purging all', async () => {
+      const { workOrderService } = await import('../src/control-plane/work-order-service.js');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/purge',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(workOrderService.purge).toHaveBeenCalled();
     });
   });
 });

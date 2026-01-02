@@ -290,6 +290,162 @@ describe('QueueManager', () => {
     });
   });
 
+  describe('cancelRunning (v0.2.23)', () => {
+    it('should cancel and abort a running work order', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+
+      expect(queue.isRunning('wo-1')).toBe(true);
+
+      const result = queue.cancelRunning('wo-1');
+
+      expect(result).toBe(true);
+      expect(queue.isRunning('wo-1')).toBe(false);
+    });
+
+    it('should return false for non-running work order', () => {
+      queue.enqueue('wo-1');
+
+      const result = queue.cancelRunning('wo-1');
+
+      expect(result).toBe(false);
+      expect(queue.isEnqueued('wo-1')).toBe(true);
+    });
+
+    it('should return false for unknown work order', () => {
+      const result = queue.cancelRunning('unknown');
+      expect(result).toBe(false);
+    });
+
+    it('should abort the registered AbortController', () => {
+      queue.enqueue('wo-1');
+
+      const abortController = new AbortController();
+      queue.markStarted('wo-1', abortController);
+
+      expect(abortController.signal.aborted).toBe(false);
+
+      queue.cancelRunning('wo-1');
+
+      expect(abortController.signal.aborted).toBe(true);
+    });
+
+    it('should emit canceled event when canceling running work order', () => {
+      const canceledHandler = vi.fn();
+      queue.on('canceled', canceledHandler);
+
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+      queue.cancelRunning('wo-1');
+
+      expect(canceledHandler).toHaveBeenCalledWith('wo-1');
+    });
+
+    it('should emit stateChange event when canceling running work order', () => {
+      const stateChangeHandler = vi.fn();
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+
+      queue.on('stateChange', stateChangeHandler);
+      queue.cancelRunning('wo-1');
+
+      expect(stateChangeHandler).toHaveBeenCalled();
+      const stats = stateChangeHandler.mock.calls[0]![0];
+      expect(stats.running).toBe(0);
+    });
+
+    it('should process queue after canceling running work order', () => {
+      const readyHandler = vi.fn();
+      queue.on('ready', readyHandler);
+
+      // Fill capacity
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+      queue.enqueue('wo-2');
+      queue.markStarted('wo-2');
+      queue.enqueue('wo-3'); // This will emit ready
+
+      readyHandler.mockClear();
+
+      // Cancel one running work order
+      queue.cancelRunning('wo-1');
+
+      // Should emit ready for wo-3
+      expect(readyHandler).toHaveBeenCalledWith('wo-3');
+    });
+  });
+
+  describe('registerAbortController (v0.2.23)', () => {
+    it('should register AbortController for running work order', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+
+      const abortController = new AbortController();
+      const result = queue.registerAbortController('wo-1', abortController);
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false for non-running work order', () => {
+      queue.enqueue('wo-1');
+
+      const abortController = new AbortController();
+      const result = queue.registerAbortController('wo-1', abortController);
+
+      expect(result).toBe(false);
+    });
+
+    it('should replace existing AbortController', () => {
+      queue.enqueue('wo-1');
+      const originalController = new AbortController();
+      queue.markStarted('wo-1', originalController);
+
+      const newController = new AbortController();
+      queue.registerAbortController('wo-1', newController);
+
+      // Cancel should abort the new controller, not the original
+      queue.cancelRunning('wo-1');
+
+      expect(newController.signal.aborted).toBe(true);
+      expect(originalController.signal.aborted).toBe(false);
+    });
+  });
+
+  describe('getAbortSignal (v0.2.23)', () => {
+    it('should return AbortSignal for running work order', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1');
+
+      const signal = queue.getAbortSignal('wo-1');
+
+      expect(signal).not.toBeNull();
+      expect(signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('should return null for non-running work order', () => {
+      queue.enqueue('wo-1');
+
+      const signal = queue.getAbortSignal('wo-1');
+
+      expect(signal).toBeNull();
+    });
+
+    it('should return null for unknown work order', () => {
+      const signal = queue.getAbortSignal('unknown');
+      expect(signal).toBeNull();
+    });
+
+    it('should return signal from registered AbortController', () => {
+      queue.enqueue('wo-1');
+      const abortController = new AbortController();
+      queue.markStarted('wo-1', abortController);
+
+      const signal = queue.getAbortSignal('wo-1');
+
+      expect(signal).toBe(abortController.signal);
+    });
+  });
+
   describe('getStats', () => {
     it('should return accurate statistics', () => {
       queue.enqueue('wo-1');
