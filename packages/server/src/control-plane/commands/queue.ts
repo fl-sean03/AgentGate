@@ -28,7 +28,7 @@ import {
   bold,
   dim,
 } from '../formatter.js';
-import type { WorkOrderStatus, WorkOrder } from '../../types/index.js';
+import type { WorkOrderStatus } from '../../types/index.js';
 
 /**
  * Configuration for queue commands (from environment)

@@ -568,18 +568,26 @@ describe('Queue CLI Commands', () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
+      // Track if process.exit was called
+      let exitCalled = false;
+      let exitCode: number | string | null | undefined;
+
       // Mock process.exit to throw instead of exiting
       const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined): never => {
+        exitCalled = true;
+        exitCode = code;
         throw new Error(`process.exit called with code ${code}`);
       });
 
       try {
         await command.parseAsync(['node', 'test', 'list'], { from: 'node' });
-        // If we get here without throwing, the test should fail
-        expect.fail('Expected process.exit to be called');
-      } catch (error) {
-        expect((error as Error).message).toContain('process.exit called');
+      } catch {
+        // Expected to throw due to process.exit mock
       }
+
+      // Verify process.exit was called with non-zero code
+      expect(exitCalled).toBe(true);
+      expect(exitCode).toBe(1);
 
       consoleSpy.mockRestore();
       consoleErrorSpy.mockRestore();
