@@ -62,16 +62,37 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 | Issue | Title | Resolution | GitHub Status |
 |-------|-------|------------|---------------|
-| #68 | Accept repoUrl in workspaceSource | **PR #77** (Wave 1.8) | Should close |
-| #66 | Sandbox not enabled by default | **NEEDS VERIFICATION** | OPEN - verify fix |
+| #68 | Accept repoUrl in workspaceSource | **PR #77** (Wave 1.8) | CLOSED |
+| #66 | Sandbox not enabled by default | **v0.2.22 Execution Manager (Thrust 4)** | OPEN |
 | #67 | Empty error objects | v0.2.22 Observability (Thrust 6) | OPEN |
 | #65 | Runs marked failed despite passing | v0.2.22 State Machine (Thrust 2) | OPEN |
 | #71 | waitForCI parameter ignored | v0.2.22 State Machine (Thrust 2) | OPEN |
 
 ### Action Items for Issue Hygiene
 - [x] Close #68 (fixed in PR #77) - Already closed
-- [ ] Verify #66 is actually fixed, then close OR reopen tracking
+- [x] Verify #66 - **NOT FIXED**, assigned to v0.2.22 Thrust 4
 - [ ] Confirm #65, #67, #71 are addressed by v0.2.22 DevGuide
+
+### Issue #66 Investigation Notes (2026-01-02)
+
+**Symptom:** Agents run unsandboxed despite config existing.
+
+**Root Cause:** Config not wired to driver:
+```typescript
+// Config exists but buildSDKDriverConfig() never called:
+sdk.enableSandbox: true  // default
+
+// Orchestrator instantiates with no config:
+new ClaudeCodeSubscriptionDriver()  // useSandbox defaults to false
+```
+
+**Fix Location:** v0.2.22 Thrust 4 (Execution Manager) - Wire config to driver:
+```typescript
+const config = getConfig();
+const driver = new ClaudeCodeSubscriptionDriver({
+  useSandbox: config.sdk.enableSandbox,
+});
+```
 
 ### Issue #71 Investigation Notes
 
