@@ -158,8 +158,7 @@ describe('API Schemas', () => {
         taskPrompt: validLocalWorkspace.taskPrompt,
         workspaceSource: {
           type: 'github',
-          owner: 'testowner',
-          repo: 'testrepo',
+          repo: 'testowner/testrepo',
           branch: 'main'
         },
       });
@@ -171,8 +170,7 @@ describe('API Schemas', () => {
         taskPrompt: validLocalWorkspace.taskPrompt,
         workspaceSource: {
           type: 'github',
-          owner: 'testowner',
-          repo: 'testrepo'
+          repo: 'testowner/testrepo'
         },
       });
       expect(result.success).toBe(true);
@@ -183,8 +181,7 @@ describe('API Schemas', () => {
         taskPrompt: validLocalWorkspace.taskPrompt,
         workspaceSource: {
           type: 'github-new',
-          owner: 'testowner',
-          repoName: 'new-repo',
+          repo: 'testowner/new-repo',
           private: true,
           template: 'typescript-base'
         },
@@ -197,8 +194,7 @@ describe('API Schemas', () => {
         taskPrompt: validLocalWorkspace.taskPrompt,
         workspaceSource: {
           type: 'github-new',
-          owner: 'testowner',
-          repoName: 'new-repo'
+          repo: 'testowner/new-repo'
         },
       });
       expect(result.success).toBe(true);
@@ -212,20 +208,21 @@ describe('API Schemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject empty github owner', () => {
+    it('should reject empty github repo', () => {
       const result = createWorkOrderBodySchema.safeParse({
         taskPrompt: validLocalWorkspace.taskPrompt,
-        workspaceSource: { type: 'github', owner: '', repo: 'testrepo' },
+        workspaceSource: { type: 'github', repo: '' },
       });
       expect(result.success).toBe(false);
     });
 
-    it('should reject empty github repo', () => {
+    it('should accept github repo without explicit owner', () => {
+      // "repo-only" format - uses default owner from env
       const result = createWorkOrderBodySchema.safeParse({
         taskPrompt: validLocalWorkspace.taskPrompt,
-        workspaceSource: { type: 'github', owner: 'testowner', repo: '' },
+        workspaceSource: { type: 'github', repo: 'testrepo' },
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('should reject taskPrompt shorter than 10 characters', () => {
