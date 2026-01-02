@@ -95,6 +95,16 @@ interface QueuedWorkOrder {
 }
 
 /**
+ * Internal representation of a running work order with timeout tracking.
+ * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+ */
+interface RunningWorkOrder {
+  workOrderId: string;
+  startedAt: Date;
+  maxWallClockMs: number | null;
+}
+
+/**
  * Persisted queue state for recovery.
  */
 interface PersistedQueueState {
@@ -120,6 +130,9 @@ export interface QueueManagerEvents {
   /** Emitted when a work order times out in queue */
   timeout: (workOrderId: string) => void;
 
+  /** Emitted when a running work order exceeds its maxWallClockSeconds (v0.2.23 - Wave 1.4) */
+  runTimeout: (workOrderId: string, elapsedMs: number, maxWallClockMs: number) => void;
+
   /** Emitted when queue state changes */
   stateChange: (stats: QueueStats) => void;
 }
@@ -139,6 +152,9 @@ export interface QueueManagerConfig {
 
   /** How often to persist queue state (ms) */
   persistIntervalMs: number;
+
+  /** How often to check running work orders for timeout (ms). Default: 30000 (30s) (v0.2.23 - Wave 1.4) */
+  runTimeoutCheckIntervalMs: number;
 }
 
 /**
@@ -149,6 +165,7 @@ export const DEFAULT_QUEUE_CONFIG: QueueManagerConfig = {
   maxQueueSize: 100,
   persistDir: null,
   persistIntervalMs: 30000,
+  runTimeoutCheckIntervalMs: 30000, // Check every 30 seconds (v0.2.23 - Wave 1.4)
 };
 
 /**
@@ -164,9 +181,13 @@ export const DEFAULT_QUEUE_CONFIG: QueueManagerConfig = {
 export class QueueManager extends EventEmitter {
   private queue: QueuedWorkOrder[] = [];
   private running: Set<string> = new Set();
+  /** Running work orders with timeout tracking (v0.2.23 - Wave 1.4) */
+  private runningWithTimeout: Map<string, RunningWorkOrder> = new Map();
   private config: QueueManagerConfig;
   private waitTimes: number[] = []; // Recent wait times for estimation
   private persistTimer: NodeJS.Timeout | null = null;
+  /** Timer for checking running work order timeouts (v0.2.23 - Wave 1.4) */
+  private runTimeoutTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<QueueManagerConfig> = {}) {
     super();
@@ -179,11 +200,19 @@ export class QueueManager extends EventEmitter {
       }, this.config.persistIntervalMs);
     }
 
+    // Start run timeout check timer (v0.2.23 - Wave 1.4)
+    if (this.config.runTimeoutCheckIntervalMs > 0) {
+      this.runTimeoutTimer = setInterval(() => {
+        this.checkRunTimeouts();
+      }, this.config.runTimeoutCheckIntervalMs);
+    }
+
     log.info(
       {
         maxConcurrent: this.config.maxConcurrent,
         maxQueueSize: this.config.maxQueueSize,
         hasPersistence: !!this.config.persistDir,
+        runTimeoutCheckIntervalMs: this.config.runTimeoutCheckIntervalMs,
       },
       'QueueManager initialized'
     );
@@ -339,8 +368,9 @@ export class QueueManager extends EventEmitter {
    * Mark a work order as started (remove from queue, add to running).
    *
    * @param workOrderId - ID to mark as started
+   * @param maxWallClockMs - Maximum wall clock time in milliseconds (null = no timeout) (v0.2.23 - Wave 1.4)
    */
-  markStarted(workOrderId: string): void {
+  markStarted(workOrderId: string, maxWallClockMs?: number | null): void {
     const index = this.queue.findIndex((e) => e.workOrderId === workOrderId);
     if (index !== -1) {
       const entry = this.queue[index]!;
@@ -350,7 +380,15 @@ export class QueueManager extends EventEmitter {
     }
 
     this.running.add(workOrderId);
-    log.debug({ workOrderId, running: this.running.size }, 'Work order started');
+
+    // Track running work order with timeout (v0.2.23 - Wave 1.4)
+    this.runningWithTimeout.set(workOrderId, {
+      workOrderId,
+      startedAt: new Date(),
+      maxWallClockMs: maxWallClockMs ?? null,
+    });
+
+    log.debug({ workOrderId, running: this.running.size, maxWallClockMs }, 'Work order started');
 
     this.notifyPositionChanges();
     this.emit('stateChange', this.getStats());
@@ -363,6 +401,8 @@ export class QueueManager extends EventEmitter {
    */
   markCompleted(workOrderId: string): void {
     this.running.delete(workOrderId);
+    // Clean up timeout tracking (v0.2.23 - Wave 1.4)
+    this.runningWithTimeout.delete(workOrderId);
     log.debug({ workOrderId, running: this.running.size }, 'Work order completed');
 
     // Process queue to start next work orders
@@ -519,6 +559,12 @@ export class QueueManager extends EventEmitter {
       this.persistTimer = null;
     }
 
+    // Clean up run timeout timer (v0.2.23 - Wave 1.4)
+    if (this.runTimeoutTimer) {
+      clearInterval(this.runTimeoutTimer);
+      this.runTimeoutTimer = null;
+    }
+
     // Final persist
     await this.persist();
 
@@ -603,6 +649,84 @@ export class QueueManager extends EventEmitter {
     }
     const sum = this.waitTimes.reduce((a, b) => a + b, 0);
     return Math.round(sum / this.waitTimes.length);
+  }
+
+  /**
+   * Check running work orders for timeout violations.
+   * Emits 'runTimeout' event for any work orders that have exceeded their maxWallClockMs.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   */
+  private checkRunTimeouts(): void {
+    const now = Date.now();
+    const timedOut: Array<{ workOrderId: string; elapsedMs: number; maxWallClockMs: number }> = [];
+
+    for (const [workOrderId, runningWo] of this.runningWithTimeout) {
+      if (runningWo.maxWallClockMs === null) {
+        continue; // No timeout configured
+      }
+
+      const elapsedMs = now - runningWo.startedAt.getTime();
+      if (elapsedMs > runningWo.maxWallClockMs) {
+        timedOut.push({
+          workOrderId,
+          elapsedMs,
+          maxWallClockMs: runningWo.maxWallClockMs,
+        });
+      }
+    }
+
+    // Emit timeout events for all timed out work orders
+    for (const { workOrderId, elapsedMs, maxWallClockMs } of timedOut) {
+      log.warn(
+        { workOrderId, elapsedMs, maxWallClockMs },
+        'Running work order exceeded maxWallClockSeconds timeout'
+      );
+      this.emit('runTimeout', workOrderId, elapsedMs, maxWallClockMs);
+    }
+  }
+
+  /**
+   * Get the elapsed time in milliseconds for a running work order.
+   * Returns null if the work order is not running or not tracked.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   */
+  getRunElapsedMs(workOrderId: string): number | null {
+    const runningWo = this.runningWithTimeout.get(workOrderId);
+    if (!runningWo) {
+      return null;
+    }
+    return Date.now() - runningWo.startedAt.getTime();
+  }
+
+  /**
+   * Get the running work order info with timeout tracking.
+   * Returns null if the work order is not running or not tracked.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   */
+  getRunningWorkOrderInfo(workOrderId: string): { startedAt: Date; maxWallClockMs: number | null; elapsedMs: number } | null {
+    const runningWo = this.runningWithTimeout.get(workOrderId);
+    if (!runningWo) {
+      return null;
+    }
+    return {
+      startedAt: runningWo.startedAt,
+      maxWallClockMs: runningWo.maxWallClockMs,
+      elapsedMs: Date.now() - runningWo.startedAt.getTime(),
+    };
+  }
+
+  /**
+   * Check if a specific running work order has exceeded its timeout.
+   * Returns false if the work order is not running, not tracked, or has no timeout.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   */
+  hasRunTimedOut(workOrderId: string): boolean {
+    const runningWo = this.runningWithTimeout.get(workOrderId);
+    if (!runningWo || runningWo.maxWallClockMs === null) {
+      return false;
+    }
+    const elapsedMs = Date.now() - runningWo.startedAt.getTime();
+    return elapsedMs > runningWo.maxWallClockMs;
   }
 }
 
