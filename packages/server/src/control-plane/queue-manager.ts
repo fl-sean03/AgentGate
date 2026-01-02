@@ -305,11 +305,12 @@ export class QueueManager extends EventEmitter {
     const waitTime = Date.now() - next.enqueuedAt.getTime();
     this.recordWaitTime(waitTime);
 
-    // Move to running (with a default AbortController - caller should replace with registerRunning)
+    // Move to running (with defaults - caller should use markStarted with proper options instead)
     const abortController = new AbortController();
     this.running.set(next.workOrderId, {
       workOrderId: next.workOrderId,
       startedAt: new Date(),
+      maxWallClockMs: null,
       abortController,
     });
 
