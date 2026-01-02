@@ -11,6 +11,8 @@ import {
 } from '../formatter.js';
 import { getConfig } from '../../config/index.js';
 import { getQueueManager } from '../queue-manager.js';
+import { createStaleDetector, type StaleDetector } from '../stale-detector.js';
+import { workOrderStore } from '../work-order-store.js';
 import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('serve-command');
@@ -28,6 +30,11 @@ const serveOptionsSchema = z.object({
   staggerDelay: z.coerce.number().int().min(0).default(30000),
   pollInterval: z.coerce.number().int().min(1000).default(5000),
   minMemory: z.coerce.number().int().min(512).default(2048),
+  // Stale detection options (v0.2.23 - Wave 2.2)
+  staleCheck: z.boolean().default(true),
+  staleCheckInterval: z.coerce.number().int().min(10000).default(60000),
+  staleThreshold: z.coerce.number().int().min(60000).default(600000),
+  maxRunningTime: z.coerce.number().int().min(300000).default(14400000),
 });
 
 type ServeOptions = z.infer<typeof serveOptionsSchema>;
@@ -47,6 +54,12 @@ export function createServeCommand(): Command {
     .option('--stagger-delay <ms>', 'Delay between starting work orders (ms)', '30000')
     .option('--poll-interval <ms>', 'How often to check the queue (ms)', '5000')
     .option('--min-memory <mb>', 'Minimum available memory to start a work order (MB)', '2048')
+    // Stale detection options (v0.2.23 - Wave 2.2)
+    .option('--stale-check', 'Enable stale work order detection (default: true)', true)
+    .option('--no-stale-check', 'Disable stale work order detection')
+    .option('--stale-check-interval <ms>', 'How often to check for stale work orders (ms)', '60000')
+    .option('--stale-threshold <ms>', 'Time without activity before considered stale (ms)', '600000')
+    .option('--max-running-time <ms>', 'Maximum allowed running time for work orders (ms)', '14400000')
     .action(async (options: Record<string, unknown>) => {
       try {
         await executeServe(options);
@@ -114,6 +127,16 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   }
   print('');
 
+  // Stale detection configuration (v0.2.23 - Wave 2.2)
+  print(`${bold('Stale Detection Configuration:')}`);
+  print(`  ${bold('Stale Check:')} ${cyan(options.staleCheck ? 'enabled' : 'disabled')}`);
+  if (options.staleCheck) {
+    print(`  ${bold('Check Interval:')} ${cyan(String(options.staleCheckInterval) + 'ms')}`);
+    print(`  ${bold('Stale Threshold:')} ${cyan(String(options.staleThreshold) + 'ms')}`);
+    print(`  ${bold('Max Running Time:')} ${cyan(String(options.maxRunningTime) + 'ms')}`);
+  }
+  print('');
+
   // Start the server - only include apiKey if it's set
   const serverConfig: Parameters<typeof startServer>[0] = {
     port: options.port,
@@ -150,13 +173,53 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     print('');
   }
 
+  // Initialize stale detector (v0.2.23 - Wave 2.2)
+  let staleDetector: StaleDetector | null = null;
+  if (options.staleCheck) {
+    print(`${bold('Starting stale detector...')}`);
+
+    staleDetector = createStaleDetector(workOrderStore, queueManager, {
+      checkIntervalMs: options.staleCheckInterval,
+      staleThresholdMs: options.staleThreshold,
+      maxRunningTimeMs: options.maxRunningTime,
+    });
+
+    // Forward stale detector events to queue manager for consistent event handling
+    staleDetector.on('staleDetected', (check: { workOrderId: string; reason?: string }) => {
+      log.info({ workOrderId: check.workOrderId, reason: check.reason }, 'Stale work order detected');
+      queueManager.emit('staleDetected', check.workOrderId, check.reason ?? 'Unknown');
+    });
+
+    staleDetector.on('deadProcessDetected', (workOrderId: string, reason: string) => {
+      log.warn({ workOrderId, reason }, 'Dead process detected');
+      queueManager.emit('deadProcessDetected', workOrderId, reason);
+    });
+
+    staleDetector.on('staleHandled', (workOrderId: string, killed: boolean) => {
+      log.info({ workOrderId, killed }, 'Stale work order handled');
+      queueManager.emit('staleHandled', workOrderId, killed);
+    });
+
+    staleDetector.start();
+    print(`Stale detector started`);
+    print('');
+  }
+
   // Handle shutdown signals
   const shutdown = (): void => {
     print('');
     print('Shutting down server...');
 
-    // Stop auto-processing first (v0.2.23 - Wave 2.1)
+    // Stop stale detection and auto-processing first
     const shutdownAsync = async (): Promise<void> => {
+      // Stop stale detector first (v0.2.23 - Wave 2.2)
+      if (staleDetector) {
+        print('Stopping stale detector...');
+        await staleDetector.stop();
+        print('Stale detector stopped');
+      }
+
+      // Stop auto-processing (v0.2.23 - Wave 2.1)
       if (options.autoProcess) {
         print('Stopping auto-processing...');
         await queueManager.stopAutoProcessing();
