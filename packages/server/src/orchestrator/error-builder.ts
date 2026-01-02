@@ -286,12 +286,13 @@ export class ErrorBuilder {
       return BuildErrorType.WORKSPACE_ERROR;
     }
 
-    if (message.includes('snapshot') || message.includes('git')) {
-      return BuildErrorType.SNAPSHOT_ERROR;
-    }
-
+    // Check GitHub errors BEFORE snapshot errors since 'github' contains 'git'
     if (message.includes('github') || message.includes('octokit') || name.includes('github')) {
       return BuildErrorType.GITHUB_ERROR;
+    }
+
+    if (message.includes('snapshot') || message.includes('git')) {
+      return BuildErrorType.SNAPSHOT_ERROR;
     }
 
     return BuildErrorType.SYSTEM_ERROR;
