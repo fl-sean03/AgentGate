@@ -11,6 +11,44 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('work-order-store');
 
 /**
+ * Result of validating a single work order file.
+ */
+export interface FileValidationResult {
+  /** File name (e.g., 'abc123.json') */
+  fileName: string;
+  /** Full file path */
+  filePath: string;
+  /** Whether the file is valid */
+  valid: boolean;
+  /** Work order ID if successfully parsed */
+  workOrderId?: string;
+  /** Error message if validation failed */
+  error?: string;
+  /** Error type for categorization */
+  errorType?: 'json_parse' | 'schema_invalid' | 'io_error';
+}
+
+/**
+ * Result of validating all work order storage.
+ */
+export interface StorageValidationResult {
+  /** Whether the storage directory exists */
+  directoryExists: boolean;
+  /** Total number of files scanned */
+  totalFiles: number;
+  /** Number of valid work order files */
+  validCount: number;
+  /** Number of invalid/corrupted files */
+  invalidCount: number;
+  /** Detailed results for each file */
+  files: FileValidationResult[];
+  /** List of corrupted file paths for cleanup */
+  corruptedFiles: string[];
+  /** Validation duration in milliseconds */
+  durationMs: number;
+}
+
+/**
  * Serializable version of WorkOrder for JSON persistence.
  * Converts Date objects to ISO strings.
  */
@@ -329,6 +367,238 @@ export class WorkOrderStore {
     }
 
     return count;
+  }
+
+  /**
+   * Validate all work order files in storage.
+   * This should be called on startup to detect corrupted files.
+   *
+   * @returns Validation result with details about valid and invalid files
+   */
+  async validateStorage(): Promise<StorageValidationResult> {
+    const startTime = Date.now();
+    await this.init();
+    const dir = getWorkOrdersDir();
+
+    // Check if directory exists
+    if (!existsSync(dir)) {
+      log.debug('Work orders directory does not exist');
+      return {
+        directoryExists: false,
+        totalFiles: 0,
+        validCount: 0,
+        invalidCount: 0,
+        files: [],
+        corruptedFiles: [],
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    let fileNames: string[];
+    try {
+      fileNames = await readdir(dir);
+    } catch (error) {
+      log.error({ error, dir }, 'Failed to read work orders directory');
+      return {
+        directoryExists: true,
+        totalFiles: 0,
+        validCount: 0,
+        invalidCount: 0,
+        files: [],
+        corruptedFiles: [],
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    const jsonFiles = fileNames.filter(f => f.endsWith('.json'));
+    const results: FileValidationResult[] = [];
+    const corruptedFiles: string[] = [];
+
+    for (const fileName of jsonFiles) {
+      const filePath = `${dir}/${fileName}`;
+      const result = await this.validateFile(fileName, filePath);
+      results.push(result);
+
+      if (!result.valid) {
+        corruptedFiles.push(filePath);
+      }
+    }
+
+    const validCount = results.filter(r => r.valid).length;
+    const invalidCount = results.filter(r => !r.valid).length;
+
+    const validationResult: StorageValidationResult = {
+      directoryExists: true,
+      totalFiles: jsonFiles.length,
+      validCount,
+      invalidCount,
+      files: results,
+      corruptedFiles,
+      durationMs: Date.now() - startTime,
+    };
+
+    // Log summary
+    if (invalidCount > 0) {
+      log.warn(
+        {
+          totalFiles: jsonFiles.length,
+          validCount,
+          invalidCount,
+          corruptedFiles,
+        },
+        'Storage validation found corrupted work order files'
+      );
+    } else {
+      log.debug(
+        { totalFiles: jsonFiles.length, validCount },
+        'Storage validation completed successfully'
+      );
+    }
+
+    return validationResult;
+  }
+
+  /**
+   * Validate a single work order file.
+   *
+   * @param fileName The file name (e.g., 'abc123.json')
+   * @param filePath The full file path
+   * @returns Validation result for the file
+   */
+  private async validateFile(
+    fileName: string,
+    filePath: string
+  ): Promise<FileValidationResult> {
+    try {
+      const content = await readFile(filePath, 'utf-8');
+
+      // Try to parse JSON
+      let data: unknown;
+      try {
+        data = JSON.parse(content);
+      } catch {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: 'Invalid JSON format',
+          errorType: 'json_parse',
+        };
+      }
+
+      // Validate structure (SerializedWorkOrder has required fields)
+      const serialized = data as Record<string, unknown>;
+
+      // Check required fields
+      const requiredFields = [
+        'id',
+        'taskPrompt',
+        'workspaceSource',
+        'agentType',
+        'maxIterations',
+        'maxWallClockSeconds',
+        'gatePlanSource',
+        'policies',
+        'createdAt',
+        'status',
+      ];
+
+      const missingFields = requiredFields.filter(
+        field => !(field in serialized) || serialized[field] === undefined
+      );
+
+      if (missingFields.length > 0) {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: `Missing required fields: ${missingFields.join(', ')}`,
+          errorType: 'schema_invalid',
+        };
+      }
+
+      // Validate specific field types
+      if (typeof serialized['id'] !== 'string') {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: 'Field "id" must be a string',
+          errorType: 'schema_invalid',
+        };
+      }
+
+      if (typeof serialized['taskPrompt'] !== 'string') {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: 'Field "taskPrompt" must be a string',
+          errorType: 'schema_invalid',
+        };
+      }
+
+      if (typeof serialized['createdAt'] !== 'string') {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: 'Field "createdAt" must be a string',
+          errorType: 'schema_invalid',
+        };
+      }
+
+      // Validate createdAt is a valid ISO date
+      // At this point we've verified serialized['createdAt'] is a string
+      const createdAtDate = new Date(String(serialized['createdAt']));
+      if (isNaN(createdAtDate.getTime())) {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: 'Field "createdAt" is not a valid ISO date string',
+          errorType: 'schema_invalid',
+        };
+      }
+
+      // Try to deserialize to ensure full compatibility
+      try {
+        deserialize(data as SerializedWorkOrder);
+      } catch (error) {
+        return {
+          fileName,
+          filePath,
+          valid: false,
+          error: `Deserialization failed: ${error instanceof Error ? error.message : String(error)}`,
+          errorType: 'schema_invalid',
+        };
+      }
+
+      // At this point we've verified serialized['id'] is a string
+      return {
+        fileName,
+        filePath,
+        valid: true,
+        workOrderId: String(serialized['id']),
+      };
+    } catch (error) {
+      return {
+        fileName,
+        filePath,
+        valid: false,
+        error: `IO error: ${error instanceof Error ? error.message : String(error)}`,
+        errorType: 'io_error',
+      };
+    }
+  }
+
+  /**
+   * Get list of corrupted files from last validation.
+   * This is a convenience method that runs validateStorage and returns just the corrupted files.
+   */
+  async getCorruptedFiles(): Promise<string[]> {
+    const result = await this.validateStorage();
+    return result.corruptedFiles;
   }
 }
 
