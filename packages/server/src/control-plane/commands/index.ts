@@ -5,3 +5,4 @@ export { createCancelCommand } from './cancel.js';
 export { createRunCommand } from './run.js';
 export { createMetricsCommand } from './metrics.js';
 export { createProfileCommand } from './profile.js';
+export { createQueueCommand } from './queue.js';
