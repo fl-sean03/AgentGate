@@ -26,6 +26,7 @@ import {
   isTerminalState,
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun, type CreateRunOptions } from './run-store.js';
+import { resultPersister } from './result-persister.js';
 import { getConfig } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
@@ -468,6 +469,22 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onPhaseEnd?.('verify', iteration);
       onVerificationComplete?.(verificationReport, iteration);
       iterationData.verificationPassed = verificationReport.passed;
+
+      // Persist verification report (v0.2.19 - Thrust 2)
+      try {
+        await resultPersister.saveVerificationReport(
+          runId,
+          iteration,
+          verificationReport,
+          {
+            waitForCI: workOrder.waitForCI ?? false,
+            skipLevels: harnessConfig?.verification?.skipLevels?.map(s => String(s)),
+          }
+        );
+      } catch (persistError) {
+        log.error({ runId, iteration, error: persistError }, 'Failed to persist verification report');
+        // Continue - don't fail the run due to persistence errors
+      }
 
       // Track verification for strategy (v0.2.16 - Thrust 9)
       currentVerification = verificationReport;
