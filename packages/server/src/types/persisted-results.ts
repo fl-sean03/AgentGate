@@ -3,7 +3,7 @@
  * Defines interfaces for structured storage of verification reports and other results.
  */
 
-import type { VerificationReport, LevelResult } from './verification.js';
+import type { VerificationReport } from './verification.js';
 
 /**
  * Full verification report persisted to disk.
