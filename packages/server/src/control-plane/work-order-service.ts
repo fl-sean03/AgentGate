@@ -215,6 +215,7 @@ export class WorkOrderService {
     const validTransitions: Record<WorkOrderStatus, WorkOrderStatus[]> = {
       [WorkOrderStatus.QUEUED]: [
         WorkOrderStatus.RUNNING,
+        WorkOrderStatus.FAILED, // Allow direct failure for early errors (e.g., workspace setup failure)
         WorkOrderStatus.CANCELED,
       ],
       [WorkOrderStatus.RUNNING]: [
@@ -234,7 +235,10 @@ export class WorkOrderService {
         WorkOrderStatus.CANCELED,
       ],
       [WorkOrderStatus.SUCCEEDED]: [],
-      [WorkOrderStatus.FAILED]: [],
+      [WorkOrderStatus.FAILED]: [
+        WorkOrderStatus.RUNNING, // Allow retry from failed state
+        WorkOrderStatus.FAILED, // Idempotent - allow re-failing with updated error
+      ],
       [WorkOrderStatus.CANCELED]: [],
     };
 
