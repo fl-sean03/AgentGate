@@ -65,3 +65,45 @@ export interface StateTransition {
   readonly timestamp: Date;
   readonly metadata?: Record<string, unknown>;
 }
+
+/**
+ * Retry policy configuration.
+ */
+export interface RetryPolicy {
+  /** Maximum number of retry attempts */
+  maxRetries: number;
+
+  /** Base delay in milliseconds before first retry */
+  baseDelayMs: number;
+
+  /** Maximum delay cap in milliseconds */
+  maxDelayMs: number;
+
+  /** Multiplier for exponential backoff (e.g., 2 = double each retry) */
+  backoffMultiplier: number;
+
+  /** Optional jitter factor (0-1) to add randomness */
+  jitterFactor: number;
+}
+
+/**
+ * Default retry policy.
+ */
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  maxRetries: 3,
+  baseDelayMs: 5000,      // 5 seconds
+  maxDelayMs: 300000,     // 5 minutes
+  backoffMultiplier: 2,
+  jitterFactor: 0.1,
+};
+
+/**
+ * Retry state for a work order.
+ */
+export interface RetryState {
+  workOrderId: string;
+  attemptNumber: number;
+  nextRetryAt: Date | null;
+  lastError: string;
+  scheduledTimerId: NodeJS.Timeout | null;
+}
