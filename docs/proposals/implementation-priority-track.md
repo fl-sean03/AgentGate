@@ -64,9 +64,25 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 |-------|-------|------------|
 | #68 | Accept repoUrl in workspaceSource | **PR #77** (Wave 1.8) |
 | #66 | Sandbox not enabled by default | **FIXED MANUALLY** |
-| #67 | Empty error objects | v0.2.22 Observability |
-| #65 | Runs marked failed despite passing | v0.2.22 State Machine |
-| #71 | waitForCI parameter ignored | Needs new work order |
+| #67 | Empty error objects | v0.2.22 Observability (Thrust 6) |
+| #65 | Runs marked failed despite passing | v0.2.22 State Machine (Thrust 2) |
+| #71 | waitForCI parameter ignored | **v0.2.22 State Machine (Thrust 2)** |
+
+### Issue #71 Investigation Notes
+
+**Symptom:** Work orders submitted with `waitForCI: true` are marked as "succeeded" even when GitHub CI fails.
+
+**Observed in:** v0.2.23 Wave 2.2 (PR #81) and Wave 3.1 (PR #82) - both had lint failures in CI but work orders succeeded.
+
+**Root Cause Analysis:**
+1. The `harness.verification.waitForCI` param may not propagate to `workOrder.waitForCI`
+2. CI polling may not be triggered for GitHub source work orders
+3. Run result determination may not properly handle CI_FAILED state
+
+**Fix Location:** v0.2.22 Thrust 2 (State Machine) - Add explicit CI verification state handling:
+- PENDING → PREPARING → RUNNING → **CI_PENDING** → COMPLETED/FAILED
+- State machine should block on CI_PENDING until CI passes or fails
+- CI failure should transition to FAILED with proper error message
 
 ---
 
