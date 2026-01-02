@@ -738,3 +738,191 @@ describe('getQueueManager singleton', () => {
     expect(stats.maxConcurrent).toBe(5);
   });
 });
+
+/**
+ * Tests for run-level timeout enforcement (v0.2.23 - Wave 1.4)
+ */
+describe('run timeout enforcement', () => {
+  let queue: QueueManager;
+
+  beforeEach(() => {
+    resetQueueManager();
+    // Disable the periodic timeout check to control timing in tests
+    queue = createQueueManager({ maxConcurrent: 2, maxQueueSize: 10, runTimeoutCheckIntervalMs: 0 });
+  });
+
+  afterEach(async () => {
+    await queue.shutdown();
+  });
+
+  describe('markStarted with maxWallClockMs', () => {
+    it('should track running work order with timeout', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1', 60000); // 60 second timeout
+
+      expect(queue.isRunning('wo-1')).toBe(true);
+      const info = queue.getRunningWorkOrderInfo('wo-1');
+      expect(info).not.toBeNull();
+      expect(info!.maxWallClockMs).toBe(60000);
+      expect(info!.startedAt).toBeInstanceOf(Date);
+      expect(info!.elapsedMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should track running work order without timeout', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1'); // No timeout
+
+      expect(queue.isRunning('wo-1')).toBe(true);
+      const info = queue.getRunningWorkOrderInfo('wo-1');
+      expect(info).not.toBeNull();
+      expect(info!.maxWallClockMs).toBeNull();
+    });
+
+    it('should clean up timeout tracking on markCompleted', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1', 60000);
+
+      expect(queue.getRunningWorkOrderInfo('wo-1')).not.toBeNull();
+
+      queue.markCompleted('wo-1');
+
+      expect(queue.getRunningWorkOrderInfo('wo-1')).toBeNull();
+    });
+  });
+
+  describe('getRunElapsedMs', () => {
+    it('should return elapsed time for running work order', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1', 60000);
+
+      const elapsed = queue.getRunElapsedMs('wo-1');
+      expect(elapsed).not.toBeNull();
+      expect(elapsed).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should return null for non-running work order', () => {
+      expect(queue.getRunElapsedMs('wo-unknown')).toBeNull();
+    });
+  });
+
+  describe('hasRunTimedOut', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should return false when no timeout configured', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1'); // No timeout
+
+      vi.advanceTimersByTime(100000); // Advance time significantly
+
+      expect(queue.hasRunTimedOut('wo-1')).toBe(false);
+    });
+
+    it('should return false when within timeout', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1', 60000); // 60 second timeout
+
+      vi.advanceTimersByTime(30000); // Advance 30 seconds
+
+      expect(queue.hasRunTimedOut('wo-1')).toBe(false);
+    });
+
+    it('should return true when timeout exceeded', () => {
+      queue.enqueue('wo-1');
+      queue.markStarted('wo-1', 60000); // 60 second timeout
+
+      vi.advanceTimersByTime(61000); // Advance past timeout
+
+      expect(queue.hasRunTimedOut('wo-1')).toBe(true);
+    });
+
+    it('should return false for non-running work order', () => {
+      expect(queue.hasRunTimedOut('wo-unknown')).toBe(false);
+    });
+  });
+
+  describe('runTimeout event emission', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('should emit runTimeout event when work order exceeds timeout', async () => {
+      // Create queue with short check interval for testing
+      const testQueue = createQueueManager({
+        maxConcurrent: 2,
+        maxQueueSize: 10,
+        runTimeoutCheckIntervalMs: 1000, // Check every 1 second
+      });
+
+      const runTimeoutHandler = vi.fn();
+      testQueue.on('runTimeout', runTimeoutHandler);
+
+      testQueue.enqueue('wo-1');
+      testQueue.markStarted('wo-1', 5000); // 5 second timeout
+
+      // Advance time past the timeout and trigger the interval check
+      vi.advanceTimersByTime(6000);
+
+      expect(runTimeoutHandler).toHaveBeenCalledWith('wo-1', expect.any(Number), 5000);
+
+      await testQueue.shutdown();
+    });
+
+    it('should not emit runTimeout for work orders without timeout', async () => {
+      const testQueue = createQueueManager({
+        maxConcurrent: 2,
+        maxQueueSize: 10,
+        runTimeoutCheckIntervalMs: 1000,
+      });
+
+      const runTimeoutHandler = vi.fn();
+      testQueue.on('runTimeout', runTimeoutHandler);
+
+      testQueue.enqueue('wo-1');
+      testQueue.markStarted('wo-1'); // No timeout
+
+      // Advance time significantly
+      vi.advanceTimersByTime(100000);
+
+      expect(runTimeoutHandler).not.toHaveBeenCalled();
+
+      await testQueue.shutdown();
+    });
+
+    it('should emit runTimeout for multiple timed out work orders', async () => {
+      const testQueue = createQueueManager({
+        maxConcurrent: 5,
+        maxQueueSize: 10,
+        runTimeoutCheckIntervalMs: 1000,
+      });
+
+      const runTimeoutHandler = vi.fn();
+      testQueue.on('runTimeout', runTimeoutHandler);
+
+      testQueue.enqueue('wo-1');
+      testQueue.markStarted('wo-1', 5000);
+      testQueue.enqueue('wo-2');
+      testQueue.markStarted('wo-2', 5000);
+      testQueue.enqueue('wo-3');
+      testQueue.markStarted('wo-3', 10000); // Longer timeout
+
+      // Advance time past first two timeouts but not third
+      vi.advanceTimersByTime(6000);
+
+      expect(runTimeoutHandler).toHaveBeenCalledTimes(2);
+      expect(runTimeoutHandler).toHaveBeenCalledWith('wo-1', expect.any(Number), 5000);
+      expect(runTimeoutHandler).toHaveBeenCalledWith('wo-2', expect.any(Number), 5000);
+
+      await testQueue.shutdown();
+    });
+  });
+});

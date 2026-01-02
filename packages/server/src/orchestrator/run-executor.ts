@@ -131,6 +131,13 @@ export interface RunExecutorOptions {
   loopStrategy?: LoopStrategy;           // v0.2.16 - Thrust 9
   leaseId?: string; // Lease ID for periodic renewal (v0.2.10 - Thrust 12)
 
+  /**
+   * Maximum wall clock time for the run in milliseconds.
+   * If the run exceeds this duration, it will be terminated with a timeout error.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   */
+  maxWallClockMs?: number;
+
   // Optional EventBroadcaster for streaming events (v0.2.11 - Thrust 4)
   broadcaster?: EventBroadcaster;
 
@@ -211,6 +218,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
     harnessConfig,   // v0.2.16 - Thrust 9
     loopStrategy,    // v0.2.16 - Thrust 9
     leaseId,
+    maxWallClockMs,  // v0.2.23 - Wave 1.4: Work Order Timeout Enforcement
     broadcaster,
     onBuild,
     onSnapshot,
@@ -244,11 +252,15 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       workOrderId: workOrder.id,
       workspaceId: workspace.id,
       maxIterations: workOrder.maxIterations,
+      maxWallClockMs, // v0.2.23 - Wave 1.4
       ciEnabled: run.ciEnabled,
       maxCiIterations: run.maxCiIterations,
     },
     'Starting run execution'
   );
+
+  // Track run start time for timeout enforcement (v0.2.23 - Wave 1.4)
+  const runStartTime = Date.now();
 
   // Set up periodic lease renewal to prevent expiry during long-running operations (v0.2.10 - Thrust 12)
   let renewalInterval: NodeJS.Timeout | null = null;
@@ -331,6 +343,31 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
   while (!isTerminalState(run.state)) {
     const iterationStart = Date.now();
     const iteration = run.iteration;
+
+    // Check for wall clock timeout before starting iteration (v0.2.23 - Wave 1.4)
+    if (maxWallClockMs !== undefined) {
+      const elapsedMs = Date.now() - runStartTime;
+      if (elapsedMs > maxWallClockMs) {
+        log.warn(
+          { runId, elapsedMs, maxWallClockMs, iteration },
+          'Run exceeded maxWallClockSeconds timeout'
+        );
+
+        // Create timeout error
+        const timeoutError = ErrorBuilder.createTimeout(
+          elapsedMs,
+          maxWallClockMs,
+          { runId, iteration, phase: run.state }
+        );
+
+        run = applyTransition(run, RunEvent.SYSTEM_ERROR);
+        run.result = RunResult.FAILED_ERROR;
+        run.error = timeoutError.message;
+        await saveRun(run);
+        onStateChange?.(run);
+        break;
+      }
+    }
 
     log.info({ runId, iteration, maxIterations: run.maxIterations }, 'Starting iteration');
 
