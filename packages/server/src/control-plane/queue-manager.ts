@@ -148,6 +148,15 @@ export interface QueueManagerEvents {
 
   /** Emitted when auto-processing skips due to stagger delay (v0.2.23 - Wave 2.1) */
   autoProcessStaggerSkip: (timeSinceLastMs: number, staggerDelayMs: number) => void;
+
+  /** Emitted when a stale work order is detected (v0.2.23 - Wave 2.2) */
+  staleDetected: (workOrderId: string, reason: string) => void;
+
+  /** Emitted when a dead process is detected for a running work order (v0.2.23 - Wave 2.2) */
+  deadProcessDetected: (workOrderId: string, reason: string) => void;
+
+  /** Emitted when a stale work order is handled (killed and marked failed) (v0.2.23 - Wave 2.2) */
+  staleHandled: (workOrderId: string, killed: boolean) => void;
 }
 
 /**
