@@ -5,7 +5,8 @@
  * Fast detection that doesn't require reading file contents.
  */
 
-import { glob } from 'fast-glob';
+import fg from 'fast-glob';
+const { glob } = fg;
 
 import type { SensitivityLevel } from '../types.js';
 import type {
