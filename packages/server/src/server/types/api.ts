@@ -263,3 +263,12 @@ export const runIdParamsSchema = z.object({
 });
 
 export type RunIdParams = z.infer<typeof runIdParamsSchema>;
+
+/**
+ * Start run response (v0.2.17 - Thrust 7)
+ */
+export interface StartRunResponse {
+  runId: string;
+  status: 'queued' | 'building' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  startedAt: string;
+}

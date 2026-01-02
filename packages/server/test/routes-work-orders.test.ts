@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createApp } from '../src/server/app.js';
-import { WorkOrderStatus } from '../src/types/index.js';
+import { WorkOrderStatus, RunResult, RunState } from '../src/types/index.js';
 
 // Mock the work order service and run store
 vi.mock('../src/control-plane/work-order-service.js', () => {
@@ -54,6 +54,8 @@ vi.mock('../src/control-plane/work-order-service.js', () => {
         order.status = WorkOrderStatus.CANCELED;
         mockOrders.set(id, order);
       }),
+      markSucceeded: vi.fn(async () => {}),
+      markFailed: vi.fn(async () => {}),
       getCounts: vi.fn(async () => ({
         [WorkOrderStatus.QUEUED]: 1,
         [WorkOrderStatus.RUNNING]: 0,
@@ -66,8 +68,30 @@ vi.mock('../src/control-plane/work-order-service.js', () => {
   };
 });
 
+// Mock run store with shared mock runs
+const mockRuns: any[] = [];
 vi.mock('../src/orchestrator/run-store.js', () => ({
-  listRuns: vi.fn(async () => []),
+  listRuns: vi.fn(async () => mockRuns),
+}));
+
+// Mock orchestrator
+vi.mock('../src/orchestrator/orchestrator.js', () => ({
+  createOrchestrator: vi.fn(() => ({
+    execute: vi.fn(async (order: any) => {
+      const run = {
+        id: `run-${Date.now()}`,
+        workOrderId: order.id,
+        state: RunState.SUCCEEDED,
+        result: RunResult.PASSED,
+        iteration: 1,
+        maxIterations: 3,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      };
+      mockRuns.push(run);
+      return run;
+    }),
+  })),
 }));
 
 describe('Work Orders Routes', () => {
@@ -79,6 +103,8 @@ describe('Work Orders Routes', () => {
     // Clear mock orders
     const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
     _mockOrders.clear();
+    // Clear mock runs
+    mockRuns.length = 0;
 
     app = await createApp({
       apiKey: testApiKey,
@@ -485,6 +511,177 @@ describe('Work Orders Routes', () => {
       const response = await app.inject({
         method: 'DELETE',
         url: `/api/v1/work-orders/${order.id}`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = response.json();
+      expect(body.error.code).toBe('CONFLICT');
+    });
+  });
+
+  describe('POST /api/v1/work-orders/:id/runs', () => {
+    it('should start run for queued work order', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'queued-order-1',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.QUEUED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/work-orders/${order.id}/runs`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data).toHaveProperty('runId');
+      expect(body.data).toHaveProperty('status');
+      expect(body.data).toHaveProperty('startedAt');
+    });
+
+    it('should start run for failed work order', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'failed-order-1',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.FAILED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/work-orders/${order.id}/runs`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data).toHaveProperty('runId');
+    });
+
+    it('should return 401 without auth header', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/some-id/runs',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 404 for nonexistent order', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/work-orders/nonexistent-id/runs',
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.message).toContain('Work order not found');
+    });
+
+    it('should return 409 when starting run for running work order', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'running-order',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.RUNNING,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/work-orders/${order.id}/runs`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = response.json();
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toContain('Cannot start run');
+    });
+
+    it('should return 409 when starting run for succeeded work order', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'succeeded-order',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.SUCCEEDED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/work-orders/${order.id}/runs`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = response.json();
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('should return 409 when starting run for canceled work order', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'canceled-order-run',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.CANCELED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/v1/work-orders/${order.id}/runs`,
         headers: {
           'Authorization': `Bearer ${testApiKey}`,
         },

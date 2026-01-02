@@ -141,12 +141,29 @@ async function checkForbiddenPatterns(
   const found: string[] = [];
 
   try {
+    // Build ignore patterns - start with standard excludes
+    const ignorePatterns = ['**/node_modules/**', '**/dist/**', '**/.git/**'];
+
+    // Read .gitignore to exclude already-ignored files (enables dogfooding with local .env files)
+    try {
+      const gitignorePath = join(workDir, '.gitignore');
+      const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+      const gitignoreLines = gitignoreContent
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'))
+        .map(line => line.startsWith('!') ? line : `**/${line.replace(/^\//, '')}`);
+      ignorePatterns.push(...gitignoreLines);
+    } catch {
+      // .gitignore doesn't exist or can't be read - continue without it
+    }
+
     const matches = await fg(forbiddenPatterns, {
       cwd: workDir,
       dot: true,
       onlyFiles: true,
       followSymbolicLinks: false,
-      ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
+      ignore: ignorePatterns,
     });
 
     for (const match of matches) {
