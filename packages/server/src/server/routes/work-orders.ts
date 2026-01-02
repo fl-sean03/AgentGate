@@ -430,8 +430,11 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           );
         }
 
+        // Capture original status before cancel (for response) (v0.2.23)
+        const wasRunning = order.status === WorkOrderStatus.RUNNING;
+
         // Log if canceling a running work order (v0.2.23)
-        if (order.status === WorkOrderStatus.RUNNING) {
+        if (wasRunning) {
           logger.info(
             { workOrderId: id, status: order.status, requestId: request.id },
             'Canceling running work order via API'
@@ -447,7 +450,7 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
               id,
               status: 'canceled',
               message: 'Work order canceled successfully',
-              wasRunning: order.status === WorkOrderStatus.RUNNING,
+              wasRunning,
             },
             request.id
           )
