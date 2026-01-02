@@ -272,3 +272,31 @@ export interface StartRunResponse {
   status: 'queued' | 'building' | 'running' | 'succeeded' | 'failed' | 'canceled';
   startedAt: string;
 }
+
+/**
+ * Purge work orders request body (v0.2.23 - Wave 1.2)
+ */
+export const purgeWorkOrdersBodySchema = z.object({
+  /** Only purge work orders in these statuses */
+  statuses: z.array(
+    z.enum(['queued', 'running', 'waiting_for_children', 'integrating', 'succeeded', 'failed', 'canceled'])
+  ).optional(),
+  /** Only purge work orders older than this many days */
+  olderThanDays: z.number().int().min(0).optional(),
+  /** If true, perform a dry run without actually deleting */
+  dryRun: z.boolean().optional().default(false),
+});
+
+export type PurgeWorkOrdersBody = z.infer<typeof purgeWorkOrdersBodySchema>;
+
+/**
+ * Purge work orders response (v0.2.23 - Wave 1.2)
+ */
+export interface PurgeWorkOrdersResponse {
+  /** Number of work orders deleted */
+  deletedCount: number;
+  /** IDs of deleted work orders */
+  deletedIds: string[];
+  /** Number of work orders that would have been deleted (for dry run) */
+  wouldDelete?: number;
+}

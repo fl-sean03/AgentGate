@@ -5,15 +5,18 @@ import {
   listWorkOrdersQuerySchema,
   workOrderIdParamsSchema,
   createWorkOrderBodySchema,
+  purgeWorkOrdersBodySchema,
   type ListWorkOrdersQuery,
   type WorkOrderIdParams,
   type CreateWorkOrderBody,
+  type PurgeWorkOrdersBody,
   type WorkOrderSummary,
   type WorkOrderDetail,
   type PaginatedResponse,
   type RunSummary,
   type HarnessInfo,
   type StartRunResponse,
+  type PurgeWorkOrdersResponse,
 } from '../types/api.js';
 import { workOrderService } from '../../control-plane/work-order-service.js';
 import { listRuns } from '../../orchestrator/run-store.js';
@@ -548,6 +551,100 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
       );
     }
   });
+
+/**
+   * POST /api/v1/work-orders/purge - Purge work orders by criteria
+   * (v0.2.23 - Wave 1.2)
+   * Requires authentication
+   * Supports filtering by status and age
+   * Supports dry run mode
+   */
+  app.post<{
+    Body: PurgeWorkOrdersBody;
+  }>(
+    '/api/v1/work-orders/purge',
+    {
+      preHandler: [apiKeyAuth],
+    },
+    async (request, reply) => {
+      try {
+        // Validate body
+        const bodyResult = purgeWorkOrdersBodySchema.safeParse(request.body);
+        if (!bodyResult.success) {
+          return reply.status(400).send(
+            createErrorResponse(
+              ErrorCode.BAD_REQUEST,
+              'Invalid request body',
+              { errors: bodyResult.error.errors },
+              request.id
+            )
+          );
+        }
+
+        const { statuses, olderThanDays, dryRun } = bodyResult.data;
+
+        // Map API status strings to WorkOrderStatus enum
+        const statusMap: Record<string, WorkOrderStatus> = {
+          queued: WorkOrderStatus.QUEUED,
+          running: WorkOrderStatus.RUNNING,
+          waiting_for_children: WorkOrderStatus.WAITING_FOR_CHILDREN,
+          integrating: WorkOrderStatus.INTEGRATING,
+          succeeded: WorkOrderStatus.SUCCEEDED,
+          failed: WorkOrderStatus.FAILED,
+          canceled: WorkOrderStatus.CANCELED,
+        };
+        const mappedStatuses: WorkOrderStatus[] | undefined = statuses
+          ? statuses.map((s) => statusMap[s] as WorkOrderStatus)
+          : undefined;
+
+        // Calculate olderThan date from days
+        const olderThan: Date | undefined =
+          olderThanDays !== undefined
+            ? new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000)
+            : undefined;
+
+        logger.info(
+          { statuses: mappedStatuses, olderThan, dryRun, requestId: request.id },
+          'Purging work orders via API'
+        );
+
+        // Build purge options only with defined values
+        const purgeOptions: { statuses?: WorkOrderStatus[]; olderThan?: Date; dryRun?: boolean } = {};
+        if (mappedStatuses !== undefined) {
+          purgeOptions.statuses = mappedStatuses;
+        }
+        if (olderThan !== undefined) {
+          purgeOptions.olderThan = olderThan;
+        }
+        if (dryRun !== undefined) {
+          purgeOptions.dryRun = dryRun;
+        }
+
+        const result = await workOrderService.purge(purgeOptions);
+
+        // Build response only with defined values
+        const response: PurgeWorkOrdersResponse = {
+          deletedCount: result.deletedCount,
+          deletedIds: result.deletedIds,
+        };
+        if (result.wouldDelete !== undefined) {
+          response.wouldDelete = result.wouldDelete;
+        }
+
+        return reply.send(createSuccessResponse(response, request.id));
+      } catch (error) {
+        logger.error({ err: error, requestId: request.id }, 'Failed to purge work orders');
+        return reply.status(500).send(
+          createErrorResponse(
+            ErrorCode.INTERNAL_ERROR,
+            'Failed to purge work orders',
+            undefined,
+            request.id
+          )
+        );
+      }
+    }
+  );
 
   /**
    * POST /api/v1/work-orders/:id/runs - Start a new run for a work order

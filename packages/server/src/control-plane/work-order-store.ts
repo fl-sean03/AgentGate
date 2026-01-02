@@ -330,6 +330,107 @@ export class WorkOrderStore {
 
     return count;
   }
+
+  /**
+   * Purge work orders based on criteria.
+   *
+   * @param options - Purge options (statuses, age, dry run)
+   * @returns Result containing count and IDs of deleted work orders
+   */
+  async purge(options: PurgeOptions = {}): Promise<PurgeResult> {
+    await this.init();
+    const dir = getWorkOrdersDir();
+
+    let files: string[];
+    try {
+      files = await readdir(dir);
+    } catch {
+      return { deletedCount: 0, deletedIds: [] };
+    }
+
+    const jsonFiles = files.filter(f => f.endsWith('.json'));
+    const matchingIds: string[] = [];
+
+    for (const file of jsonFiles) {
+      try {
+        const content = await readFile(`${dir}/${file}`, 'utf-8');
+        const data = JSON.parse(content) as SerializedWorkOrder;
+        const order = deserialize(data);
+
+        // Check status filter
+        if (options.statuses && options.statuses.length > 0) {
+          if (!options.statuses.includes(order.status)) {
+            continue;
+          }
+        }
+
+        // Check age filter
+        if (options.olderThan) {
+          if (order.createdAt >= options.olderThan) {
+            continue;
+          }
+        }
+
+        matchingIds.push(order.id);
+      } catch (error) {
+        log.warn({ file, error }, 'Failed to read work order file during purge');
+      }
+    }
+
+    // Dry run - just return what would be deleted
+    if (options.dryRun) {
+      log.debug({ matchingIds, options }, 'Dry run purge - no files deleted');
+      return {
+        deletedCount: 0,
+        deletedIds: [],
+        wouldDelete: matchingIds.length,
+      };
+    }
+
+    // Actually delete the files
+    const deletedIds: string[] = [];
+    for (const id of matchingIds) {
+      try {
+        const deleted = await this.delete(id);
+        if (deleted) {
+          deletedIds.push(id);
+        }
+      } catch (error) {
+        log.warn({ id, error }, 'Failed to delete work order during purge');
+      }
+    }
+
+    log.info({ deletedCount: deletedIds.length, deletedIds, options }, 'Purge completed');
+
+    return {
+      deletedCount: deletedIds.length,
+      deletedIds,
+    };
+  }
+}
+
+/**
+ * Options for purging work orders.
+ */
+export interface PurgeOptions {
+  /** Only purge work orders in these statuses */
+  statuses?: WorkOrderStatus[];
+  /** Only purge work orders older than this date */
+  olderThan?: Date;
+  /** If true, perform a dry run without actually deleting */
+  dryRun?: boolean;
+}
+
+/**
+ * Result of a purge operation.
+ */
+export interface PurgeResult {
+  /** Number of work orders deleted */
+  deletedCount: number;
+  /** IDs of deleted work orders */
+  deletedIds: string[];
+  /** Number of work orders that would have been deleted (for dry run) */
+  wouldDelete?: number;
 }
 
 // Default singleton instance
