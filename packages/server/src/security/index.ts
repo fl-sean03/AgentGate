@@ -41,5 +41,8 @@ export {
   type PartialSecurityPolicyInput,
 } from './schemas.js';
 
-// Policy module - will be added after Thrust 2 implementation
+// Policy module
 export * from './policy/index.js';
+
+// Detectors module
+export * from './detectors/index.js';
