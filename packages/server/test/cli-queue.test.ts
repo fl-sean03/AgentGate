@@ -92,12 +92,12 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       // Suppress console output
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await listCmd!.parseAsync(['list'], { from: 'user' });
+      // Parse via parent command - this is how commander works with subcommands
+      await command.parseAsync(['node', 'test', 'list'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
@@ -126,11 +126,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await listCmd!.parseAsync(['list', '--status', 'failed'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'list', '--status', 'failed'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const fetchUrl = mockFetch.mock.calls[0][0] as string;
@@ -155,11 +154,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await listCmd!.parseAsync(['list', '--limit', '10'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'list', '--limit', '10'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const fetchUrl = mockFetch.mock.calls[0][0] as string;
@@ -176,12 +174,11 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await listCmd!.parseAsync(['list'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'list'], { from: 'node' });
 
       expect(process.exitCode).toBe(1);
 
@@ -206,11 +203,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const cancelCmd = command.commands.find((c) => c.name() === 'cancel');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await cancelCmd!.parseAsync(['cancel', 'test-wo-1'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'cancel', 'test-wo-1'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
@@ -239,11 +235,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const cancelCmd = command.commands.find((c) => c.name() === 'cancel');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await cancelCmd!.parseAsync(['cancel', 'test-wo-1'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'cancel', 'test-wo-1'], { from: 'node' });
 
       // Should output something about "was running"
       expect(consoleSpy).toHaveBeenCalled();
@@ -259,12 +254,11 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const cancelCmd = command.commands.find((c) => c.name() === 'cancel');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await cancelCmd!.parseAsync(['cancel', 'non-existent'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'cancel', 'non-existent'], { from: 'node' });
 
       expect(process.exitCode).toBe(1);
 
@@ -291,11 +285,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const killCmd = command.commands.find((c) => c.name() === 'kill');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await killCmd!.parseAsync(['kill', 'test-wo-1'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'kill', 'test-wo-1'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
@@ -329,11 +322,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const killCmd = command.commands.find((c) => c.name() === 'kill');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await killCmd!.parseAsync(['kill', 'test-wo-1', '--force'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'kill', 'test-wo-1', '--force'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body as string);
@@ -360,12 +352,11 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const killCmd = command.commands.find((c) => c.name() === 'kill');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await killCmd!.parseAsync(['kill', 'test-wo-1'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'kill', 'test-wo-1'], { from: 'node' });
 
       expect(process.exitCode).toBe(1);
 
@@ -403,11 +394,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const healthCmd = command.commands.find((c) => c.name() === 'health');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await healthCmd!.parseAsync(['health'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'health'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
@@ -450,11 +440,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const healthCmd = command.commands.find((c) => c.name() === 'health');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await healthCmd!.parseAsync(['health', '--json'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'health', '--json'], { from: 'node' });
 
       // Check that JSON was output
       expect(consoleSpy).toHaveBeenCalled();
@@ -472,12 +461,11 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const healthCmd = command.commands.find((c) => c.name() === 'health');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await healthCmd!.parseAsync(['health'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'health'], { from: 'node' });
 
       expect(process.exitCode).toBe(1);
 
@@ -489,12 +477,11 @@ describe('Queue CLI Commands', () => {
   describe('queue purge', () => {
     it('should require either ID or --status option', async () => {
       const command = createQueueCommand();
-      const purgeCmd = command.commands.find((c) => c.name() === 'purge');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await purgeCmd!.parseAsync(['purge', '--yes'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'purge', '--yes'], { from: 'node' });
 
       expect(process.exitCode).toBe(1);
 
@@ -534,11 +521,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const purgeCmd = command.commands.find((c) => c.name() === 'purge');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await purgeCmd!.parseAsync(['purge', '--status', 'failed', '--yes'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'purge', '--status', 'failed', '--yes'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
 
@@ -561,11 +547,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const purgeCmd = command.commands.find((c) => c.name() === 'purge');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await purgeCmd!.parseAsync(['purge', '--status', 'failed', '--yes'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'purge', '--status', 'failed', '--yes'], { from: 'node' });
 
       // Should indicate no work orders found
       expect(consoleSpy).toHaveBeenCalled();
@@ -579,7 +564,6 @@ describe('Queue CLI Commands', () => {
       delete process.env['AGENTGATE_API_KEY'];
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -589,7 +573,7 @@ describe('Queue CLI Commands', () => {
         throw new Error('process.exit called');
       });
 
-      await expect(listCmd!.parseAsync(['list'], { from: 'user' })).rejects.toThrow(
+      await expect(command.parseAsync(['node', 'test', 'list'], { from: 'node' })).rejects.toThrow(
         'process.exit called'
       );
 
@@ -618,11 +602,10 @@ describe('Queue CLI Commands', () => {
       });
 
       const command = createQueueCommand();
-      const listCmd = command.commands.find((c) => c.name() === 'list');
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await listCmd!.parseAsync(['list'], { from: 'user' });
+      await command.parseAsync(['node', 'test', 'list'], { from: 'node' });
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('http://localhost:3001'),
