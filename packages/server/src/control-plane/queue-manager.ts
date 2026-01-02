@@ -139,6 +139,15 @@ export interface QueueManagerEvents {
 
   /** Emitted when a running work order is canceled */
   canceled: (workOrderId: string) => void;
+
+  /** Emitted when auto-processing starts a work order (v0.2.23 - Wave 2.1) */
+  autoProcessStart: (workOrderId: string) => void;
+
+  /** Emitted when auto-processing skips due to memory constraints (v0.2.23 - Wave 2.1) */
+  autoProcessMemorySkip: (availableMB: number, requiredMB: number) => void;
+
+  /** Emitted when auto-processing skips due to stagger delay (v0.2.23 - Wave 2.1) */
+  autoProcessStaggerSkip: (timeSinceLastMs: number, staggerDelayMs: number) => void;
 }
 
 /**
@@ -159,6 +168,15 @@ export interface QueueManagerConfig {
 
   /** How often to check running work orders for timeout (ms). Default: 30000 (30s) (v0.2.23 - Wave 1.4) */
   runTimeoutCheckIntervalMs: number;
+
+  /** How often to poll the queue for auto-processing (ms). Default: 5000 (5s) (v0.2.23 - Wave 2.1) */
+  autoProcessPollIntervalMs: number;
+
+  /** Delay between starting work orders to avoid resource spikes (ms). Default: 30000 (30s) (v0.2.23 - Wave 2.1) */
+  staggerDelayMs: number;
+
+  /** Minimum available memory in MB before starting a new work order. Default: 2048 (2GB) (v0.2.23 - Wave 2.1) */
+  minAvailableMemoryMB: number;
 }
 
 /**
@@ -170,6 +188,9 @@ export const DEFAULT_QUEUE_CONFIG: QueueManagerConfig = {
   persistDir: null,
   persistIntervalMs: 30000,
   runTimeoutCheckIntervalMs: 30000, // Check every 30 seconds (v0.2.23 - Wave 1.4)
+  autoProcessPollIntervalMs: 5000,  // Poll queue every 5 seconds (v0.2.23 - Wave 2.1)
+  staggerDelayMs: 30000,            // 30 seconds between starts (v0.2.23 - Wave 2.1)
+  minAvailableMemoryMB: 2048,       // Require 2GB free memory (v0.2.23 - Wave 2.1)
 };
 
 /**
@@ -191,6 +212,18 @@ export class QueueManager extends EventEmitter {
   private persistTimer: NodeJS.Timeout | null = null;
   /** Timer for checking running work order timeouts (v0.2.23 - Wave 1.4) */
   private runTimeoutTimer: NodeJS.Timeout | null = null;
+
+  // Auto-processing state (v0.2.23 - Wave 2.1)
+  /** Timer for auto-processing poll loop */
+  private autoProcessTimer: NodeJS.Timeout | null = null;
+  /** Time of last work order start (for stagger delay) */
+  private lastAutoStartTime: number = 0;
+  /** Whether auto-processing is currently checking the queue */
+  private isAutoProcessing: boolean = false;
+  /** Whether shutdown has been requested */
+  private shuttingDown: boolean = false;
+  /** Callback to start a work order (injected by caller) */
+  private autoStartCallback: ((workOrderId: string) => Promise<void>) | null = null;
 
   constructor(config: Partial<QueueManagerConfig> = {}) {
     super();
@@ -662,6 +695,9 @@ export class QueueManager extends EventEmitter {
    * Stop the queue manager and clean up resources.
    */
   async shutdown(): Promise<void> {
+    // Stop auto-processing first (v0.2.23 - Wave 2.1)
+    await this.stopAutoProcessing();
+
     if (this.persistTimer) {
       clearInterval(this.persistTimer);
       this.persistTimer = null;
@@ -677,6 +713,195 @@ export class QueueManager extends EventEmitter {
     await this.persist();
 
     log.info('QueueManager shutdown complete');
+  }
+
+  // ==========================================================================
+  // Auto-Processing Methods (v0.2.23 - Wave 2.1)
+  // ==========================================================================
+
+  /**
+   * Start automatic processing of queued work orders.
+   * (v0.2.23 - Wave 2.1)
+   *
+   * When enabled, the queue manager will automatically start queued work orders
+   * when capacity is available, respecting stagger delays and memory constraints.
+   *
+   * @param startCallback - Callback to start a work order (receives work order ID)
+   */
+  startAutoProcessing(startCallback: (workOrderId: string) => Promise<void>): void {
+    if (this.autoProcessTimer) {
+      log.warn('Auto-processing already started');
+      return;
+    }
+
+    this.autoStartCallback = startCallback;
+    this.shuttingDown = false;
+
+    log.info(
+      {
+        pollIntervalMs: this.config.autoProcessPollIntervalMs,
+        staggerDelayMs: this.config.staggerDelayMs,
+        minAvailableMemoryMB: this.config.minAvailableMemoryMB,
+        maxConcurrent: this.config.maxConcurrent,
+      },
+      'Starting auto-processing'
+    );
+
+    // Start the poll loop
+    this.autoProcessTimer = setInterval(() => {
+      void this.autoProcessQueue();
+    }, this.config.autoProcessPollIntervalMs);
+
+    // Initial check
+    void this.autoProcessQueue();
+  }
+
+  /**
+   * Stop automatic processing of queued work orders.
+   * (v0.2.23 - Wave 2.1)
+   *
+   * Waits for any in-progress processing to complete before returning.
+   */
+  async stopAutoProcessing(): Promise<void> {
+    this.shuttingDown = true;
+
+    if (this.autoProcessTimer) {
+      clearInterval(this.autoProcessTimer);
+      this.autoProcessTimer = null;
+    }
+
+    log.info('Auto-processing stopping...');
+
+    // Wait for any in-progress processing to complete
+    if (this.isAutoProcessing) {
+      log.info('Waiting for current auto-processing to complete...');
+      await this.waitForAutoProcessingComplete();
+    }
+
+    this.autoStartCallback = null;
+    log.info('Auto-processing stopped');
+  }
+
+  /**
+   * Check if auto-processing is currently active.
+   * (v0.2.23 - Wave 2.1)
+   */
+  isAutoProcessingActive(): boolean {
+    return this.autoProcessTimer !== null;
+  }
+
+  /**
+   * Process the queue automatically - start work orders if capacity available.
+   * (v0.2.23 - Wave 2.1)
+   *
+   * This method is called periodically by the poll loop. It checks:
+   * 1. Capacity available (running < maxConcurrent)
+   * 2. Stagger delay met (time since last start)
+   * 3. Memory available (free memory > threshold)
+   *
+   * If all conditions are met, starts the next queued work order.
+   */
+  private async autoProcessQueue(): Promise<void> {
+    if (this.isAutoProcessing || this.shuttingDown) {
+      return;
+    }
+
+    this.isAutoProcessing = true;
+
+    try {
+      // Check if we have capacity
+      if (!this.canStartImmediately()) {
+        log.debug(
+          { running: this.running.size, max: this.config.maxConcurrent },
+          'Auto-process: at capacity, skipping'
+        );
+        return;
+      }
+
+      // Check if we have work to do
+      if (this.queue.length === 0) {
+        return; // Nothing to process
+      }
+
+      // Check stagger delay
+      const timeSinceLastStart = Date.now() - this.lastAutoStartTime;
+      if (timeSinceLastStart < this.config.staggerDelayMs && this.lastAutoStartTime > 0) {
+        log.debug(
+          { timeSinceLastStart, staggerDelayMs: this.config.staggerDelayMs },
+          'Auto-process: stagger delay not met'
+        );
+        this.emit('autoProcessStaggerSkip', timeSinceLastStart, this.config.staggerDelayMs);
+        return;
+      }
+
+      // Check memory before starting
+      const memInfo = await this.getMemoryInfo();
+      if (memInfo.availableMB < this.config.minAvailableMemoryMB) {
+        log.warn(
+          { availableMB: memInfo.availableMB, requiredMB: this.config.minAvailableMemoryMB },
+          'Auto-process: insufficient memory, delaying start'
+        );
+        this.emit('autoProcessMemorySkip', memInfo.availableMB, this.config.minAvailableMemoryMB);
+        return;
+      }
+
+      // Get next work order (FIFO from priority queue)
+      const nextWorkOrderId = this.peek();
+      if (!nextWorkOrderId) {
+        return; // Queue became empty
+      }
+
+      // Start the work order
+      log.info(
+        {
+          workOrderId: nextWorkOrderId,
+          queuedCount: this.queue.length,
+          runningCount: this.running.size,
+          availableMemoryMB: memInfo.availableMB,
+        },
+        'Auto-process: starting work order'
+      );
+
+      this.lastAutoStartTime = Date.now();
+      this.emit('autoProcessStart', nextWorkOrderId);
+
+      // Call the start callback
+      if (this.autoStartCallback) {
+        try {
+          await this.autoStartCallback(nextWorkOrderId);
+        } catch (error) {
+          log.error({ workOrderId: nextWorkOrderId, error }, 'Auto-process: failed to start work order');
+          // Don't throw - we want to continue processing on the next poll
+        }
+      }
+    } finally {
+      this.isAutoProcessing = false;
+    }
+  }
+
+  /**
+   * Get memory information for auto-processing decisions.
+   * (v0.2.23 - Wave 2.1)
+   */
+  private async getMemoryInfo(): Promise<{ totalMB: number; availableMB: number }> {
+    const os = await import('os');
+    const total = os.totalmem();
+    const free = os.freemem();
+    return {
+      totalMB: Math.floor(total / 1024 / 1024),
+      availableMB: Math.floor(free / 1024 / 1024),
+    };
+  }
+
+  /**
+   * Wait for auto-processing to complete (for graceful shutdown).
+   * (v0.2.23 - Wave 2.1)
+   */
+  private async waitForAutoProcessingComplete(timeoutMs: number = 30000): Promise<void> {
+    const startTime = Date.now();
+    while (this.isAutoProcessing && Date.now() - startTime < timeoutMs) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
   }
 
   /**
