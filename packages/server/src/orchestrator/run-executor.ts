@@ -18,6 +18,8 @@ import {
   RunEvent,
   RunResult,
   RunState,
+  IterationErrorType,
+  createIterationData,
 } from '../types/index.js';
 import type { ResolvedHarnessConfig } from '../types/harness-config.js';
 import type { LoopStrategy, LoopContext, LoopState, LoopDecision } from '../types/loop-strategy.js';
@@ -27,6 +29,7 @@ import {
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun, type CreateRunOptions } from './run-store.js';
 import { resultPersister } from './result-persister.js';
+import { ErrorBuilder } from './error-builder.js';
 import { getConfig } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
@@ -358,17 +361,8 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
     }
 
-    // Create iteration tracking
-    const iterationData: IterationData = {
-      iteration,
-      state: run.state,
-      snapshotId: null,
-      verificationPassed: null,
-      feedbackGenerated: false,
-      startedAt: new Date(),
-      completedAt: null,
-      durationMs: null,
-    };
+    // Create iteration tracking (v0.2.19 - Thrust 3: use factory function)
+    const iterationData: IterationData = createIterationData(iteration, run.state);
 
     try {
       // BUILD PHASE
@@ -400,9 +394,20 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       if (buildResult.agentResult) {
         onAgentResult?.(buildResult.agentResult, iteration);
 
+        // Populate iteration data with agent fields (v0.2.19 - Thrust 3)
+        iterationData.agentSessionId = buildResult.agentResult.sessionId;
+        iterationData.agentDurationMs = buildResult.agentResult.durationMs;
+        iterationData.agentSuccess = buildResult.agentResult.success;
+        iterationData.agentModel = buildResult.agentResult.model ?? null;
+        iterationData.agentTokensUsed = buildResult.agentResult.tokensUsed
+          ? buildResult.agentResult.tokensUsed.input + buildResult.agentResult.tokensUsed.output
+          : null;
+        iterationData.agentCostUsd = buildResult.agentResult.totalCostUsd ?? null;
+
         // Persist full agent result to disk for debugging (v0.2.19 - Thrust 1)
         try {
-          await resultPersister.saveAgentResult(runId, iteration, buildResult.agentResult);
+          const agentFilePath = await resultPersister.saveAgentResult(runId, iteration, buildResult.agentResult);
+          iterationData.agentResultFile = agentFilePath;
         } catch (persistError) {
           log.error({ runId, iteration, error: persistError }, 'Failed to persist agent result');
           // Continue execution - don't fail the run because of persistence issues
@@ -415,11 +420,32 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
 
       if (!buildResult.success) {
         log.warn({ runId, iteration, error: buildResult.error }, 'Build failed');
+
+        // Create structured BuildError (v0.2.19 - Thrust 4)
+        const buildError = buildResult.agentResult
+          ? ErrorBuilder.fromAgentResult(buildResult.agentResult, runId, iteration)
+          : ErrorBuilder.fromSystemError(new Error(buildResult.error ?? 'Build failed'), {
+              runId,
+              iteration,
+              phase: 'build',
+            });
+
+        // Set error fields in iteration data (v0.2.19 - Thrust 3)
+        iterationData.errorType = buildResult.agentResult?.exitCode === 0
+          ? IterationErrorType.AGENT_FAILURE
+          : IterationErrorType.AGENT_CRASH;
+        iterationData.errorMessage = buildError.message;
+        iterationData.errorDetails = {
+          buildErrorType: buildError.type,
+          exitCode: buildError.exitCode,
+          sessionId: buildResult.sessionId,
+          context: buildError.context,
+        };
+
         run = applyTransition(run, RunEvent.BUILD_FAILED);
         run.result = RunResult.FAILED_BUILD;
-        // Include file reference in error message (v0.2.19 - Thrust 1)
-        const agentFile = `agent-${iteration}.json`;
-        run.error = `Build failed. Details: ${agentFile}`;
+        // Include structured error message (v0.2.19 - Thrust 4)
+        run.error = buildError.message;
         await saveRun(run);
         break;
       }
@@ -479,6 +505,24 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       onPhaseEnd?.('verify', iteration);
       onVerificationComplete?.(verificationReport, iteration);
       iterationData.verificationPassed = verificationReport.passed;
+
+      // Populate verification fields in iteration data (v0.2.19 - Thrust 3)
+      iterationData.verificationDurationMs = verificationReport.totalDuration;
+      const levelsRun: string[] = [];
+      if (verificationReport.l0Result?.checks?.length > 0) levelsRun.push('L0');
+      if (verificationReport.l1Result?.checks?.length > 0) levelsRun.push('L1');
+      if (verificationReport.l2Result?.checks?.length > 0) levelsRun.push('L2');
+      if (verificationReport.l3Result?.checks?.length > 0) levelsRun.push('L3');
+      iterationData.verificationLevelsRun = levelsRun;
+
+      // Persist verification report (v0.2.19 - Thrust 2)
+      try {
+        const verificationFilePath = await resultPersister.saveVerificationReport(runId, iteration, verificationReport);
+        iterationData.verificationFile = verificationFilePath;
+      } catch (persistError) {
+        log.error({ runId, iteration, error: persistError }, 'Failed to persist verification report');
+        // Continue execution - don't fail the run because of persistence issues
+      }
 
       // Track verification for strategy (v0.2.16 - Thrust 9)
       currentVerification = verificationReport;
@@ -636,6 +680,24 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       if (shouldStop) {
         log.warn({ runId, iteration }, 'Max iterations reached, verification failed');
 
+        // Create structured BuildError from verification (v0.2.19 - Thrust 4)
+        const verificationError = currentVerification
+          ? ErrorBuilder.fromVerificationReport(currentVerification, runId, iteration)
+          : null;
+
+        // Set error fields in iteration data (v0.2.19 - Thrust 3)
+        iterationData.errorType = IterationErrorType.VERIFICATION_FAILED;
+        iterationData.errorMessage = verificationError?.message ??
+          strategyDecision?.reason ??
+          'Max iterations reached without passing verification';
+        iterationData.errorDetails = {
+          buildErrorType: verificationError?.type,
+          iteration,
+          maxIterations: run.maxIterations,
+          strategyAction: strategyDecision?.action,
+          context: verificationError?.context,
+        };
+
         // Notify strategy of loop end (v0.2.16 - Thrust 9)
         if (loopStrategy && harnessConfig && strategyDecision) {
           try {
@@ -658,7 +720,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
 
         run = applyTransition(run, RunEvent.VERIFY_FAILED_TERMINAL);
         run.result = RunResult.FAILED_VERIFICATION;
-        run.error = strategyDecision?.reason ?? 'Max iterations reached without passing verification';
+        // Use structured error message (v0.2.19 - Thrust 4)
+        run.error = verificationError?.message ??
+          strategyDecision?.reason ??
+          'Max iterations reached without passing verification';
         await saveRun(run);
         onStateChange?.(run);
         break;
@@ -720,9 +785,27 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       };
     } catch (error) {
       log.error({ error, runId, iteration }, 'Iteration failed with error');
+
+      // Create structured BuildError (v0.2.19 - Thrust 4)
+      const systemError = ErrorBuilder.fromSystemError(error, {
+        runId,
+        iteration,
+        phase: run.state,
+      });
+
+      // Set error fields in iteration data (v0.2.19 - Thrust 3)
+      iterationData.errorType = IterationErrorType.SYSTEM_ERROR;
+      iterationData.errorMessage = systemError.message;
+      iterationData.errorDetails = {
+        buildErrorType: systemError.type,
+        errorName: error instanceof Error ? error.name : 'Unknown',
+        context: systemError.context,
+      };
+
       run = applyTransition(run, RunEvent.SYSTEM_ERROR);
       run.result = RunResult.FAILED_ERROR;
-      run.error = error instanceof Error ? error.message : String(error);
+      // Use structured error message (v0.2.19 - Thrust 4)
+      run.error = systemError.message;
       await saveRun(run);
       onStateChange?.(run);
 

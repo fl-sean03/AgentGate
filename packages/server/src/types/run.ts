@@ -50,6 +50,18 @@ export const RunResult = {
 
 export type RunResult = (typeof RunResult)[keyof typeof RunResult];
 
+// Iteration Error Type (v0.2.19 - Thrust 3)
+export const IterationErrorType = {
+  NONE: 'none',
+  AGENT_CRASH: 'agent_crash',
+  AGENT_FAILURE: 'agent_failure',
+  VERIFICATION_FAILED: 'verification_failed',
+  TIMEOUT: 'timeout',
+  SYSTEM_ERROR: 'system_error',
+} as const;
+
+export type IterationErrorType = (typeof IterationErrorType)[keyof typeof IterationErrorType];
+
 // Run Warning (v0.2.10 - Thrust 13)
 export interface RunWarning {
   type: string;
@@ -93,7 +105,7 @@ export interface Run {
   ciWorkflowUrl: string | null;
 }
 
-// Iteration Data
+// Iteration Data (Enhanced v0.2.19 - Thrust 3)
 export interface IterationData {
   iteration: number;
   state: RunState;
@@ -103,6 +115,61 @@ export interface IterationData {
   startedAt: Date;
   completedAt: Date | null;
   durationMs: number | null;
+
+  // Agent fields (v0.2.19 - Thrust 3)
+  agentSessionId: string | null;
+  agentResultFile: string | null;
+  agentDurationMs: number | null;
+  agentSuccess: boolean | null;
+  agentModel: string | null;
+  agentTokensUsed: number | null;
+  agentCostUsd: number | null;
+
+  // Verification fields (v0.2.19 - Thrust 3)
+  verificationFile: string | null;
+  verificationLevelsRun: string[];
+  verificationDurationMs: number | null;
+
+  // Error fields (v0.2.19 - Thrust 3)
+  errorType: IterationErrorType;
+  errorMessage: string | null;
+  errorDetails: Record<string, unknown> | null;
+}
+
+/**
+ * Create a new IterationData with defaults.
+ * (v0.2.19 - Thrust 3)
+ */
+export function createIterationData(
+  iteration: number,
+  state: RunState
+): IterationData {
+  return {
+    iteration,
+    state,
+    snapshotId: null,
+    verificationPassed: null,
+    feedbackGenerated: false,
+    startedAt: new Date(),
+    completedAt: null,
+    durationMs: null,
+    // Agent fields
+    agentSessionId: null,
+    agentResultFile: null,
+    agentDurationMs: null,
+    agentSuccess: null,
+    agentModel: null,
+    agentTokensUsed: null,
+    agentCostUsd: null,
+    // Verification fields
+    verificationFile: null,
+    verificationLevelsRun: [],
+    verificationDurationMs: null,
+    // Error fields
+    errorType: IterationErrorType.NONE,
+    errorMessage: null,
+    errorDetails: null,
+  };
 }
 
 // Run Status (for queries)
