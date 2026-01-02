@@ -8,7 +8,7 @@
 import { VerificationLevel, type CheckResult } from '../../types/index.js';
 import type { VerifyContext, DiagnosticLocal } from '../../verifier/types.js';
 import { logger } from '../../utils/logger.js';
-import type { Finding, ResolvedSecurityPolicy } from '../types.js';
+import type { Finding } from '../types.js';
 import { resolveSecurityPolicy } from '../policy/resolver.js';
 import { securityEngine } from '../enforcement/engine.js';
 import { auditLogger } from '../audit/logger.js';
@@ -43,8 +43,6 @@ export async function runSecurityVerification(
   ctx: VerifyContext,
   profileName?: string
 ): Promise<SecurityCheckResult> {
-  const startTime = Date.now();
-
   try {
     // Resolve security policy
     const policy = await resolveSecurityPolicy(workDir, profileName);
@@ -87,7 +85,7 @@ export async function runSecurityVerification(
  */
 export function mapEnforcementToCheckResult(
   result: EnforcementResult,
-  ctx: VerifyContext
+  _ctx: VerifyContext
 ): SecurityCheckResult {
   const { summary, blockedFindings, warnedFindings } = result;
 
