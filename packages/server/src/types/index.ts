@@ -36,6 +36,8 @@ export {
   RunState,
   RunEvent,
   RunResult,
+  IterationErrorType,
+  createIterationData,
   type Run,
   type IterationData,
   type RunStatus,

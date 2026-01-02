@@ -5,7 +5,15 @@
 
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RunState, type Run, type IterationData, type RunStatus } from '../types/index.js';
+import {
+  RunState,
+  IterationErrorType,
+  type Run,
+  type IterationData,
+  type RunStatus,
+  type AgentResult,
+  type VerificationReport,
+} from '../types/index.js';
 import { getRunDir, ensureRunStructure } from '../artifacts/paths.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -78,23 +86,26 @@ export async function loadRun(runId: string): Promise<Run | null> {
 }
 
 /**
- * Save iteration data.
+ * Save iteration data to disk.
+ * (v0.2.19 - Thrust 3: Enhanced IterationData)
  */
 export async function saveIterationData(
   runId: string,
-  iteration: number,
   data: IterationData
-): Promise<void> {
+): Promise<string> {
   await ensureRunStructure(runId);
   const runDir = getRunDir(runId);
-  const iterFile = join(runDir, `iteration-${iteration}.json`);
+  const filePath = join(runDir, `iteration-${data.iteration}.json`);
 
-  await writeFile(iterFile, JSON.stringify(data, null, 2));
-  log.debug({ runId, iteration }, 'Iteration data saved');
+  await writeFile(filePath, JSON.stringify(data, null, 2));
+
+  log.debug({ runId, iteration: data.iteration }, 'Saved iteration data');
+  return filePath;
 }
 
 /**
- * Load iteration data.
+ * Load iteration data from disk.
+ * (v0.2.19 - Thrust 3: Enhanced IterationData)
  */
 export async function loadIterationData(
   runId: string,
@@ -102,22 +113,60 @@ export async function loadIterationData(
 ): Promise<IterationData | null> {
   try {
     const runDir = getRunDir(runId);
-    const iterFile = join(runDir, `iteration-${iteration}.json`);
-    const content = await readFile(iterFile, 'utf-8');
+    const filePath = join(runDir, `iteration-${iteration}.json`);
+    const content = await readFile(filePath, 'utf-8');
     const data = JSON.parse(content) as Record<string, unknown>;
 
+    // Parse agent tokens used if present
+    let agentTokensUsed: { input: number; output: number; total: number } | null = null;
+    const rawTokens = data['agentTokensUsed'] as Record<string, number> | null;
+    if (rawTokens) {
+      agentTokensUsed = {
+        input: rawTokens['input'] ?? 0,
+        output: rawTokens['output'] ?? 0,
+        total: rawTokens['total'] ?? 0,
+      };
+    }
+
     return {
+      // Core metadata
       iteration: data['iteration'] as number,
       state: data['state'] as RunState,
-      snapshotId: (data['snapshotId'] as string) ?? null,
-      verificationPassed: (data['verificationPassed'] as boolean) ?? null,
-      feedbackGenerated: (data['feedbackGenerated'] as boolean) ?? false,
       startedAt: new Date(data['startedAt'] as string),
       completedAt: data['completedAt'] ? new Date(data['completedAt'] as string) : null,
       durationMs: (data['durationMs'] as number) ?? null,
+
+      // Snapshot
+      snapshotId: (data['snapshotId'] as string) ?? null,
+
+      // Feedback loop
+      feedbackGenerated: (data['feedbackGenerated'] as boolean) ?? false,
+
+      // Agent execution (v0.2.19 - Thrust 3)
+      agentSessionId: (data['agentSessionId'] as string) ?? null,
+      agentResultFile: (data['agentResultFile'] as string) ?? null,
+      agentDurationMs: (data['agentDurationMs'] as number) ?? null,
+      agentSuccess: (data['agentSuccess'] as boolean) ?? null,
+      agentModel: (data['agentModel'] as string) ?? null,
+      agentTokensUsed,
+      agentCostUsd: (data['agentCostUsd'] as number) ?? null,
+
+      // Verification (v0.2.19 - Thrust 3)
+      verificationFile: (data['verificationFile'] as string) ?? null,
+      verificationPassed: (data['verificationPassed'] as boolean) ?? null,
+      verificationLevelsRun: (data['verificationLevelsRun'] as string[]) ?? [],
+      verificationDurationMs: (data['verificationDurationMs'] as number) ?? null,
+
+      // Error handling (v0.2.19 - Thrust 3)
+      errorType: (data['errorType'] as IterationErrorType) ?? IterationErrorType.NONE,
+      errorMessage: (data['errorMessage'] as string) ?? null,
+      errorDetails: (data['errorDetails'] as Record<string, unknown>) ?? null,
     };
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -255,5 +304,102 @@ export function createRun(
     ciPollingStartedAt: null,
     ciCompletedAt: null,
     ciWorkflowUrl: null,
+  };
+}
+
+// ==========================================================================
+// Enhanced IterationData Functions (v0.2.19 - Thrust 3)
+// ==========================================================================
+
+/**
+ * List all iteration numbers for a run.
+ */
+export async function listIterations(runId: string): Promise<number[]> {
+  const runDir = getRunDir(runId);
+
+  let files: string[];
+  try {
+    files = await readdir(runDir);
+  } catch {
+    return [];
+  }
+
+  return files
+    .filter(f => f.startsWith('iteration-') && f.endsWith('.json'))
+    .map(f => parseInt(f.replace('iteration-', '').replace('.json', ''), 10))
+    .filter(n => !isNaN(n))
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Update iteration data with agent result info.
+ */
+export function updateWithAgentResult(
+  data: IterationData,
+  result: AgentResult,
+  resultFile: string
+): IterationData {
+  // Convert TokenUsage to the required format with total
+  let agentTokensUsed: { input: number; output: number; total: number } | null = null;
+  if (result.tokensUsed) {
+    agentTokensUsed = {
+      input: result.tokensUsed.input,
+      output: result.tokensUsed.output,
+      total: result.tokensUsed.input + result.tokensUsed.output,
+    };
+  }
+
+  return {
+    ...data,
+    agentSessionId: result.sessionId,
+    agentResultFile: resultFile,
+    agentDurationMs: result.durationMs,
+    agentSuccess: result.success,
+    agentModel: result.model ?? null,
+    agentTokensUsed,
+    agentCostUsd: result.totalCostUsd ?? null,
+  };
+}
+
+/**
+ * Update iteration data with verification result info.
+ */
+export function updateWithVerificationResult(
+  data: IterationData,
+  report: VerificationReport,
+  reportFile: string
+): IterationData {
+  // Determine which levels were run
+  const verificationLevelsRun: string[] = [];
+  if (report.l0Result) verificationLevelsRun.push('L0');
+  if (report.l1Result) verificationLevelsRun.push('L1');
+  if (report.l2Result) verificationLevelsRun.push('L2');
+  if (report.l3Result) verificationLevelsRun.push('L3');
+
+  return {
+    ...data,
+    verificationFile: reportFile,
+    verificationPassed: report.passed,
+    verificationLevelsRun,
+    verificationDurationMs: report.totalDuration,
+  };
+}
+
+/**
+ * Update iteration data with error info.
+ */
+export function updateWithError(
+  data: IterationData,
+  errorType: IterationErrorType,
+  message: string,
+  details?: Record<string, unknown>
+): IterationData {
+  return {
+    ...data,
+    errorType,
+    errorMessage: message,
+    errorDetails: details ?? null,
+    completedAt: new Date(),
+    durationMs: new Date().getTime() - data.startedAt.getTime(),
   };
 }

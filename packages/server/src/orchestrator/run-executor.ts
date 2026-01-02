@@ -25,7 +25,17 @@ import {
   applyTransition,
   isTerminalState,
 } from './state-machine.js';
-import { saveRun, saveIterationData, createRun, type CreateRunOptions } from './run-store.js';
+import {
+  saveRun,
+  saveIterationData,
+  createRun,
+  updateWithAgentResult,
+  updateWithVerificationResult,
+  updateWithError,
+  type CreateRunOptions,
+} from './run-store.js';
+import { createIterationData, IterationErrorType } from '../types/run.js';
+import { basename } from 'node:path';
 import { getConfig } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
@@ -357,17 +367,9 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
     }
 
-    // Create iteration tracking
-    const iterationData: IterationData = {
-      iteration,
-      state: run.state,
-      snapshotId: null,
-      verificationPassed: null,
-      feedbackGenerated: false,
-      startedAt: new Date(),
-      completedAt: null,
-      durationMs: null,
-    };
+    // Create iteration tracking with enhanced fields (v0.2.19 - Thrust 3)
+    let iterationData = createIterationData(iteration);
+    iterationData.state = run.state;
 
     try {
       // BUILD PHASE
@@ -398,6 +400,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       // Record agent result for metrics (v0.2.5)
       if (buildResult.agentResult) {
         onAgentResult?.(buildResult.agentResult, iteration);
+
+        // Update iteration data with agent result (v0.2.19 - Thrust 3)
+        const agentResultFile = `agent-${iteration}.json`;
+        iterationData = updateWithAgentResult(iterationData, buildResult.agentResult, agentResultFile);
       }
 
       // Store session ID for continuation
@@ -406,6 +412,19 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
 
       if (!buildResult.success) {
         log.warn({ runId, iteration, error: buildResult.error }, 'Build failed');
+
+        // Update iteration data with error info (v0.2.19 - Thrust 3)
+        const errorType = buildResult.agentResult?.exitCode === 137
+          ? IterationErrorType.TIMEOUT
+          : IterationErrorType.AGENT_FAILURE;
+        iterationData = updateWithError(
+          iterationData,
+          errorType,
+          buildResult.error ?? 'Agent execution failed',
+          { exitCode: buildResult.agentResult?.exitCode ?? -1 }
+        );
+        await saveIterationData(runId, iterationData);
+
         run = applyTransition(run, RunEvent.BUILD_FAILED);
         run.result = RunResult.FAILED_BUILD;
         run.error = buildResult.error ?? 'Build failed';
@@ -467,7 +486,10 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       const verificationReport = await onVerify(snapshot, gatePlan, runId, iteration);
       onPhaseEnd?.('verify', iteration);
       onVerificationComplete?.(verificationReport, iteration);
-      iterationData.verificationPassed = verificationReport.passed;
+
+      // Update iteration data with verification result (v0.2.19 - Thrust 3)
+      const verificationFile = `verification-${iteration}.json`;
+      iterationData = updateWithVerificationResult(iterationData, verificationReport, verificationFile);
 
       // Track verification for strategy (v0.2.16 - Thrust 9)
       currentVerification = verificationReport;
@@ -625,6 +647,17 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       if (shouldStop) {
         log.warn({ runId, iteration }, 'Max iterations reached, verification failed');
 
+        // Update iteration data with verification failure (v0.2.19 - Thrust 3)
+        iterationData = updateWithError(
+          iterationData,
+          IterationErrorType.VERIFICATION_FAILED,
+          strategyDecision?.reason ?? 'Max iterations reached without passing verification',
+          { failedLevel: findFailedLevel(verificationReport) }
+        );
+        iterationData.completedAt = new Date();
+        iterationData.durationMs = Date.now() - iterationStart;
+        await saveIterationData(runId, iterationData);
+
         // Notify strategy of loop end (v0.2.16 - Thrust 9)
         if (loopStrategy && harnessConfig && strategyDecision) {
           try {
@@ -670,10 +703,11 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       await saveRun(run);
       onStateChange?.(run);
 
-      // Update iteration data
+      // Update iteration data and save (v0.2.19 - Thrust 3)
       iterationData.completedAt = new Date();
       iterationData.durationMs = Date.now() - iterationStart;
-      await saveIterationData(runId, iteration, iterationData);
+      iterationData.state = run.state;
+      await saveIterationData(runId, iterationData);
       onIterationComplete?.(run, iterationData);
 
       // Notify strategy of iteration end (v0.2.16 - Thrust 9)
@@ -715,10 +749,15 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       await saveRun(run);
       onStateChange?.(run);
 
-      // Save final iteration state
-      iterationData.completedAt = new Date();
-      iterationData.durationMs = Date.now() - iterationStart;
-      await saveIterationData(runId, iteration, iterationData);
+      // Update iteration data with system error (v0.2.19 - Thrust 3)
+      iterationData = updateWithError(
+        iterationData,
+        IterationErrorType.SYSTEM_ERROR,
+        error instanceof Error ? error.message : String(error),
+        { stack: error instanceof Error ? error.stack : undefined }
+      );
+      iterationData.state = run.state;
+      await saveIterationData(runId, iterationData);
       break;
     }
   }
@@ -865,4 +904,19 @@ function createStreamingCallback(
         log.debug({ eventType: (event as ParsedEvent).type }, 'Unknown streaming event type');
     }
   };
+}
+
+// ==========================================================================
+// Helper Functions (v0.2.19 - Thrust 3)
+// ==========================================================================
+
+/**
+ * Find the first failed verification level.
+ */
+function findFailedLevel(report: VerificationReport): string | null {
+  if (report.l0Result && !report.l0Result.passed) return 'L0';
+  if (report.l1Result && !report.l1Result.passed) return 'L1';
+  if (report.l2Result && !report.l2Result.passed) return 'L2';
+  if (report.l3Result && !report.l3Result.passed) return 'L3';
+  return null;
 }
