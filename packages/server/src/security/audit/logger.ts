@@ -9,7 +9,7 @@ import { mkdir, appendFile, stat, rename, readdir, unlink } from 'node:fs/promis
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { logger } from '../../utils/logger.js';
-import type { Finding, ResolvedSecurityPolicy } from '../types.js';
+import type { ResolvedSecurityPolicy } from '../types.js';
 import type { EnforcementResult } from '../enforcement/types.js';
 import {
   AuditEventType,
@@ -355,7 +355,7 @@ export async function queryAuditEvents(
 ): Promise<AuditEvent[]> {
   const { readFile } = await import('node:fs/promises');
 
-  const logPath = process.env.AGENTGATE_AUDIT_PATH || DEFAULT_LOG_PATH;
+  const logPath = process.env.AGENTGATE_AUDIT_PATH ?? DEFAULT_LOG_PATH;
   let content: string;
 
   try {

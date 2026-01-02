@@ -77,7 +77,7 @@ export class SecurityEnforcementEngine {
       }
 
       // Validate detector options
-      const options = detectorConfig.options || {};
+      const options = detectorConfig.options ?? {};
       const validation = detector.validateOptions(options);
       if (!validation.valid) {
         logger.warn(
