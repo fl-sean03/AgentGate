@@ -3,10 +3,10 @@
  * Stores and retrieves run state and iteration data.
  */
 
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RunState, IterationErrorType, type Run, type IterationData, type RunStatus } from '../types/index.js';
-import { getRunDir, ensureRunStructure } from '../artifacts/paths.js';
+import { getRunDir, getRunsDir, ensureRunStructure } from '../artifacts/paths.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('run-store');
@@ -272,4 +272,169 @@ export function createRun(
     ciCompletedAt: null,
     ciWorkflowUrl: null,
   };
+}
+
+/**
+ * Result of orphan cleanup operation.
+ * (v0.2.23 - Wave 1.6: Orphan cleanup)
+ */
+export interface OrphanCleanupResult {
+  /** Number of orphaned runs found */
+  orphanedCount: number;
+  /** Number of orphaned runs successfully deleted */
+  deletedCount: number;
+  /** IDs of orphaned runs that were deleted */
+  deletedRunIds: string[];
+  /** IDs of orphaned runs that failed to delete */
+  failedRunIds: string[];
+  /** Total bytes freed by cleanup */
+  freedBytes: number;
+}
+
+/**
+ * Options for orphan cleanup.
+ * (v0.2.23 - Wave 1.6: Orphan cleanup)
+ */
+export interface OrphanCleanupOptions {
+  /** Whether to perform cleanup (false = dry run) */
+  dryRun?: boolean;
+  /** Maximum number of orphans to process (default: unlimited) */
+  maxOrphans?: number;
+}
+
+/**
+ * Clean up orphaned runs whose work orders no longer exist.
+ * A run is considered orphaned when its associated workOrderId
+ * does not correspond to any existing work order.
+ * (v0.2.23 - Wave 1.6: Orphan cleanup)
+ *
+ * @param validWorkOrderIds Set of valid work order IDs
+ * @param options Cleanup options
+ * @returns Cleanup result with statistics
+ */
+export async function cleanupOrphanedRuns(
+  validWorkOrderIds: Set<string>,
+  options: OrphanCleanupOptions = {}
+): Promise<OrphanCleanupResult> {
+  const { dryRun = false, maxOrphans } = options;
+
+  const result: OrphanCleanupResult = {
+    orphanedCount: 0,
+    deletedCount: 0,
+    deletedRunIds: [],
+    failedRunIds: [],
+    freedBytes: 0,
+  };
+
+  const runsDir = getRunsDir();
+
+  let entries: string[];
+  try {
+    entries = await readdir(runsDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      log.debug('Runs directory does not exist, nothing to clean');
+      return result;
+    }
+    throw error;
+  }
+
+  // Find orphaned runs
+  const orphanedRunIds: string[] = [];
+
+  for (const entry of entries) {
+    const run = await loadRun(entry);
+    if (!run) {
+      // Can't load run, might be corrupted - skip for now
+      log.warn({ runId: entry }, 'Could not load run during orphan scan');
+      continue;
+    }
+
+    if (!validWorkOrderIds.has(run.workOrderId)) {
+      orphanedRunIds.push(run.id);
+      log.debug(
+        { runId: run.id, workOrderId: run.workOrderId },
+        'Found orphaned run'
+      );
+
+      // Check if we've hit the limit
+      if (maxOrphans !== undefined && orphanedRunIds.length >= maxOrphans) {
+        log.info(
+          { limit: maxOrphans },
+          'Reached orphan processing limit, stopping scan'
+        );
+        break;
+      }
+    }
+  }
+
+  result.orphanedCount = orphanedRunIds.length;
+
+  if (dryRun) {
+    log.info(
+      { orphanedCount: result.orphanedCount },
+      'Dry run: would delete orphaned runs'
+    );
+    return result;
+  }
+
+  // Delete orphaned runs
+  for (const runId of orphanedRunIds) {
+    const runDir = getRunDir(runId);
+    try {
+      // Get directory size before deletion for freed bytes calculation
+      const size = await getDirSize(runDir);
+
+      await rm(runDir, { recursive: true, force: true });
+
+      result.deletedCount++;
+      result.deletedRunIds.push(runId);
+      result.freedBytes += size;
+
+      log.info({ runId, freedBytes: size }, 'Deleted orphaned run');
+    } catch (error) {
+      log.error({ runId, error }, 'Failed to delete orphaned run');
+      result.failedRunIds.push(runId);
+    }
+  }
+
+  log.info(
+    {
+      orphanedCount: result.orphanedCount,
+      deletedCount: result.deletedCount,
+      failedCount: result.failedRunIds.length,
+      freedBytes: result.freedBytes,
+    },
+    'Orphan cleanup completed'
+  );
+
+  return result;
+}
+
+/**
+ * Calculate directory size recursively.
+ * (v0.2.23 - Wave 1.6: Orphan cleanup)
+ */
+async function getDirSize(path: string): Promise<number> {
+  const { stat } = await import('node:fs/promises');
+  let size = 0;
+
+  try {
+    const entries = await readdir(path, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const entryPath = join(path, entry.name);
+
+      if (entry.isDirectory()) {
+        size += await getDirSize(entryPath);
+      } else {
+        const stats = await stat(entryPath);
+        size += stats.size;
+      }
+    }
+  } catch {
+    // Ignore errors (directory might not exist or be inaccessible)
+  }
+
+  return size;
 }
