@@ -24,26 +24,22 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 ## v0.2.23 Progress Tracker
 
-### Wave 1: Foundation (8 Parallel) - IN PROGRESS
+### Wave 1: Foundation (8 Parallel) - ✅ COMPLETE
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
-| 1.1 | #76 | DRAFT/MERGEABLE | Cancel Running Work Orders |
-| 1.2 | #73 | DRAFT/MERGEABLE | Work Order Purge API |
-| 1.3 | #80 | DRAFT/MERGEABLE | Force Kill Capability |
-| 1.4 | #79 | DRAFT/MERGEABLE | Work Order Timeout Enforcement |
-| 1.5 | #74 | DRAFT/MERGEABLE | Storage Validation on Startup |
-| 1.6 | #78 | DRAFT/MERGEABLE | Run Store Orphan Cleanup |
-| 1.7 | #75 | DRAFT/MERGEABLE | Queue Health Dashboard Endpoint |
-| 1.8 | #77 | DRAFT/MERGEABLE | Fix Workspace Source API |
+| 1.1 | #76 | ✅ MERGED | Cancel Running Work Orders |
+| 1.2 | #73 | ✅ MERGED | Work Order Purge API |
+| 1.3 | #80 | ✅ MERGED | Force Kill Capability |
+| 1.4 | #79 | ✅ MERGED | Work Order Timeout Enforcement |
+| 1.5 | #74 | ✅ MERGED | Storage Validation on Startup |
+| 1.6 | #78 | ✅ MERGED | Run Store Orphan Cleanup |
+| 1.7 | #75 | ✅ MERGED | Queue Health Dashboard Endpoint |
+| 1.8 | #77 | ✅ MERGED | Fix Workspace Source API |
 
-**Merge Order:**
-1. #76 (Cancel) - foundation
-2. #80 (Force Kill) - depends on cancel concepts
-3. #79 (Timeout) - depends on kill
-4. #73, #74, #75, #77, #78 - independent, merge in parallel
+**Validated:** All tests pass, typecheck pass (2026-01-02)
 
-### Wave 2: Automation (Sequential) - PENDING
+### Wave 2: Automation (Sequential) - IN PROGRESS
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
