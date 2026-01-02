@@ -7,7 +7,7 @@ import {
   AgentType,
   GatePlanSource,
 } from '../types/index.js';
-import { WorkOrderStore, workOrderStore } from './work-order-store.js';
+import { WorkOrderStore, workOrderStore, type PurgeOptions, type PurgeResult } from './work-order-store.js';
 import {
   type AgentProcessManager,
   type KillResult,
@@ -468,6 +468,37 @@ export class WorkOrderService {
     };
 
     return validTransitions[from]?.includes(to) ?? false;
+  }
+
+  /**
+   * Purge work orders based on criteria.
+   *
+   * Deletes work orders matching the specified filters:
+   * - statuses: Only delete work orders in these statuses
+   * - olderThan: Only delete work orders created before this date
+   * - dryRun: Preview what would be deleted without actually deleting
+   *
+   * By default (no options), this will delete ALL work orders.
+   * For safety, callers should specify either statuses or olderThan.
+   */
+  async purge(options: PurgeOptions = {}): Promise<PurgeResult> {
+    log.info({ options }, 'Purging work orders');
+
+    const result = await this.store.purge(options);
+
+    if (options.dryRun) {
+      log.info(
+        { wouldDelete: result.wouldDelete },
+        'Dry run purge complete - no work orders deleted'
+      );
+    } else {
+      log.info(
+        { deletedCount: result.deletedCount, deletedIds: result.deletedIds },
+        'Work orders purged'
+      );
+    }
+
+    return result;
   }
 }
 
