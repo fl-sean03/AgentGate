@@ -11,7 +11,6 @@ import { createSuccessResponse, createErrorResponse, ErrorCode } from '../types.
 import {
   getQueueManager,
   type QueueStats,
-  type QueuePosition,
 } from '../../control-plane/queue-manager.js';
 import { createLogger } from '../../utils/logger.js';
 
