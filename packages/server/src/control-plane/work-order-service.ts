@@ -8,10 +8,45 @@ import {
   GatePlanSource,
 } from '../types/index.js';
 import { WorkOrderStore, workOrderStore } from './work-order-store.js';
+import {
+  type AgentProcessManager,
+  type KillResult,
+  getAgentProcessManager,
+} from './agent-process-manager.js';
 import { getQueueManager } from './queue-manager.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('work-order-service');
+
+/**
+ * Force kill options for terminating running work orders.
+ * (v0.2.23 Wave 1.3)
+ */
+export interface ForceKillOptions {
+  /** Grace period in ms before SIGKILL (default: 5000) */
+  gracePeriodMs?: number;
+  /** Skip graceful shutdown, immediately SIGKILL */
+  immediate?: boolean;
+  /** Reason for killing (logged) */
+  reason?: string;
+}
+
+/**
+ * Result of a force kill operation.
+ * (v0.2.23 Wave 1.3)
+ */
+export interface ForceKillResult {
+  /** Whether the kill was successful */
+  success: boolean;
+  /** Whether force kill (SIGKILL) was used */
+  forcedKill: boolean;
+  /** Time taken to terminate */
+  durationMs: number;
+  /** Error message if failed */
+  error?: string;
+  /** New work order status after kill */
+  newStatus: WorkOrderStatus;
+}
 
 /**
  * Work Order Service - Manages work order lifecycle.
@@ -20,7 +55,14 @@ const log = createLogger('work-order-service');
  * and managing work orders.
  */
 export class WorkOrderService {
-  constructor(private store: WorkOrderStore = workOrderStore) {}
+  private processManager: AgentProcessManager;
+
+  constructor(
+    private store: WorkOrderStore = workOrderStore,
+    processManager?: AgentProcessManager
+  ) {
+    this.processManager = processManager ?? getAgentProcessManager();
+  }
 
   /**
    * Submit a new work order.
@@ -228,6 +270,164 @@ export class WorkOrderService {
     }
 
     return counts;
+  }
+
+  /**
+   * Force kill a running work order's agent process.
+   * (v0.2.23 Wave 1.3)
+   *
+   * This terminates the agent process associated with the work order,
+   * first attempting a graceful shutdown (SIGTERM), then escalating
+   * to SIGKILL if the process doesn't terminate within the grace period.
+   *
+   * @param id - Work order ID
+   * @param options - Kill options
+   * @returns Result of the kill operation
+   * @throws Error if work order not found
+   */
+  async forceKill(id: string, options: ForceKillOptions = {}): Promise<ForceKillResult> {
+    const order = await this.store.load(id);
+
+    if (!order) {
+      throw new Error(`Work order not found: ${id}`);
+    }
+
+    // Check if work order is in a killable state
+    const killableStatuses: WorkOrderStatus[] = [
+      WorkOrderStatus.RUNNING,
+      WorkOrderStatus.WAITING_FOR_CHILDREN,
+      WorkOrderStatus.INTEGRATING,
+    ];
+
+    if (!killableStatuses.includes(order.status)) {
+      // If already in terminal state, return success
+      const terminalStatuses: WorkOrderStatus[] = [
+        WorkOrderStatus.SUCCEEDED,
+        WorkOrderStatus.FAILED,
+        WorkOrderStatus.CANCELED,
+      ];
+
+      if (terminalStatuses.includes(order.status)) {
+        log.info({ id, status: order.status }, 'Work order already in terminal state');
+        return {
+          success: true,
+          forcedKill: false,
+          durationMs: 0,
+          newStatus: order.status,
+        };
+      }
+
+      // Queued orders can be canceled directly
+      if (order.status === WorkOrderStatus.QUEUED) {
+        await this.cancel(id);
+        return {
+          success: true,
+          forcedKill: false,
+          durationMs: 0,
+          newStatus: WorkOrderStatus.CANCELED,
+        };
+      }
+    }
+
+    log.info(
+      {
+        id,
+        status: order.status,
+        gracePeriodMs: options.gracePeriodMs,
+        immediate: options.immediate,
+        reason: options.reason,
+      },
+      'Force killing work order'
+    );
+
+    // Check if there's an active process for this work order
+    const hasProcess = this.processManager.hasActiveProcess(id);
+
+    if (!hasProcess) {
+      // No active process, just update status
+      log.warn({ id }, 'No active process found for work order, updating status only');
+      await this.store.updateStatus(id, WorkOrderStatus.CANCELED, {
+        completedAt: new Date(),
+        error: options.reason ?? 'Force killed (no active process)',
+      });
+      return {
+        success: true,
+        forcedKill: false,
+        durationMs: 0,
+        newStatus: WorkOrderStatus.CANCELED,
+      };
+    }
+
+    // Kill the process
+    let killResult: KillResult;
+    if (options.immediate) {
+      killResult = await this.processManager.forceKill(id, options.reason);
+    } else {
+      // Build kill options, only including defined properties
+      const killOptions: {
+        gracePeriodMs?: number;
+        reason?: string;
+        forceImmediate: false;
+      } = { forceImmediate: false };
+      if (options.gracePeriodMs !== undefined) {
+        killOptions.gracePeriodMs = options.gracePeriodMs;
+      }
+      if (options.reason !== undefined) {
+        killOptions.reason = options.reason;
+      }
+      killResult = await this.processManager.kill(id, killOptions);
+    }
+
+    // Update work order status based on kill result
+    const newStatus = killResult.success
+      ? WorkOrderStatus.CANCELED
+      : order.status; // Keep current status if kill failed
+
+    if (killResult.success) {
+      await this.store.updateStatus(id, WorkOrderStatus.CANCELED, {
+        completedAt: new Date(),
+        error: options.reason ?? 'Force killed',
+      });
+    }
+
+    log.info(
+      {
+        id,
+        success: killResult.success,
+        forcedKill: killResult.forcedKill,
+        durationMs: killResult.durationMs,
+        newStatus,
+      },
+      'Force kill completed'
+    );
+
+    // Build result, only including error if defined
+    const result: ForceKillResult = {
+      success: killResult.success,
+      forcedKill: killResult.forcedKill,
+      durationMs: killResult.durationMs,
+      newStatus,
+    };
+    if (killResult.error !== undefined) {
+      result.error = killResult.error;
+    }
+    return result;
+  }
+
+  /**
+   * Check if a work order has an active agent process.
+   * (v0.2.23 Wave 1.3)
+   */
+  hasActiveProcess(id: string): boolean {
+    return this.processManager.hasActiveProcess(id);
+  }
+
+  /**
+   * Get the process manager instance.
+   * (v0.2.23 Wave 1.3)
+   */
+  getProcessManager(): AgentProcessManager {
+    return this.processManager;
   }
 
   /**

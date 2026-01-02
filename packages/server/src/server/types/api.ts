@@ -272,3 +272,37 @@ export interface StartRunResponse {
   status: 'queued' | 'building' | 'running' | 'succeeded' | 'failed' | 'canceled';
   startedAt: string;
 }
+
+/**
+ * Force kill request body (v0.2.23 Wave 1.3)
+ */
+export const forceKillBodySchema = z.object({
+  /** Grace period in ms before escalating to SIGKILL (default: 5000) */
+  gracePeriodMs: z.number().int().min(0).max(60000).optional(),
+  /** Skip graceful shutdown and immediately SIGKILL */
+  immediate: z.boolean().optional(),
+  /** Reason for killing (logged for debugging) */
+  reason: z.string().max(500).optional(),
+}).optional();
+
+export type ForceKillBody = z.infer<typeof forceKillBodySchema>;
+
+/**
+ * Force kill response (v0.2.23 Wave 1.3)
+ */
+export interface ForceKillResponse {
+  /** Work order ID */
+  id: string;
+  /** Whether the kill was successful */
+  success: boolean;
+  /** Whether SIGKILL was used */
+  forcedKill: boolean;
+  /** Time taken to terminate the process */
+  durationMs: number;
+  /** New work order status */
+  status: 'queued' | 'running' | 'waiting_for_children' | 'integrating' | 'succeeded' | 'failed' | 'canceled';
+  /** Error message if kill failed */
+  error?: string;
+  /** Message describing the result */
+  message: string;
+}
