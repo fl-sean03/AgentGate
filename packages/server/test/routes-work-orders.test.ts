@@ -520,6 +520,64 @@ describe('Work Orders Routes', () => {
       const body = response.json();
       expect(body.error.code).toBe('CONFLICT');
     });
+
+    it('should cancel running work order (v0.2.23)', async () => {
+      const { _mockOrders, workOrderService } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'running-order-cancel',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.RUNNING,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/work-orders/${order.id}`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('canceled');
+      expect(body.data.wasRunning).toBe(true);
+      expect(workOrderService.cancel).toHaveBeenCalledWith(order.id);
+    });
+
+    it('should indicate wasRunning=false for queued orders', async () => {
+      const { _mockOrders } = await import('../src/control-plane/work-order-service.js');
+      const order = {
+        id: 'queued-order-cancel',
+        taskPrompt: 'Test task',
+        status: WorkOrderStatus.QUEUED,
+        workspaceSource: { type: 'local' as const, path: '/tmp' },
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        createdAt: new Date(),
+      };
+      _mockOrders.set(order.id, order);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/work-orders/${order.id}`,
+        headers: {
+          'Authorization': `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.wasRunning).toBe(false);
+    });
   });
 
   describe('POST /api/v1/work-orders/:id/runs', () => {

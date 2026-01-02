@@ -77,9 +77,8 @@ async function executeCancel(
       return;
     }
 
-    // TODO: When execution layer is implemented, this should signal
-    // the runner to stop gracefully. For now, we just update the status.
-    print(formatWarning('Canceling running work order. The agent process may still be running.'));
+    // v0.2.23: Send abort signal to the running agent process via queue manager
+    print(formatWarning('Canceling running work order. Sending abort signal to agent process.'));
   }
 
   // Cancel the work order
