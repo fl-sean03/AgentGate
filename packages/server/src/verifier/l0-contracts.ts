@@ -9,6 +9,10 @@ import fg from 'fast-glob';
 import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  isSecurityEngineEnabled,
+  runSecurityVerification,
+} from '../security/integration/index.js';
 
 const log = createLogger('l0-contracts');
 
@@ -32,13 +36,22 @@ export async function verifyL0(ctx: VerifyContext): Promise<LevelResult> {
   );
   checks.push(requiredFilesResult);
 
-  // Check forbidden patterns
-  const forbiddenResult = await checkForbiddenPatterns(
-    workDir,
-    gatePlan.contracts.forbiddenPatterns,
-    ctx
-  );
-  checks.push(forbiddenResult);
+  // Check forbidden patterns / security verification
+  // Use new Security Engine if enabled, otherwise fall back to legacy checkForbiddenPatterns
+  if (isSecurityEngineEnabled()) {
+    log.debug({ workDir }, 'Using new Security Policy Engine');
+    const securityResult = await runSecurityVerification(workDir, ctx);
+    checks.push(securityResult);
+  } else {
+    // Legacy: Check forbidden patterns
+    // @deprecated - Will be removed when Security Engine is fully rolled out
+    const forbiddenResult = await checkForbiddenPatterns(
+      workDir,
+      gatePlan.contracts.forbiddenPatterns,
+      ctx
+    );
+    checks.push(forbiddenResult);
+  }
 
   // Check schemas
   for (const schemaCheck of gatePlan.contracts.requiredSchemas) {
