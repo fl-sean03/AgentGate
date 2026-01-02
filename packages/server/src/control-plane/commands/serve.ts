@@ -162,10 +162,11 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
 
     // The auto-start callback triggers a run for a queued work order
     // This emits a 'ready' event which the orchestrator listens for
-    const autoStartCallback = async (workOrderId: string): Promise<void> => {
+    const autoStartCallback = (workOrderId: string): Promise<void> => {
       log.info({ workOrderId }, 'Auto-processing: emitting ready event');
       // Emit ready event - the server's run trigger logic should handle this
       queueManager.emit('ready', workOrderId);
+      return Promise.resolve();
     };
 
     queueManager.startAutoProcessing(autoStartCallback);
