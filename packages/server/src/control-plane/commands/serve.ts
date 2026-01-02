@@ -185,17 +185,17 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     });
 
     // Forward stale detector events to queue manager for consistent event handling
-    staleDetector.on('staleDetected', (check) => {
+    staleDetector.on('staleDetected', (check: { workOrderId: string; reason?: string }) => {
       log.info({ workOrderId: check.workOrderId, reason: check.reason }, 'Stale work order detected');
       queueManager.emit('staleDetected', check.workOrderId, check.reason ?? 'Unknown');
     });
 
-    staleDetector.on('deadProcessDetected', (workOrderId, reason) => {
+    staleDetector.on('deadProcessDetected', (workOrderId: string, reason: string) => {
       log.warn({ workOrderId, reason }, 'Dead process detected');
       queueManager.emit('deadProcessDetected', workOrderId, reason);
     });
 
-    staleDetector.on('staleHandled', (workOrderId, killed) => {
+    staleDetector.on('staleHandled', (workOrderId: string, killed: boolean) => {
       log.info({ workOrderId, killed }, 'Stale work order handled');
       queueManager.emit('staleHandled', workOrderId, killed);
     });

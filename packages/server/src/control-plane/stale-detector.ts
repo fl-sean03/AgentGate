@@ -196,7 +196,7 @@ export class StaleDetector extends EventEmitter {
       const results: StaleCheck[] = [];
 
       for (const wo of running) {
-        const check = await this.checkWorkOrder(wo);
+        const check = this.checkWorkOrder(wo);
         results.push(check);
 
         if (check.status !== 'healthy') {
@@ -217,7 +217,7 @@ export class StaleDetector extends EventEmitter {
   /**
    * Check a single work order for staleness.
    */
-  private async checkWorkOrder(wo: WorkOrder): Promise<StaleCheck> {
+  private checkWorkOrder(wo: WorkOrder): StaleCheck {
     // Calculate running time based on when the work order started
     // We check the queue manager for actual start time tracking
     const runningInfo = this.queueManager.getRunningWorkOrderInfo(wo.id);
