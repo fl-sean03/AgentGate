@@ -284,3 +284,10 @@ export type {
   SDKSessionState,
   SDKStreamEvent,
 } from './sdk.js';
+
+// Persisted Results Types (v0.2.19 - Thrust 1)
+export {
+  DEFAULT_SAVE_OPTIONS,
+  type PersistedAgentResult,
+  type SaveAgentResultOptions,
+} from './persisted-results.js';
