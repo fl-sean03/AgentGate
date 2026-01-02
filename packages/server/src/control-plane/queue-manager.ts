@@ -95,13 +95,14 @@ interface QueuedWorkOrder {
 }
 
 /**
- * Internal representation of a running work order with timeout tracking.
+ * Internal representation of a running work order with timeout and cancellation tracking.
  * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
  */
 interface RunningWorkOrder {
   workOrderId: string;
   startedAt: Date;
   maxWallClockMs: number | null;
+  abortController: AbortController;
 }
 
 /**
@@ -135,6 +136,9 @@ export interface QueueManagerEvents {
 
   /** Emitted when queue state changes */
   stateChange: (stats: QueueStats) => void;
+
+  /** Emitted when a running work order is canceled */
+  canceled: (workOrderId: string) => void;
 }
 
 /**
@@ -180,9 +184,8 @@ export const DEFAULT_QUEUE_CONFIG: QueueManagerConfig = {
  */
 export class QueueManager extends EventEmitter {
   private queue: QueuedWorkOrder[] = [];
-  private running: Set<string> = new Set();
-  /** Running work orders with timeout tracking (v0.2.23 - Wave 1.4) */
-  private runningWithTimeout: Map<string, RunningWorkOrder> = new Map();
+  /** Running work orders with timeout and cancellation tracking (v0.2.23 - Wave 1.4) */
+  private running: Map<string, RunningWorkOrder> = new Map();
   private config: QueueManagerConfig;
   private waitTimes: number[] = []; // Recent wait times for estimation
   private persistTimer: NodeJS.Timeout | null = null;
@@ -228,7 +231,7 @@ export class QueueManager extends EventEmitter {
    */
   enqueue(workOrderId: string, options: EnqueueOptions = {}): EnqueueResult {
     // Check if already in queue or running
-    if (this.isEnqueued(workOrderId) || this.running.has(workOrderId)) {
+    if (this.isEnqueued(workOrderId) || this.isRunning(workOrderId)) {
       return {
         success: false,
         position: null,
@@ -302,8 +305,13 @@ export class QueueManager extends EventEmitter {
     const waitTime = Date.now() - next.enqueuedAt.getTime();
     this.recordWaitTime(waitTime);
 
-    // Move to running
-    this.running.add(next.workOrderId);
+    // Move to running (with a default AbortController - caller should replace with registerRunning)
+    const abortController = new AbortController();
+    this.running.set(next.workOrderId, {
+      workOrderId: next.workOrderId,
+      startedAt: new Date(),
+      abortController,
+    });
 
     log.info({ workOrderId: next.workOrderId, waitTime }, 'Work order dequeued');
 
@@ -334,14 +342,14 @@ export class QueueManager extends EventEmitter {
    */
   getPosition(workOrderId: string): QueuePosition | null {
     // Check if running
-    if (this.running.has(workOrderId)) {
-      // Find the enqueue time if we have it stored
+    const runningEntry = this.running.get(workOrderId);
+    if (runningEntry) {
       return {
         position: 0,
         estimatedWaitMs: 0,
         ahead: 0,
         state: 'running',
-        enqueuedAt: new Date(), // Not accurate but indicates running
+        enqueuedAt: runningEntry.startedAt,
       };
     }
 
@@ -368,9 +376,9 @@ export class QueueManager extends EventEmitter {
    * Mark a work order as started (remove from queue, add to running).
    *
    * @param workOrderId - ID to mark as started
-   * @param maxWallClockMs - Maximum wall clock time in milliseconds (null = no timeout) (v0.2.23 - Wave 1.4)
+   * @param options - Optional configuration: abortController for cancellation, maxWallClockMs for timeout (v0.2.23 - Wave 1.4)
    */
-  markStarted(workOrderId: string, maxWallClockMs?: number | null): void {
+  markStarted(workOrderId: string, options?: { abortController?: AbortController; maxWallClockMs?: number | null }): void {
     const index = this.queue.findIndex((e) => e.workOrderId === workOrderId);
     if (index !== -1) {
       const entry = this.queue[index]!;
@@ -379,13 +387,12 @@ export class QueueManager extends EventEmitter {
       this.recordWaitTime(waitTime);
     }
 
-    this.running.add(workOrderId);
-
-    // Track running work order with timeout (v0.2.23 - Wave 1.4)
-    this.runningWithTimeout.set(workOrderId, {
+    const maxWallClockMs = options?.maxWallClockMs ?? null;
+    this.running.set(workOrderId, {
       workOrderId,
       startedAt: new Date(),
-      maxWallClockMs: maxWallClockMs ?? null,
+      maxWallClockMs,
+      abortController: options?.abortController ?? new AbortController(),
     });
 
     log.debug({ workOrderId, running: this.running.size, maxWallClockMs }, 'Work order started');
@@ -395,20 +402,82 @@ export class QueueManager extends EventEmitter {
   }
 
   /**
+   * Register an AbortController for a running work order.
+   * Call this to enable cancellation of running work orders.
+   *
+   * @param workOrderId - ID of the running work order
+   * @param abortController - AbortController to use for cancellation
+   * @returns true if registered, false if work order not running
+   */
+  registerAbortController(workOrderId: string, abortController: AbortController): boolean {
+    const entry = this.running.get(workOrderId);
+    if (!entry) {
+      log.warn({ workOrderId }, 'Cannot register AbortController: work order not running');
+      return false;
+    }
+
+    entry.abortController = abortController;
+    log.debug({ workOrderId }, 'AbortController registered for running work order');
+    return true;
+  }
+
+  /**
+   * Get the AbortSignal for a running work order.
+   * Use this to pass to the agent driver for cancellation support.
+   *
+   * @param workOrderId - ID of the running work order
+   * @returns AbortSignal or null if work order not running
+   */
+  getAbortSignal(workOrderId: string): AbortSignal | null {
+    const entry = this.running.get(workOrderId);
+    return entry?.abortController.signal ?? null;
+  }
+
+  /**
    * Mark a work order as completed (remove from running).
    *
    * @param workOrderId - ID to mark as completed
    */
   markCompleted(workOrderId: string): void {
     this.running.delete(workOrderId);
-    // Clean up timeout tracking (v0.2.23 - Wave 1.4)
-    this.runningWithTimeout.delete(workOrderId);
     log.debug({ workOrderId, running: this.running.size }, 'Work order completed');
 
     // Process queue to start next work orders
     this.processQueue();
 
     this.emit('stateChange', this.getStats());
+  }
+
+  /**
+   * Cancel a running work order.
+   * Aborts the agent process and removes from running set.
+   *
+   * @param workOrderId - ID to cancel
+   * @returns true if found and canceled, false otherwise
+   */
+  cancelRunning(workOrderId: string): boolean {
+    const entry = this.running.get(workOrderId);
+    if (!entry) {
+      return false;
+    }
+
+    // Abort the running process
+    entry.abortController.abort();
+    log.info({ workOrderId }, 'Aborted running work order');
+
+    // Remove from running
+    this.running.delete(workOrderId);
+
+    // Emit canceled event
+    this.emit('canceled', workOrderId);
+
+    // Emit state change
+    this.emit('stateChange', this.getStats());
+
+    // Process queue to start next work orders
+    this.processQueue();
+
+    return true;
   }
 
   /**
@@ -427,6 +496,44 @@ export class QueueManager extends EventEmitter {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Force cancel a work order from queue or running set.
+   * (v0.2.23 Wave 1.3)
+   *
+   * Unlike cancel(), this removes from both queue AND running set.
+   * Use this when forcefully terminating a work order.
+   *
+   * @param workOrderId - ID to force cancel
+   * @returns Object indicating where it was removed from
+   */
+  forceCancel(workOrderId: string): { fromQueue: boolean; fromRunning: boolean } {
+    const result = { fromQueue: false, fromRunning: false };
+
+    // Try to remove from queue
+    const queueIndex = this.queue.findIndex((e) => e.workOrderId === workOrderId);
+    if (queueIndex !== -1) {
+      this.queue.splice(queueIndex, 1);
+      result.fromQueue = true;
+      log.info({ workOrderId }, 'Work order force-canceled from queue');
+      this.notifyPositionChanges();
+    }
+
+    // Try to remove from running
+    if (this.running.has(workOrderId)) {
+      this.running.delete(workOrderId);
+      result.fromRunning = true;
+      log.info({ workOrderId }, 'Work order force-canceled from running');
+      // Process queue to start next work orders
+      this.processQueue();
+    }
+
+    if (result.fromQueue || result.fromRunning) {
+      this.emit('stateChange', this.getStats());
+    }
+
+    return result;
   }
 
   /**
@@ -488,7 +595,7 @@ export class QueueManager extends EventEmitter {
         enqueuedAt: e.enqueuedAt.toISOString(),
         maxWaitMs: e.maxWaitMs,
       })),
-      running: Array.from(this.running),
+      running: Array.from(this.running.keys()),
       waitTimes: this.waitTimes,
       savedAt: new Date().toISOString(),
     };
@@ -529,9 +636,9 @@ export class QueueManager extends EventEmitter {
         onPositionChange: undefined,
       }));
 
-      // Note: running set is NOT restored - those work orders need to be
+      // Note: running map is NOT restored - those work orders need to be
       // resubmitted by the orchestrator on restart
-      this.running = new Set();
+      this.running = new Map();
 
       // Restore wait time history
       this.waitTimes = state.waitTimes;
@@ -660,7 +767,7 @@ export class QueueManager extends EventEmitter {
     const now = Date.now();
     const timedOut: Array<{ workOrderId: string; elapsedMs: number; maxWallClockMs: number }> = [];
 
-    for (const [workOrderId, runningWo] of this.runningWithTimeout) {
+    for (const [workOrderId, runningWo] of this.running) {
       if (runningWo.maxWallClockMs === null) {
         continue; // No timeout configured
       }
@@ -691,7 +798,7 @@ export class QueueManager extends EventEmitter {
    * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
    */
   getRunElapsedMs(workOrderId: string): number | null {
-    const runningWo = this.runningWithTimeout.get(workOrderId);
+    const runningWo = this.running.get(workOrderId);
     if (!runningWo) {
       return null;
     }
@@ -704,7 +811,7 @@ export class QueueManager extends EventEmitter {
    * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
    */
   getRunningWorkOrderInfo(workOrderId: string): { startedAt: Date; maxWallClockMs: number | null; elapsedMs: number } | null {
-    const runningWo = this.runningWithTimeout.get(workOrderId);
+    const runningWo = this.running.get(workOrderId);
     if (!runningWo) {
       return null;
     }
@@ -721,7 +828,7 @@ export class QueueManager extends EventEmitter {
    * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
    */
   hasRunTimedOut(workOrderId: string): boolean {
-    const runningWo = this.runningWithTimeout.get(workOrderId);
+    const runningWo = this.running.get(workOrderId);
     if (!runningWo?.maxWallClockMs) {
       return false;
     }
