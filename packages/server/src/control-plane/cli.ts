@@ -9,6 +9,7 @@ import { createServeCommand } from './commands/serve.js';
 import { createRunCommand } from './commands/run.js';
 import { createExecCommand } from './commands/exec.js';
 import { createProfileCommand } from './commands/profile.js';
+import { createQueueCommand } from './commands/queue.js';
 import { ensureAllDirs } from '../artifacts/paths.js';
 
 /**
@@ -44,6 +45,7 @@ export function createProgram(): Command {
   program.addCommand(createMetricsCommand());
   program.addCommand(createServeCommand());
   program.addCommand(createProfileCommand()); // v0.2.16 - Thrust 10
+  program.addCommand(createQueueCommand()); // v0.2.23 - Wave 3.1
 
   // Error handling
   program.exitOverride();
@@ -86,3 +88,4 @@ export { createAuthCommand } from './commands/auth.js';
 export { createMetricsCommand } from './commands/metrics.js';
 export { createServeCommand } from './commands/serve.js';
 export { createProfileCommand } from './commands/profile.js';
+export { createQueueCommand } from './commands/queue.js';
