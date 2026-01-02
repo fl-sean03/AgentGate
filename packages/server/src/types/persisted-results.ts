@@ -1,11 +1,13 @@
 /**
- * Types for persisted agent results.
- * Enables post-mortem debugging of failed runs by storing complete AgentResult to disk.
- * (v0.2.19 - Thrust 1)
+ * Types for persisted run results (v0.2.19 - Observability & Reliability).
+ * Enables post-mortem debugging of failed runs by storing complete results to disk.
+ * - Thrust 1: PersistedAgentResult
+ * - Thrust 2: PersistedVerificationReport
  */
 
 import type { AgentStructuredOutput, TokenUsage } from './agent.js';
 import type { ToolCallRecord } from './sdk.js';
+import type { VerificationReport } from './verification.js';
 
 /**
  * Full agent result persisted to disk for debugging.
@@ -55,3 +57,28 @@ export const DEFAULT_SAVE_OPTIONS: SaveAgentResultOptions = {
   maxStderrBytes: 1024 * 1024, // 1MB
   includeToolCalls: true,
 };
+
+/**
+ * Full verification report persisted to disk.
+ * Extends the in-memory VerificationReport with metadata for persistence.
+ * (v0.2.19 - Thrust 2)
+ */
+export interface PersistedVerificationReport extends VerificationReport {
+  /** When this report was captured */
+  capturedAt: string;
+  /** Levels that were skipped (not just not-run) */
+  skippedLevels: string[];
+  /** Harness config that affected verification */
+  harnessConfig: {
+    waitForCI: boolean;
+    skipLevels: string[];
+  };
+}
+
+/**
+ * Harness config options relevant to verification persistence.
+ */
+export interface VerificationHarnessConfig {
+  waitForCI?: boolean | undefined;
+  skipLevels?: string[] | undefined;
+}
