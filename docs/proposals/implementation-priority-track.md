@@ -15,8 +15,8 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 | Priority | Version | Focus | Status |
 |----------|---------|-------|--------|
-| 1 | **v0.2.23** | Queue Tactical Fixes | **IN PROGRESS** |
-| 2 | v0.2.22 | Queue Architecture Refactor | Planning |
+| 1 | **v0.2.23** | Queue Tactical Fixes | **✅ COMPLETE** |
+| 2 | v0.2.22 | Queue Architecture Refactor | **NEXT** |
 | 3 | v0.2.20 | Dashboard Enhancement | Planning |
 | 4 | v0.2.21 | Terminal UI (TUI) | Planning |
 
@@ -39,20 +39,22 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 
 **Validated:** All tests pass, typecheck pass (2026-01-02)
 
-### Wave 2: Automation (Sequential) - IN PROGRESS
+### Wave 2: Automation (Sequential) - ✅ COMPLETE
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
 | 2.1 | - | ✅ DIRECT COMMIT | Auto-Queue Processing |
-| 2.2 | ydsR1nuVGqGG | 🏃 RUNNING | Stale Work Order Detection |
+| 2.2 | #81 | ✅ MERGED | Stale Work Order Detection |
 
 **Dependencies:** Requires Wave 1 merged (specifically 1.1, 1.3, 1.4) - ✅ MET
 
-### Wave 3: CLI (Parallel with Wave 2) - IN PROGRESS
+### Wave 3: CLI (Parallel with Wave 2) - ✅ COMPLETE
 
 | Task | PR | Status | Description |
 |------|-----|--------|-------------|
-| 3.1 | zCBtDxBdOMUU | 🏃 RUNNING | Queue Management CLI |
+| 3.1 | #82 | ✅ MERGED | Queue Management CLI |
+
+**Validated:** All 1517 tests pass, typecheck pass, lint pass (2026-01-02)
 
 ---
 
