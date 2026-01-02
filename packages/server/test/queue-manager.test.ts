@@ -321,7 +321,7 @@ describe('QueueManager', () => {
       queue.enqueue('wo-1');
 
       const abortController = new AbortController();
-      queue.markStarted('wo-1', abortController);
+      queue.markStarted('wo-1', { abortController });
 
       expect(abortController.signal.aborted).toBe(false);
 
@@ -398,7 +398,7 @@ describe('QueueManager', () => {
     it('should replace existing AbortController', () => {
       queue.enqueue('wo-1');
       const originalController = new AbortController();
-      queue.markStarted('wo-1', originalController);
+      queue.markStarted('wo-1', { abortController: originalController });
 
       const newController = new AbortController();
       queue.registerAbortController('wo-1', newController);
@@ -438,7 +438,7 @@ describe('QueueManager', () => {
     it('should return signal from registered AbortController', () => {
       queue.enqueue('wo-1');
       const abortController = new AbortController();
-      queue.markStarted('wo-1', abortController);
+      queue.markStarted('wo-1', { abortController });
 
       const signal = queue.getAbortSignal('wo-1');
 
@@ -758,7 +758,7 @@ describe('run timeout enforcement', () => {
   describe('markStarted with maxWallClockMs', () => {
     it('should track running work order with timeout', () => {
       queue.enqueue('wo-1');
-      queue.markStarted('wo-1', 60000); // 60 second timeout
+      queue.markStarted('wo-1', { maxWallClockMs: 60000 }); // 60 second timeout
 
       expect(queue.isRunning('wo-1')).toBe(true);
       const info = queue.getRunningWorkOrderInfo('wo-1');
@@ -780,7 +780,7 @@ describe('run timeout enforcement', () => {
 
     it('should clean up timeout tracking on markCompleted', () => {
       queue.enqueue('wo-1');
-      queue.markStarted('wo-1', 60000);
+      queue.markStarted('wo-1', { maxWallClockMs: 60000 });
 
       expect(queue.getRunningWorkOrderInfo('wo-1')).not.toBeNull();
 
@@ -793,7 +793,7 @@ describe('run timeout enforcement', () => {
   describe('getRunElapsedMs', () => {
     it('should return elapsed time for running work order', () => {
       queue.enqueue('wo-1');
-      queue.markStarted('wo-1', 60000);
+      queue.markStarted('wo-1', { maxWallClockMs: 60000 });
 
       const elapsed = queue.getRunElapsedMs('wo-1');
       expect(elapsed).not.toBeNull();
@@ -825,7 +825,7 @@ describe('run timeout enforcement', () => {
 
     it('should return false when within timeout', () => {
       queue.enqueue('wo-1');
-      queue.markStarted('wo-1', 60000); // 60 second timeout
+      queue.markStarted('wo-1', { maxWallClockMs: 60000 }); // 60 second timeout
 
       vi.advanceTimersByTime(30000); // Advance 30 seconds
 
@@ -834,7 +834,7 @@ describe('run timeout enforcement', () => {
 
     it('should return true when timeout exceeded', () => {
       queue.enqueue('wo-1');
-      queue.markStarted('wo-1', 60000); // 60 second timeout
+      queue.markStarted('wo-1', { maxWallClockMs: 60000 }); // 60 second timeout
 
       vi.advanceTimersByTime(61000); // Advance past timeout
 
@@ -867,7 +867,7 @@ describe('run timeout enforcement', () => {
       testQueue.on('runTimeout', runTimeoutHandler);
 
       testQueue.enqueue('wo-1');
-      testQueue.markStarted('wo-1', 5000); // 5 second timeout
+      testQueue.markStarted('wo-1', { maxWallClockMs: 5000 }); // 5 second timeout
 
       // Advance time past the timeout and trigger the interval check
       vi.advanceTimersByTime(6000);
@@ -909,11 +909,11 @@ describe('run timeout enforcement', () => {
       testQueue.on('runTimeout', runTimeoutHandler);
 
       testQueue.enqueue('wo-1');
-      testQueue.markStarted('wo-1', 5000);
+      testQueue.markStarted('wo-1', { maxWallClockMs: 5000 });
       testQueue.enqueue('wo-2');
-      testQueue.markStarted('wo-2', 5000);
+      testQueue.markStarted('wo-2', { maxWallClockMs: 5000 });
       testQueue.enqueue('wo-3');
-      testQueue.markStarted('wo-3', 10000); // Longer timeout
+      testQueue.markStarted('wo-3', { maxWallClockMs: 10000 }); // Longer timeout
 
       // Advance time past first two timeouts but not third
       vi.advanceTimersByTime(6000);
