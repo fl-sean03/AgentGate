@@ -1,0 +1,1204 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AgentGate API",
+    "description": "\nAgentGate API provides programmatic access to autonomous code agent orchestration.\n\n## Authentication\n\nMutating endpoints require an API key passed in the `X-API-Key` header.\n\n## Streaming\n\nReal-time updates are available via Server-Sent Events (SSE) at:\n- `GET /api/v1/runs/:id/stream`\n\n## Rate Limiting\n\nAPI calls may be rate limited. Check response headers for limit information.\n\n## Common Response Format\n\nAll endpoints return responses in the following format:\n\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"requestId\": \"...\"\n}\n```\n\nError responses follow this format:\n\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": \"NOT_FOUND\",\n    \"message\": \"Resource not found\"\n  },\n  \"requestId\": \"...\"\n}\n```\n        ",
+    "version": "0.2.17",
+    "contact": {
+      "name": "AgentGate Team"
+    },
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "name": "X-API-Key",
+        "in": "header",
+        "description": "API key for authentication"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Error code"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message"
+              },
+              "details": {
+                "type": "object",
+                "description": "Additional error details",
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "description": "Unique request identifier"
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "requestId"
+        ]
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of items"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of items per page"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of items skipped"
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether more items are available"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "hasMore"
+        ]
+      },
+      "LocalWorkspaceSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "local"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Local filesystem path"
+          }
+        },
+        "required": [
+          "type",
+          "path"
+        ]
+      },
+      "GitHubWorkspaceSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "github"
+            ]
+          },
+          "repo": {
+            "type": "string",
+            "description": "Repository in owner/repo format"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Branch name"
+          }
+        },
+        "required": [
+          "type",
+          "repo"
+        ]
+      },
+      "GitHubNewWorkspaceSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "github-new"
+            ]
+          },
+          "repo": {
+            "type": "string",
+            "description": "New repository name in owner/repo format"
+          },
+          "template": {
+            "type": "string",
+            "description": "Template to use (minimal, typescript, python)"
+          }
+        },
+        "required": [
+          "type",
+          "repo"
+        ]
+      },
+      "WorkspaceSource": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LocalWorkspaceSource"
+          },
+          {
+            "$ref": "#/components/schemas/GitHubWorkspaceSource"
+          },
+          {
+            "$ref": "#/components/schemas/GitHubNewWorkspaceSource"
+          }
+        ]
+      },
+      "LoopStrategyConfig": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "hybrid",
+              "ralph",
+              "custom"
+            ],
+            "description": "Loop strategy mode"
+          },
+          "maxIterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum iterations"
+          },
+          "baseIterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Base iterations for hybrid mode"
+          },
+          "maxBonusIterations": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Max bonus iterations for hybrid mode"
+          },
+          "progressThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Progress threshold"
+          },
+          "completionCriteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Completion criteria indicators"
+          },
+          "minIterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Minimum iterations for ralph mode"
+          },
+          "convergenceThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Convergence threshold for ralph mode"
+          },
+          "windowSize": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 10,
+            "description": "Window size for ralph mode"
+          }
+        }
+      },
+      "VerificationConfig": {
+        "type": "object",
+        "properties": {
+          "gatePlanSource": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "inline",
+              "workspace",
+              "ci-workflow"
+            ]
+          },
+          "waitForCI": {
+            "type": "boolean",
+            "description": "Wait for CI completion"
+          },
+          "skipLevels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "L0",
+                "L1",
+                "L2",
+                "L3",
+                "lint",
+                "typecheck",
+                "test",
+                "blackbox",
+                "contracts"
+              ]
+            },
+            "description": "Verification levels to skip"
+          }
+        }
+      },
+      "GitOpsConfig": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "branch",
+              "pr",
+              "fork"
+            ]
+          },
+          "branchPattern": {
+            "type": "string",
+            "description": "Branch naming pattern"
+          },
+          "draftPR": {
+            "type": "boolean",
+            "description": "Create PR as draft"
+          },
+          "autoMerge": {
+            "type": "boolean",
+            "description": "Auto-merge PR when checks pass"
+          }
+        }
+      },
+      "ExecutionLimitsConfig": {
+        "type": "object",
+        "properties": {
+          "maxWallClockSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 86400
+          },
+          "networkAllowed": {
+            "type": "boolean"
+          },
+          "maxDiskMb": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "HarnessOptions": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "description": "Named profile to use"
+          },
+          "loopStrategy": {
+            "$ref": "#/components/schemas/LoopStrategyConfig"
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationConfig"
+          },
+          "gitOps": {
+            "$ref": "#/components/schemas/GitOpsConfig"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ExecutionLimitsConfig"
+          }
+        }
+      },
+      "HarnessInfo": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "nullable": true
+          },
+          "loopStrategy": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string"
+              },
+              "maxIterations": {
+                "type": "integer"
+              }
+            }
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "waitForCI": {
+                "type": "boolean"
+              },
+              "skipLevels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "gitOps": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WorkOrderSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Work order ID"
+          },
+          "taskPrompt": {
+            "type": "string",
+            "description": "Task description"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_for_children",
+              "integrating",
+              "succeeded",
+              "failed",
+              "canceled"
+            ],
+            "description": "Current status"
+          },
+          "workspaceSource": {
+            "$ref": "#/components/schemas/WorkspaceSource"
+          },
+          "agentType": {
+            "type": "string",
+            "description": "Type of agent"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "runCount": {
+            "type": "integer",
+            "description": "Number of runs"
+          }
+        },
+        "required": [
+          "id",
+          "taskPrompt",
+          "status",
+          "workspaceSource",
+          "agentType",
+          "createdAt",
+          "runCount"
+        ]
+      },
+      "WorkOrderDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/WorkOrderSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "maxIterations": {
+                "type": "integer"
+              },
+              "maxTime": {
+                "type": "integer",
+                "nullable": true
+              },
+              "runs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              },
+              "harness": {
+                "$ref": "#/components/schemas/HarnessInfo"
+              }
+            }
+          }
+        ]
+      },
+      "RunSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Run ID"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "building",
+              "running",
+              "succeeded",
+              "failed",
+              "canceled"
+            ],
+            "description": "Current status"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "iterationCount": {
+            "type": "integer",
+            "description": "Number of iterations"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "iterationCount"
+        ]
+      },
+      "RunDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "workOrderId": {
+                "type": "string"
+              },
+              "branchName": {
+                "type": "string",
+                "nullable": true
+              },
+              "prUrl": {
+                "type": "string",
+                "nullable": true
+              },
+              "iterations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/IterationSummary"
+                }
+              }
+            },
+            "required": [
+              "workOrderId",
+              "iterations"
+            ]
+          }
+        ]
+      },
+      "IterationSummary": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "verification": {
+            "$ref": "#/components/schemas/VerificationSummary"
+          }
+        },
+        "required": [
+          "number",
+          "status"
+        ]
+      },
+      "VerificationSummary": {
+        "type": "object",
+        "properties": {
+          "l0Passed": {
+            "type": "boolean"
+          },
+          "l1Passed": {
+            "type": "boolean"
+          },
+          "l2Passed": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "l3Passed": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "overallPassed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "l0Passed",
+          "l1Passed",
+          "overallPassed"
+        ]
+      },
+      "ProfileSummary": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "extends": {
+            "type": "string",
+            "nullable": true
+          },
+          "isBuiltIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "isBuiltIn"
+        ]
+      },
+      "ProfileDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProfileSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "loopStrategy": {
+                "$ref": "#/components/schemas/LoopStrategyConfig"
+              },
+              "verification": {
+                "$ref": "#/components/schemas/VerificationConfig"
+              },
+              "gitOps": {
+                "$ref": "#/components/schemas/GitOpsConfig"
+              },
+              "executionLimits": {
+                "$ref": "#/components/schemas/ExecutionLimitsConfig"
+              },
+              "resolved": {
+                "type": "object",
+                "properties": {
+                  "inheritanceChain": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "configHash": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ConfigSnapshot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "workOrderId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "iteration": {
+            "type": "integer"
+          },
+          "snapshotAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "configHash": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "loopStrategy": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string"
+                  },
+                  "maxIterations": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "verification": {
+                "type": "object",
+                "properties": {
+                  "skipLevels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "gitOps": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string"
+                  }
+                }
+              },
+              "executionLimits": {
+                "type": "object",
+                "properties": {
+                  "maxWallClockSeconds": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "runId",
+          "iteration",
+          "snapshotAt",
+          "configHash",
+          "config"
+        ]
+      },
+      "AuditRecord": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "workOrderId": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "initialConfig": {
+            "$ref": "#/components/schemas/ConfigSnapshot"
+          },
+          "finalConfig": {
+            "$ref": "#/components/schemas/ConfigSnapshot"
+          },
+          "snapshotCount": {
+            "type": "integer"
+          },
+          "changeCount": {
+            "type": "integer"
+          },
+          "configHashChanged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "runId",
+          "workOrderId",
+          "startedAt",
+          "initialConfig",
+          "snapshotCount",
+          "changeCount",
+          "configHashChanged"
+        ]
+      },
+      "ConfigChange": {
+        "type": "object",
+        "properties": {
+          "iteration": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string",
+            "description": "Dot-notation path to changed field"
+          },
+          "previousValue": {
+            "description": "Previous value"
+          },
+          "newValue": {
+            "description": "New value"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "iteration",
+          "path",
+          "changedAt"
+        ]
+      },
+      "StreamEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "iteration-start",
+              "verification-complete",
+              "iteration-complete",
+              "run-complete",
+              "heartbeat",
+              "error"
+            ]
+          },
+          "runId": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "type",
+          "runId",
+          "timestamp"
+        ]
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/work-orders": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/work-orders/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/work-orders/{id}/audit": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/work-orders/{id}/runs": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/runs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/profiles": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/profiles/{name}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/profiles/{name}/validate": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "name",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/audit/runs/{runId}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "runId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/audit/runs/{runId}/snapshots": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "runId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/audit/runs/{runId}/changes": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "runId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/stream": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{id}/config": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    },
+    {
+      "url": "https://api.agentgate.dev",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Work Orders",
+      "description": "Work order submission and management"
+    },
+    {
+      "name": "Runs",
+      "description": "Run execution and monitoring"
+    },
+    {
+      "name": "Profiles",
+      "description": "Harness profile management"
+    },
+    {
+      "name": "Audit",
+      "description": "Configuration audit trail"
+    },
+    {
+      "name": "Streaming",
+      "description": "Real-time event streaming via SSE"
+    },
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    }
+  ]
+}
