@@ -20,7 +20,6 @@ import {
   RunState,
   IterationErrorType,
   createIterationData,
-  BuildErrorType,
 } from '../types/index.js';
 import type { ResolvedHarnessConfig } from '../types/harness-config.js';
 import type { LoopStrategy, LoopContext, LoopState, LoopDecision } from '../types/loop-strategy.js';

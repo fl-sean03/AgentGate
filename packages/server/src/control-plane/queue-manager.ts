@@ -722,7 +722,7 @@ export class QueueManager extends EventEmitter {
    */
   hasRunTimedOut(workOrderId: string): boolean {
     const runningWo = this.runningWithTimeout.get(workOrderId);
-    if (!runningWo || runningWo.maxWallClockMs === null) {
+    if (!runningWo?.maxWallClockMs) {
       return false;
     }
     const elapsedMs = Date.now() - runningWo.startedAt.getTime();
