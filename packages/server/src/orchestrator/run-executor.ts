@@ -26,6 +26,7 @@ import {
   isTerminalState,
 } from './state-machine.js';
 import { saveRun, saveIterationData, createRun, type CreateRunOptions } from './run-store.js';
+import { resultPersister } from './result-persister.js';
 import { getConfig } from '../config/index.js';
 import { createLogger } from '../utils/logger.js';
 import type { EventBroadcaster } from '../server/websocket/broadcaster.js';
@@ -398,6 +399,14 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       // Record agent result for metrics (v0.2.5)
       if (buildResult.agentResult) {
         onAgentResult?.(buildResult.agentResult, iteration);
+
+        // Persist full agent result to disk for debugging (v0.2.19 - Thrust 1)
+        try {
+          await resultPersister.saveAgentResult(runId, iteration, buildResult.agentResult);
+        } catch (persistError) {
+          log.error({ runId, iteration, error: persistError }, 'Failed to persist agent result');
+          // Continue execution - don't fail the run because of persistence issues
+        }
       }
 
       // Store session ID for continuation
@@ -408,7 +417,9 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         log.warn({ runId, iteration, error: buildResult.error }, 'Build failed');
         run = applyTransition(run, RunEvent.BUILD_FAILED);
         run.result = RunResult.FAILED_BUILD;
-        run.error = buildResult.error ?? 'Build failed';
+        // Include file reference in error message (v0.2.19 - Thrust 1)
+        const agentFile = `agent-${iteration}.json`;
+        run.error = `Build failed. Details: ${agentFile}`;
         await saveRun(run);
         break;
       }

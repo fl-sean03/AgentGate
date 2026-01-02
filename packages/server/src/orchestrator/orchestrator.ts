@@ -432,9 +432,16 @@ export class Orchestrator {
 
           const result = await driver.execute(request);
 
-          const buildResult: { sessionId: string; success: boolean; error?: string } = {
+          // Build result now includes full agentResult for persistence (v0.2.19 - Thrust 1)
+          const buildResult: {
+            sessionId: string;
+            success: boolean;
+            error?: string;
+            agentResult?: typeof result;
+          } = {
             sessionId: result.sessionId ?? randomUUID(),
             success: result.success,
+            agentResult: result,
           };
           if (!result.success) {
             buildResult.error = result.stderr || 'Build failed';
