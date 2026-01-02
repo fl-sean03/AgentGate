@@ -466,4 +466,63 @@ describe('ErrorBuilder', () => {
       expect(error.failedAt).toBe('unknown');
     });
   });
+
+  /**
+   * Tests for createTimeout (v0.2.23 - Wave 1.4)
+   */
+  describe('createTimeout', () => {
+    it('should create a timeout error with correct type', () => {
+      const error = ErrorBuilder.createTimeout(65000, 60000, { runId: 'run-123' });
+
+      expect(error.type).toBe(BuildErrorType.AGENT_TIMEOUT);
+    });
+
+    it('should include elapsed and max time in message', () => {
+      const error = ErrorBuilder.createTimeout(65000, 60000, { runId: 'run-123' });
+
+      expect(error.message).toContain('65s');
+      expect(error.message).toContain('60s');
+      expect(error.message).toContain('exceeded');
+    });
+
+    it('should include timing details in context', () => {
+      const error = ErrorBuilder.createTimeout(65000, 60000, { runId: 'run-123' });
+
+      expect(error.context.elapsedMs).toBe(65000);
+      expect(error.context.maxWallClockMs).toBe(60000);
+      expect(error.context.elapsedSeconds).toBe(65);
+      expect(error.context.maxWallClockSeconds).toBe(60);
+      expect(error.context.timeoutType).toBe('wall_clock');
+    });
+
+    it('should include provided context', () => {
+      const error = ErrorBuilder.createTimeout(65000, 60000, {
+        runId: 'run-123',
+        iteration: 3,
+        phase: 'build',
+      });
+
+      expect(error.context.runId).toBe('run-123');
+      expect(error.context.iteration).toBe(3);
+      expect(error.failedAt).toBe('build');
+    });
+
+    it('should default failedAt to unknown if no phase provided', () => {
+      const error = ErrorBuilder.createTimeout(65000, 60000, { runId: 'run-123' });
+
+      expect(error.failedAt).toBe('unknown');
+    });
+
+    it('should handle large timeout values', () => {
+      const elapsedMs = 24 * 60 * 60 * 1000 + 3600000; // 25 hours
+      const maxMs = 24 * 60 * 60 * 1000; // 24 hours
+
+      const error = ErrorBuilder.createTimeout(elapsedMs, maxMs, { runId: 'run-123' });
+
+      expect(error.context.elapsedSeconds).toBe(90000);
+      expect(error.context.maxWallClockSeconds).toBe(86400);
+      expect(error.message).toContain('90000s');
+      expect(error.message).toContain('86400s');
+    });
+  });
 });

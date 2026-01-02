@@ -400,6 +400,7 @@ export class Orchestrator {
       harnessConfig, // v0.2.16 - Thrust 9
       loopStrategy,  // v0.2.16 - Thrust 9
       leaseId: lease.id, // Pass lease ID for periodic renewal (v0.2.10 - Thrust 12)
+      maxWallClockMs: workOrder.maxWallClockSeconds * 1000, // v0.2.23 - Wave 1.4: Work Order Timeout Enforcement
 
       onCaptureBeforeState: async (ws) => {
         return captureBeforeState(ws);

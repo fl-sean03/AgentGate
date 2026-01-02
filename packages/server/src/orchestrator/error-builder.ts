@@ -134,6 +134,42 @@ export class ErrorBuilder {
   }
 
   /**
+   * Create a BuildError for a wall clock timeout.
+   * (v0.2.23 - Wave 1.4: Work Order Timeout Enforcement)
+   *
+   * @param elapsedMs - Actual elapsed time in milliseconds
+   * @param maxWallClockMs - Maximum allowed time in milliseconds
+   * @param context - Additional context about where the timeout occurred
+   * @returns A structured BuildError
+   */
+  static createTimeout(
+    elapsedMs: number,
+    maxWallClockMs: number,
+    context: { runId?: string; iteration?: number; phase?: string; [key: string]: unknown }
+  ): BuildError {
+    const elapsedSec = Math.round(elapsedMs / 1000);
+    const maxSec = Math.round(maxWallClockMs / 1000);
+    const message = `Run exceeded maximum wall clock time: ${elapsedSec}s > ${maxSec}s limit`;
+
+    const buildError = createBuildError(
+      BuildErrorType.AGENT_TIMEOUT,
+      message,
+      context.phase ?? 'unknown'
+    );
+
+    buildError.context = {
+      ...context,
+      elapsedMs,
+      maxWallClockMs,
+      elapsedSeconds: elapsedSec,
+      maxWallClockSeconds: maxSec,
+      timeoutType: 'wall_clock',
+    };
+
+    return buildError;
+  }
+
+  /**
    * Classify an agent error based on the result.
    */
   private static classifyAgentError(result: AgentResult): BuildErrorType {
