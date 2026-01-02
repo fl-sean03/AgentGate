@@ -390,6 +390,44 @@ export class QueueManager extends EventEmitter {
   }
 
   /**
+   * Force cancel a work order from queue or running set.
+   * (v0.2.23 Wave 1.3)
+   *
+   * Unlike cancel(), this removes from both queue AND running set.
+   * Use this when forcefully terminating a work order.
+   *
+   * @param workOrderId - ID to force cancel
+   * @returns Object indicating where it was removed from
+   */
+  forceCancel(workOrderId: string): { fromQueue: boolean; fromRunning: boolean } {
+    const result = { fromQueue: false, fromRunning: false };
+
+    // Try to remove from queue
+    const queueIndex = this.queue.findIndex((e) => e.workOrderId === workOrderId);
+    if (queueIndex !== -1) {
+      this.queue.splice(queueIndex, 1);
+      result.fromQueue = true;
+      log.info({ workOrderId }, 'Work order force-canceled from queue');
+      this.notifyPositionChanges();
+    }
+
+    // Try to remove from running
+    if (this.running.has(workOrderId)) {
+      this.running.delete(workOrderId);
+      result.fromRunning = true;
+      log.info({ workOrderId }, 'Work order force-canceled from running');
+      // Process queue to start next work orders
+      this.processQueue();
+    }
+
+    if (result.fromQueue || result.fromRunning) {
+      this.emit('stateChange', this.getStats());
+    }
+
+    return result;
+  }
+
+  /**
    * Get queue statistics.
    */
   getStats(): QueueStats {
