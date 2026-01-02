@@ -19,6 +19,10 @@ import { registerAuthPlugin } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  workOrderStore,
+  type StorageValidationResult,
+} from '../control-plane/work-order-store.js';
 
 const logger = createLogger('server');
 
@@ -28,7 +32,25 @@ const logger = createLogger('server');
 export interface AppConfig extends Partial<ServerConfig> {
   apiKey?: string;
   broadcaster?: EventBroadcaster;
+  /**
+   * Whether to validate storage on startup (v0.2.23 Wave 1.5).
+   * When enabled, validates all work order files and logs warnings for corrupted files.
+   * @default false
+   */
+  validateStorageOnStartup?: boolean;
+  /**
+   * Whether to fail startup if corrupted files are found.
+   * Only relevant if validateStorageOnStartup is true.
+   * @default false
+   */
+  failOnCorruptedStorage?: boolean;
 }
+
+/**
+ * Result of storage validation on startup.
+ * Exported for use in tests and external consumers.
+ */
+export { StorageValidationResult };
 
 /**
  * Create and configure a Fastify application instance
@@ -36,8 +58,48 @@ export interface AppConfig extends Partial<ServerConfig> {
 export async function createApp(
   config: AppConfig = {}
 ): Promise<FastifyInstance> {
-  // Extract apiKey and broadcaster before validation (not part of ServerConfig schema)
-  const { apiKey, broadcaster: providedBroadcaster, ...serverConfig } = config;
+  // Extract apiKey, broadcaster, and storage validation options before validation (not part of ServerConfig schema)
+  const {
+    apiKey,
+    broadcaster: providedBroadcaster,
+    validateStorageOnStartup = false,
+    failOnCorruptedStorage = false,
+    ...serverConfig
+  } = config;
+
+  // Validate storage on startup if enabled (v0.2.23 Wave 1.5)
+  if (validateStorageOnStartup) {
+    logger.info('Validating work order storage on startup...');
+    const validationResult = await workOrderStore.validateStorage();
+
+    if (validationResult.invalidCount > 0) {
+      logger.warn(
+        {
+          totalFiles: validationResult.totalFiles,
+          validCount: validationResult.validCount,
+          invalidCount: validationResult.invalidCount,
+          corruptedFiles: validationResult.corruptedFiles,
+          durationMs: validationResult.durationMs,
+        },
+        'Storage validation found corrupted work order files'
+      );
+
+      if (failOnCorruptedStorage) {
+        throw new Error(
+          `Storage validation failed: ${validationResult.invalidCount} corrupted file(s) found. ` +
+          `Corrupted files: ${validationResult.corruptedFiles.join(', ')}`
+        );
+      }
+    } else {
+      logger.info(
+        {
+          totalFiles: validationResult.totalFiles,
+          durationMs: validationResult.durationMs,
+        },
+        'Storage validation completed successfully'
+      );
+    }
+  }
 
   // Create broadcaster instance if not provided
   const broadcaster = providedBroadcaster ?? new EventBroadcaster();
