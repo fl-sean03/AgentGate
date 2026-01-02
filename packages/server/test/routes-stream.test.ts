@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import http from 'http';
 import { createApp } from '../src/server/app.js';
 import { RunState } from '../src/types/index.js';
 import type { Run } from '../src/types/index.js';
@@ -24,7 +25,7 @@ function createMockRun(
     workspaceId: options.workspaceId ?? `ws-${runId}`,
     iteration: options.iteration ?? 1,
     maxIterations: options.maxIterations ?? 3,
-    state: options.state ?? RunState.RUNNING,
+    state: options.state ?? RunState.BUILDING,
     snapshotBeforeSha: null,
     snapshotAfterSha: null,
     snapshotIds: [],
@@ -57,8 +58,60 @@ vi.mock('../src/orchestrator/run-store.js', () => ({
   createRun: vi.fn(),
 }));
 
+/**
+ * Helper function to make SSE requests and collect response data.
+ * Uses real HTTP requests to handle SSE streaming properly.
+ */
+async function makeSSERequest(
+  port: number,
+  path: string,
+  timeout = 200
+): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; data: string }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: 'localhost',
+        port,
+        path,
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+        },
+      },
+      (res) => {
+        let data = '';
+
+        res.on('data', (chunk) => {
+          data += chunk.toString();
+        });
+
+        // Give time for initial SSE events to be sent, then close
+        setTimeout(() => {
+          req.destroy();
+          resolve({
+            statusCode: res.statusCode ?? 0,
+            headers: res.headers,
+            data,
+          });
+        }, timeout);
+      }
+    );
+
+    req.on('error', (err) => {
+      // ECONNRESET is expected when we destroy the connection
+      if ((err as NodeJS.ErrnoException).code === 'ECONNRESET') {
+        return;
+      }
+      reject(err);
+    });
+
+    req.end();
+  });
+}
+
 describe('Stream Routes', () => {
   let app: FastifyInstance;
+  let serverPort: number;
   const testApiKey = 'test-api-key-123';
 
   beforeEach(async () => {
@@ -69,6 +122,11 @@ describe('Stream Routes', () => {
       apiKey: testApiKey,
       enableLogging: false,
     });
+
+    // Start the server on a random port for SSE tests
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    const address = app.server.address();
+    serverPort = typeof address === 'object' && address ? address.port : 0;
   });
 
   afterEach(async () => {
@@ -93,20 +151,7 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-1';
       mockRuns.set(runId, createMockRun(runId));
 
-      // Create a promise that resolves after a short delay
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
-
-        // Wait a bit for SSE to start, then resolve
-        setTimeout(async () => {
-          // In test mode with inject, we'll get back the raw response
-          const result = await req;
-          resolve(result);
-        }, 50);
-      });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
       // SSE returns 200 with text/event-stream content type
       expect(response.statusCode).toBe(200);
@@ -117,16 +162,7 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-headers';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
-
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
       expect(response.headers['content-type']).toBe('text/event-stream');
       expect(response.headers['cache-control']).toBe('no-cache');
@@ -137,19 +173,10 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-connected';
       mockRuns.set(runId, createMockRun(runId, { iteration: 2 }));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
-
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
       // Parse SSE response
-      const payload = response.payload;
+      const payload = response.data;
       expect(payload).toContain('event: connected');
       expect(payload).toContain('"type":"connected"');
       expect(payload).toContain(`"runId":"${runId}"`);
@@ -159,37 +186,19 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-clientid';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
-
-      const payload = response.payload;
+      const payload = response.data;
       expect(payload).toContain('"clientId"');
     });
 
     it('should include current run status in connected event', async () => {
       const runId = 'run-sse-status';
-      mockRuns.set(runId, createMockRun(runId, { state: RunState.RUNNING, iteration: 2 }));
+      mockRuns.set(runId, createMockRun(runId, { state: RunState.BUILDING, iteration: 2 }));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
-
-      const payload = response.payload;
+      const payload = response.data;
       expect(payload).toContain('"runStatus"');
       expect(payload).toContain('"currentIteration"');
     });
@@ -198,17 +207,8 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-no-auth';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-          // No auth header
-        });
-
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
+      // SSE connection without auth header
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
       expect(response.statusCode).toBe(200);
     });
@@ -257,7 +257,7 @@ describe('Stream Routes', () => {
       const runId = 'run-config-fields';
       mockRuns.set(runId, createMockRun(runId, {
         workOrderId: 'wo-config-fields',
-        state: RunState.RUNNING,
+        state: RunState.BUILDING,
         iteration: 2,
         startedAt: new Date('2024-01-01T00:00:00Z'),
       }));
@@ -279,7 +279,7 @@ describe('Stream Routes', () => {
     it('should return null completedAt for running runs', async () => {
       const runId = 'run-config-running';
       mockRuns.set(runId, createMockRun(runId, {
-        state: RunState.RUNNING,
+        state: RunState.BUILDING,
         completedAt: null,
       }));
 
@@ -354,18 +354,9 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-format';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
-
-      const payload = response.payload;
+      const payload = response.data;
 
       // SSE format: event: type\ndata: json\n\n
       expect(payload).toMatch(/event: connected\n/);
@@ -376,18 +367,9 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-timestamp';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
-
-      const payload = response.payload;
+      const payload = response.data;
       expect(payload).toContain('"timestamp"');
     });
 
@@ -395,18 +377,9 @@ describe('Stream Routes', () => {
       const runId = 'run-sse-type';
       mockRuns.set(runId, createMockRun(runId));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
-
-      const payload = response.payload;
+      const payload = response.data;
       expect(payload).toContain('"type":"connected"');
     });
   });
@@ -512,16 +485,7 @@ describe('Stream Routes', () => {
         completedAt: new Date(),
       }));
 
-      const response = await new Promise<any>((resolve) => {
-        const req = app.inject({
-          method: 'GET',
-          url: `/api/v1/runs/${runId}/stream`,
-        });
-
-        setTimeout(async () => {
-          resolve(await req);
-        }, 50);
-      });
+      const response = await makeSSERequest(serverPort, `/api/v1/runs/${runId}/stream`);
 
       // Should still allow connection (client might want to see final state)
       expect(response.statusCode).toBe(200);
