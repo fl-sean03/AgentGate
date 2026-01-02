@@ -112,7 +112,7 @@ export class ErrorBuilder {
    * @returns A structured BuildError
    */
   static fromSystemError(
-    error: Error | unknown,
+    error: unknown,
     context: { runId?: string; iteration?: number; phase?: string; [key: string]: unknown }
   ): BuildError {
     const errorType = this.classifySystemError(error);
@@ -278,7 +278,7 @@ export class ErrorBuilder {
   /**
    * Classify a system error.
    */
-  private static classifySystemError(error: Error | unknown): BuildErrorType {
+  private static classifySystemError(error: unknown): BuildErrorType {
     const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
     const name = error instanceof Error ? error.name.toLowerCase() : '';
 

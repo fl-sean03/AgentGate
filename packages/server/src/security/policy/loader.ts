@@ -68,7 +68,7 @@ async function fileExists(path: string): Promise<boolean> {
  */
 export async function loadPolicyFromFile(filePath: string): Promise<SecurityPolicy> {
   const content = await readFile(filePath, 'utf-8');
-  const parsed = YAML.parse(content);
+  const parsed: unknown = YAML.parse(content);
 
   const result = securityPolicySchema.safeParse(parsed);
 
@@ -93,7 +93,7 @@ export async function loadPartialPolicyFromFile(
   filePath: string
 ): Promise<Partial<SecurityPolicy>> {
   const content = await readFile(filePath, 'utf-8');
-  const parsed = YAML.parse(content);
+  const parsed: unknown = YAML.parse(content);
 
   const result = partialSecurityPolicySchema.safeParse(parsed);
 

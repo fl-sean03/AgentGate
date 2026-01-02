@@ -13,9 +13,23 @@ const log = createLogger('config');
 /**
  * CI configuration schema
  */
+/**
+ * Verification loop configuration schema
+ */
+const verificationConfigSchema = z.object({
+  /** Enable retry loop on local L0-L3 verification failure */
+  localRetryEnabled: z.coerce.boolean().default(true),
+  /** Enable retry loop on CI verification failure */
+  ciRetryEnabled: z.coerce.boolean().default(true),
+});
+
+export type VerificationConfig = z.infer<typeof verificationConfigSchema>;
+
 const ciConfigSchema = z.object({
   /** Enable CI monitoring */
   enabled: z.coerce.boolean().default(true),
+  /** Wait for CI by default on new work orders */
+  waitByDefault: z.coerce.boolean().default(true),
   /** Polling interval in milliseconds (5s - 5min) */
   pollIntervalMs: z.coerce.number().int().min(5000).max(300000).default(30000),
   /** Maximum wait time in milliseconds (1min - 2hours) */
@@ -109,6 +123,9 @@ const configSchema = z.object({
   // CI configuration
   ci: ciConfigSchema,
 
+  // Verification loop configuration
+  verification: verificationConfigSchema,
+
   // SDK Driver configuration
   sdk: sdkConfigSchema,
 
@@ -136,11 +153,17 @@ export function loadConfig(): AgentGateConfig {
     // CI configuration
     ci: {
       enabled: process.env.AGENTGATE_CI_ENABLED,
+      waitByDefault: process.env.AGENTGATE_CI_WAIT_BY_DEFAULT,
       pollIntervalMs: process.env.AGENTGATE_CI_POLL_INTERVAL_MS,
       timeoutMs: process.env.AGENTGATE_CI_TIMEOUT_MS,
       maxIterations: process.env.AGENTGATE_CI_MAX_ITERATIONS,
       skipIfNoWorkflows: process.env.AGENTGATE_CI_SKIP_IF_NO_WORKFLOWS,
       logRetentionCount: process.env.AGENTGATE_CI_LOG_RETENTION_COUNT,
+    },
+    // Verification loop configuration
+    verification: {
+      localRetryEnabled: process.env.AGENTGATE_VERIFICATION_LOCAL_RETRY_ENABLED,
+      ciRetryEnabled: process.env.AGENTGATE_VERIFICATION_CI_RETRY_ENABLED,
     },
     // SDK Driver configuration
     sdk: {
