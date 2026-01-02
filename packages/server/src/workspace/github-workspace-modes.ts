@@ -6,9 +6,9 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { simpleGit, type SimpleGit } from 'simple-git';
+import { simpleGit } from 'simple-git';
 import {
   CloneMode,
   GitHubMode,
@@ -23,9 +23,8 @@ import {
   DEFAULT_CLONE_OPTIONS,
 } from '../types/github-mode.js';
 import {
-  RetryPolicyEngine,
+  type RetryPolicyEngine,
   createRetryPolicyEngine,
-  DEFAULT_RETRY_POLICY,
 } from '../orchestrator/retry-policy.js';
 import { BuildErrorType } from '../types/build-error.js';
 import { createLogger } from '../utils/logger.js';

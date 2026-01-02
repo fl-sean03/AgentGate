@@ -327,7 +327,7 @@ export class RetryPolicyEngine {
    */
   isRetryable(
     errorType: BuildErrorType,
-    customCheck?: (error: Error) => boolean
+    _customCheck?: (error: Error) => boolean
   ): boolean {
     // Check explicit retryable errors list
     if (this.policy.retryableErrors.includes(errorType)) {
