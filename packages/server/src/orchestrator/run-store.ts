@@ -5,7 +5,7 @@
 
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RunState, type Run, type IterationData, type RunStatus } from '../types/index.js';
+import { RunState, IterationErrorType, type Run, type IterationData, type RunStatus } from '../types/index.js';
 import { getRunDir, ensureRunStructure } from '../artifacts/paths.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -115,6 +115,22 @@ export async function loadIterationData(
       startedAt: new Date(data['startedAt'] as string),
       completedAt: data['completedAt'] ? new Date(data['completedAt'] as string) : null,
       durationMs: (data['durationMs'] as number) ?? null,
+      // Agent fields (v0.2.19 - Thrust 3)
+      agentSessionId: (data['agentSessionId'] as string) ?? null,
+      agentResultFile: (data['agentResultFile'] as string) ?? null,
+      agentDurationMs: (data['agentDurationMs'] as number) ?? null,
+      agentSuccess: (data['agentSuccess'] as boolean) ?? null,
+      agentModel: (data['agentModel'] as string) ?? null,
+      agentTokensUsed: (data['agentTokensUsed'] as number) ?? null,
+      agentCostUsd: (data['agentCostUsd'] as number) ?? null,
+      // Verification fields (v0.2.19 - Thrust 3)
+      verificationFile: (data['verificationFile'] as string) ?? null,
+      verificationLevelsRun: (data['verificationLevelsRun'] as string[]) ?? [],
+      verificationDurationMs: (data['verificationDurationMs'] as number) ?? null,
+      // Error fields (v0.2.19 - Thrust 3)
+      errorType: (data['errorType'] as IterationErrorType) ?? IterationErrorType.NONE,
+      errorMessage: (data['errorMessage'] as string) ?? null,
+      errorDetails: (data['errorDetails'] as Record<string, unknown>) ?? null,
     };
   } catch {
     return null;

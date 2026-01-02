@@ -36,6 +36,8 @@ export {
   RunState,
   RunEvent,
   RunResult,
+  IterationErrorType,
+  createIterationData,
   type Run,
   type IterationData,
   type RunStatus,
@@ -291,3 +293,11 @@ export {
   type PersistedAgentResult,
   type SaveAgentResultOptions,
 } from './persisted-results.js';
+
+// Build Error Types (v0.2.19 - Thrust 4)
+export {
+  BuildErrorType,
+  BUILD_ERROR_DESCRIPTIONS,
+  createBuildError,
+  type BuildError,
+} from './build-error.js';

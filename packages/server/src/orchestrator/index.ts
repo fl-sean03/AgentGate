@@ -38,3 +38,6 @@ export {
   listRuns,
   createRun,
 } from './run-store.js';
+
+// Error builder (v0.2.19 - Thrust 4)
+export { ErrorBuilder } from './error-builder.js';
