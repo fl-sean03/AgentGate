@@ -6,10 +6,12 @@ import {
   workOrderIdParamsSchema,
   createWorkOrderBodySchema,
   purgeWorkOrdersBodySchema,
+  forceKillBodySchema,
   type ListWorkOrdersQuery,
   type WorkOrderIdParams,
   type CreateWorkOrderBody,
   type PurgeWorkOrdersBody,
+  type ForceKillBody,
   type WorkOrderSummary,
   type WorkOrderDetail,
   type PaginatedResponse,
@@ -17,6 +19,7 @@ import {
   type HarnessInfo,
   type StartRunResponse,
   type PurgeWorkOrdersResponse,
+  type ForceKillResponse,
 } from '../types/api.js';
 import { workOrderService } from '../../control-plane/work-order-service.js';
 import { listRuns } from '../../orchestrator/run-store.js';
@@ -375,6 +378,7 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
   /**
    * DELETE /api/v1/work-orders/:id - Cancel a work order
    * Requires authentication
+   * Supports canceling both queued and running work orders (v0.2.23)
    * Returns 409 if work order is already completed
    */
   app.delete<{
@@ -432,12 +436,28 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           );
         }
 
-        // Cancel the work order
+        // Capture original status before cancel (for response) (v0.2.23)
+        const wasRunning = order.status === WorkOrderStatus.RUNNING;
+
+        // Log if canceling a running work order (v0.2.23)
+        if (wasRunning) {
+          logger.info(
+            { workOrderId: id, status: order.status, requestId: request.id },
+            'Canceling running work order via API'
+          );
+        }
+
+        // Cancel the work order (handles both queued and running)
         await workOrderService.cancel(id);
 
         return reply.send(
           createSuccessResponse(
-            { id, status: 'canceled', message: 'Work order canceled successfully' },
+            {
+              id,
+              status: 'canceled',
+              message: 'Work order canceled successfully',
+              wasRunning,
+            },
             request.id
           )
         );
@@ -460,6 +480,132 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           createErrorResponse(
             ErrorCode.INTERNAL_ERROR,
             'Failed to cancel work order',
+            undefined,
+            request.id
+          )
+        );
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/work-orders/:id/kill - Force kill a work order's agent process
+   * (v0.2.23 Wave 1.3)
+   * Requires authentication
+   * Returns 404 if work order not found
+   * Returns 200 with result even if work order is already in terminal state
+   */
+  app.post<{
+    Params: WorkOrderIdParams;
+    Body: ForceKillBody;
+  }>(
+    '/api/v1/work-orders/:id/kill',
+    {
+      preHandler: [apiKeyAuth],
+    },
+    async (request, reply) => {
+      try {
+        // Validate params
+        const paramsResult = workOrderIdParamsSchema.safeParse(request.params);
+        if (!paramsResult.success) {
+          return reply.status(400).send(
+            createErrorResponse(
+              ErrorCode.BAD_REQUEST,
+              'Invalid work order ID',
+              { errors: paramsResult.error.errors },
+              request.id
+            )
+          );
+        }
+
+        // Validate body (optional)
+        const bodyResult = forceKillBodySchema.safeParse(request.body);
+        if (!bodyResult.success) {
+          return reply.status(400).send(
+            createErrorResponse(
+              ErrorCode.BAD_REQUEST,
+              'Invalid request body',
+              { errors: bodyResult.error.errors },
+              request.id
+            )
+          );
+        }
+
+        const { id } = paramsResult.data;
+        const body = bodyResult.data ?? {};
+
+        logger.info(
+          {
+            workOrderId: id,
+            gracePeriodMs: body.gracePeriodMs,
+            immediate: body.immediate,
+            reason: body.reason,
+            requestId: request.id,
+          },
+          'Force kill requested via API'
+        );
+
+        // Build force kill options, only including defined properties
+        const forceKillOptions: {
+          gracePeriodMs?: number;
+          immediate?: boolean;
+          reason: string;
+        } = {
+          reason: body.reason ?? 'Force killed via API',
+        };
+        if (body.gracePeriodMs !== undefined) {
+          forceKillOptions.gracePeriodMs = body.gracePeriodMs;
+        }
+        if (body.immediate !== undefined) {
+          forceKillOptions.immediate = body.immediate;
+        }
+
+        // Execute force kill
+        const result = await workOrderService.forceKill(id, forceKillOptions);
+
+        // Build response message
+        let message: string;
+        if (result.success && result.forcedKill) {
+          message = 'Work order agent process force killed (SIGKILL)';
+        } else if (result.success) {
+          message = 'Work order agent process terminated gracefully';
+        } else {
+          message = `Failed to kill work order: ${result.error ?? 'Unknown error'}`;
+        }
+
+        const response: ForceKillResponse = {
+          id,
+          success: result.success,
+          forcedKill: result.forcedKill,
+          durationMs: result.durationMs,
+          status: result.newStatus as ForceKillResponse['status'],
+          message,
+        };
+
+        if (result.error) {
+          response.error = result.error;
+        }
+
+        return reply.send(createSuccessResponse(response, request.id));
+      } catch (error) {
+        logger.error({ err: error, requestId: request.id }, 'Failed to force kill work order');
+
+        // Handle specific errors
+        if (error instanceof Error && error.message.includes('not found')) {
+          return reply.status(404).send(
+            createErrorResponse(
+              ErrorCode.NOT_FOUND,
+              error.message,
+              undefined,
+              request.id
+            )
+          );
+        }
+
+        return reply.status(500).send(
+          createErrorResponse(
+            ErrorCode.INTERNAL_ERROR,
+            'Failed to force kill work order',
             undefined,
             request.id
           )
@@ -770,6 +916,19 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
 }
 
 /**
+ * Parse owner/repo from a combined repo string
+ * Returns { owner, repoName } where owner may be from the string or default
+ */
+function parseRepoString(repo: string, defaultOwner: string): { owner: string; repoName: string } {
+  const parts = repo.split('/');
+  const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+  return {
+    owner: hasExplicitOwner ? parts[0]! : defaultOwner,
+    repoName: hasExplicitOwner ? parts[1]! : repo,
+  };
+}
+
+/**
  * Map API workspace source to internal format
  * Uses exhaustive switch for type safety (v0.2.10 - Thrust 14)
  *
@@ -784,22 +943,20 @@ function mapWorkspaceSource(source: CreateWorkOrderBody['workspaceSource']): Wor
     case 'local':
       return { type: 'local', path: source.path };
     case 'github': {
-      const parts = source.repo.split('/');
-      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+      const { owner, repoName } = parseRepoString(source.repo, defaultOwner);
       return {
         type: 'github',
-        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
-        repo: hasExplicitOwner ? (parts[1] as string) : source.repo,
+        owner,
+        repo: repoName,
         branch: source.branch,
       };
     }
     case 'github-new': {
-      const parts = source.repo.split('/');
-      const hasExplicitOwner = parts.length === 2 && parts[0] && parts[1];
+      const { owner, repoName } = parseRepoString(source.repo, defaultOwner);
       return {
         type: 'github-new',
-        owner: hasExplicitOwner ? (parts[0] as string) : defaultOwner,
-        repoName: hasExplicitOwner ? (parts[1] as string) : source.repo,
+        owner,
+        repoName,
         template: source.template as 'minimal' | 'typescript' | 'python' | undefined,
       };
     }
