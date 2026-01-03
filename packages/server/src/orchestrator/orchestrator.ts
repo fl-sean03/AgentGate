@@ -15,7 +15,10 @@ import {
 import type { HarnessConfig, ResolvedHarnessConfig } from '../types/harness-config.js';
 import type { LoopStrategy } from '../types/loop-strategy.js';
 import { type SpawnLimits } from '../types/spawn.js';
-import { executeRun, type RunExecutorOptions } from './run-executor.js';
+import { createExecutionEngine, type ExecutionEngine } from '../execution/engine.js';
+import type { ExecutionInput } from '../execution/context.js';
+import { resolveTaskSpec } from '../execution/task-spec-resolver.js';
+import { createServicesFromCallbacks } from './engine-bridge.js';
 import { loadRun, getRunStatus } from './run-store.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
@@ -75,6 +78,7 @@ interface InternalOrchestratorConfig {
 export class Orchestrator {
   private config: InternalOrchestratorConfig;
   private activeRuns: Map<string, Run> = new Map();
+  private readonly engine: ExecutionEngine;
 
   constructor(config: OrchestratorConfig = {}) {
     const globalConfig = getConfig();
@@ -90,6 +94,12 @@ export class Orchestrator {
       enableSpawning: config.enableSpawning ?? true,
       defaultHarnessConfig: config.defaultHarnessConfig ?? null,
     };
+
+    // Create execution engine (v0.2.26)
+    this.engine = createExecutionEngine({
+      maxConcurrentRuns: this.config.maxConcurrentRuns,
+      defaultTimeoutMs: this.config.defaultTimeoutSeconds * 1000,
+    });
 
     log.info(
       {
@@ -392,293 +402,59 @@ export class Orchestrator {
       log.info({ billingMethod: 'api' }, 'Using API-based billing');
     }
 
-    // Set up run executor options
-    const executorOptions: RunExecutorOptions = {
+    // v0.2.26: Use ExecutionEngine instead of executeRun
+    // Create TaskSpec from work order and harness config
+    const taskSpec = resolveTaskSpec({
       workOrder,
+      harnessConfig,
+      gatePlan,
+    });
+
+    // Create services from callbacks via engine bridge
+    const services = createServicesFromCallbacks({
+      driver,
       workspace,
       gatePlan,
-      harnessConfig, // v0.2.16 - Thrust 9
-      loopStrategy,  // v0.2.16 - Thrust 9
-      leaseId: lease.id, // Pass lease ID for periodic renewal (v0.2.10 - Thrust 12)
-      maxWallClockMs: workOrder.maxWallClockSeconds * 1000, // v0.2.23 - Wave 1.4: Work Order Timeout Enforcement
+      workOrder,
+      spawnLimits: this.config.enableSpawning ? this.config.spawnLimits : null,
+    });
 
-      onCaptureBeforeState: async (ws) => {
-        return captureBeforeState(ws);
-      },
-
-      onBuild: async (ws, taskPrompt, feedback, iteration, sessionId, runId) => {
-        log.debug(
-          { workspaceId: ws.id, iteration, hasFeedback: !!feedback, runId },
-          'Building'
-        );
-
-        try {
-          const { EMPTY_CONTEXT_POINTERS } = await import('../agent/defaults.js');
-          const { generateGateSummary } = await import('../gate/summary.js');
-
-          const gatePlanSummary = generateGateSummary(executorOptions.gatePlan);
-
-          const request: AgentRequest = {
-            workspacePath: ws.rootPath,
-            taskPrompt,
-            gatePlanSummary,
-            constraints: DEFAULT_AGENT_CONSTRAINTS,
-            priorFeedback: feedback,
-            contextPointers: EMPTY_CONTEXT_POINTERS,
-            timeoutMs: workOrder.maxWallClockSeconds * 1000,
-            sessionId: sessionId,
-            spawnLimits: this.config.enableSpawning ? this.config.spawnLimits : null,
-            workOrderId: workOrder.id,
-            runId: runId, // v0.2.22 fix: Pass runId for AgentProcessManager tracking
-          };
-
-          const result = await driver.execute(request);
-
-          // Build result now includes full agentResult for persistence (v0.2.19 - Thrust 1)
-          const buildResult: {
-            sessionId: string;
-            success: boolean;
-            error?: string;
-            agentResult?: typeof result;
-          } = {
-            sessionId: result.sessionId ?? randomUUID(),
-            success: result.success,
-            agentResult: result,
-          };
-          if (!result.success) {
-            buildResult.error = result.stderr || 'Build failed';
-          }
-          return buildResult;
-        } catch (error) {
-          log.error({ error, iteration }, 'Build error');
-          const errorResult: { sessionId: string; success: boolean; error?: string } = {
-            sessionId: sessionId ?? randomUUID(),
-            success: false,
-          };
-          errorResult.error = error instanceof Error ? error.message : String(error);
-          return errorResult;
-        }
-      },
-
-      onSnapshot: async (ws, beforeState, runId, iteration, taskPrompt) => {
-        log.debug({ runId, iteration }, 'Capturing snapshot');
-        return captureAfterState(ws, beforeState, runId, iteration, taskPrompt);
-      },
-
-      onVerify: async (snapshot, plan, runId, iteration) => {
-        log.debug({ snapshotId: snapshot.id, iteration }, 'Verifying');
-        const report = await verify({
-          snapshotPath: workspace.rootPath,
-          gatePlan: plan,
-          snapshotId: snapshot.id,
-          runId,
-          iteration,
-          cleanRoom: false, // TODO: Make configurable
-          timeoutMs: 5 * 60 * 1000, // 5 minute timeout per verification
-          skip: workOrder.skipVerification ?? [], // v0.2.15: Allow skipping verification levels
-        });
-        return report;
-      },
-
-      // eslint-disable-next-line @typescript-eslint/require-await -- Callback interface requires Promise
-      onFeedback: async (_snapshot, report, _plan) => {
-        log.debug({ passed: report.passed }, 'Generating feedback');
-        const structuredFeedback = generateFeedback(report, report.iteration);
-        // Convert to string for the agent
-        return formatForAgent(structuredFeedback);
-      },
-
-      onRunStarted: async (run) => {
-        log.info({ runId: run.id, workOrderId: workOrder.id }, 'Run started, updating work order status to RUNNING');
-        await workOrderService.markRunning(workOrder.id, run.id);
-      },
-
-      onStateChange: (run) => {
-        log.debug({ runId: run.id, state: run.state }, 'Run state changed');
-      },
-
-      onIterationComplete: (run, iteration) => {
-        log.info(
-          {
-            runId: run.id,
-            iteration: iteration.iteration,
-            passed: iteration.verificationPassed,
-            durationMs: iteration.durationMs,
-          },
-          'Iteration complete'
-        );
-      },
-
+    // Build execution input for the engine
+    const executionInput: ExecutionInput = {
+      workOrder,
+      taskSpec,
+      leaseId: lease.id,
+      workspace,
+      gatePlan,
+      services,
     };
 
-    // Add GitHub integration callbacks (v0.2.4)
-    if (isGitHub) {
-      executorOptions.onPushIteration = async (ws, run, iteration, commitMessage): Promise<void> => {
-        // Set the branch name on the run if not already set
-        if (!run.gitHubBranch && gitHubBranch) {
-          run.gitHubBranch = gitHubBranch;
-        }
-
-        // Stage all changes
-        await stageAll(ws.rootPath);
-
-        // Commit with the provided message
-        await commit(ws.rootPath, commitMessage);
-
-        // Push to the run branch
-        if (gitHubBranch) {
-          await push(ws.rootPath, 'origin', gitHubBranch);
-          log.debug({ runId: run.id, iteration, branch: gitHubBranch }, 'Pushed iteration to GitHub');
-        }
-      };
-
-      executorOptions.onCreatePullRequest = async (_ws, run, verificationReport): Promise<{ prUrl: string; prNumber: number } | null> => {
-        if (!gitHubBranch) {
-          log.warn({ runId: run.id }, 'No GitHub branch set, skipping PR creation');
-          return null;
-        }
-
-        // Get GitHub config and create client
-        const config = getGitHubConfigFromEnv();
-        const client = createGitHubClient(config);
-
-        // Get owner and repo from workspace source
-        let owner: string;
-        let repo: string;
-
-        if (workOrder.workspaceSource.type === 'github') {
-          owner = workOrder.workspaceSource.owner;
-          repo = workOrder.workspaceSource.repo;
-        } else if (workOrder.workspaceSource.type === 'github-new') {
-          owner = workOrder.workspaceSource.owner;
-          repo = workOrder.workspaceSource.repoName;
-        } else {
-          log.warn({ runId: run.id }, 'Workspace is not GitHub-backed, skipping PR creation');
-          return null;
-        }
-
-        // Determine highest verification level passed
-        const getHighestLevel = (): string => {
-          if (verificationReport.l3Result.passed) return 'L3';
-          if (verificationReport.l2Result.passed) return 'L2';
-          if (verificationReport.l1Result.passed) return 'L1';
-          if (verificationReport.l0Result.passed) return 'L0';
-          return 'None';
-        };
-
-        // Create the PR
-        const taskSummary = workOrder.taskPrompt.slice(0, 50);
-        const prTitle = `[AgentGate] ${taskSummary}...`;
-        const prBody = `## AgentGate Run Summary
-
-**Run ID:** ${run.id}
-**Work Order:** ${workOrder.id}
-**Iterations:** ${run.iteration}
-**Status:** Verification Passed
-
-### Task
-${workOrder.taskPrompt}
-
-### Verification Report
-- Passed: ${verificationReport.passed}
-- Highest Level: ${getHighestLevel()}
-
----
-*This PR was automatically created by AgentGate.*`;
-
-        // Create PR as draft initially - will be converted to ready after CI passes
-        const pr = await createPullRequest(client, {
-          owner,
-          repo,
-          title: prTitle,
-          body: prBody,
-          head: gitHubBranch,
-          base: 'main',
-          draft: true,
-        });
-
-        return {
-          prUrl: pr.url,
-          prNumber: pr.number,
-        };
-      };
-
-      // Only enable CI polling if waitForCI is true
-      if (workOrder.waitForCI) {
-        executorOptions.onPollCI = async (_ws, run, _prUrl, branchRef): Promise<{ success: boolean; feedback?: string }> => {
-          // Get GitHub config and create client
-          const config = getGitHubConfigFromEnv();
-          const client = createGitHubClient(config);
-
-          // Get owner and repo from workspace source
-          let owner: string;
-          let repo: string;
-
-          if (workOrder.workspaceSource.type === 'github') {
-            owner = workOrder.workspaceSource.owner;
-            repo = workOrder.workspaceSource.repo;
-          } else if (workOrder.workspaceSource.type === 'github-new') {
-            owner = workOrder.workspaceSource.owner;
-            repo = workOrder.workspaceSource.repoName;
-          } else {
-            log.warn({ runId: run.id }, 'Workspace is not GitHub-backed, skipping CI polling');
-            return { success: true };
-          }
-
-          try {
-            log.info({ runId: run.id, owner, repo, ref: branchRef }, 'Polling CI status');
-
-            // Poll for CI completion (30 min timeout)
-            const ciStatus = await pollCIStatus(client, owner, repo, branchRef, {
-              pollIntervalMs: 30_000, // 30 seconds
-              timeoutMs: 30 * 60 * 1000, // 30 minutes
-            });
-
-            log.info(
-              {
-                runId: run.id,
-                status: ciStatus.status,
-                conclusion: ciStatus.conclusion,
-                totalChecks: ciStatus.totalCount,
-                passed: ciStatus.allPassed,
-              },
-              'CI polling completed'
-            );
-
-            if (ciStatus.allPassed) {
-              // Convert draft PR to ready for review now that CI has passed
-              if (run.gitHubPrNumber) {
-                try {
-                  log.info({ runId: run.id, prNumber: run.gitHubPrNumber }, 'Converting draft PR to ready for review');
-                  await convertDraftToReady(client, owner, repo, run.gitHubPrNumber);
-                  log.info({ runId: run.id, prNumber: run.gitHubPrNumber }, 'PR marked as ready for review');
-                } catch (error) {
-                  // Log but don't fail - PR is still valid even if we can't convert it
-                  log.warn({ runId: run.id, prNumber: run.gitHubPrNumber, error }, 'Failed to convert draft PR to ready');
-                }
-              }
-              return { success: true };
-            } else {
-              // Generate feedback from CI failures
-              const feedback = parseCIFailures(ciStatus);
-              return { success: false, feedback };
-            }
-          } catch (error) {
-            log.error({ runId: run.id, error }, 'CI polling failed');
-            throw error;
-          }
-        };
-      }
-    }
-
-    // Execute the run and track it
+    // Execute the run via ExecutionEngine
     let run: Run | undefined;
     try {
-      // Execute the run
-      run = await executeRun(executorOptions);
+      // Mark work order as running
+      log.info({ workOrderId: workOrder.id }, 'Starting execution via ExecutionEngine');
 
-      // Add to active runs tracking AFTER we have the run ID
+      const result = await this.engine.execute(executionInput);
+      run = result.run;
+
+      // Mark work order as running (now that we have run ID)
+      await workOrderService.markRunning(workOrder.id, run.id);
+
+      // Add to active runs tracking
       this.activeRuns.set(run.id, run);
+
+      // Handle GitHub delivery after successful execution (v0.2.26)
+      const { RunState } = await import('../types/index.js');
+      if (isGitHub && run.state === RunState.SUCCEEDED) {
+        await this.handleGitHubDelivery(
+          workspace,
+          run,
+          workOrder,
+          gitHubBranch,
+          { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, parseCIFailures }
+        );
+      }
 
       log.info(
         {
@@ -698,6 +474,114 @@ ${workOrder.taskPrompt}
       if (run) {
         this.activeRuns.delete(run.id);
       }
+    }
+  }
+
+  /**
+   * Handle GitHub delivery after successful execution (v0.2.26)
+   * Extracted from legacy callbacks for cleaner separation
+   */
+  private async handleGitHubDelivery(
+    workspace: Workspace,
+    run: Run,
+    workOrder: WorkOrder,
+    gitHubBranch: string | null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    githubOps: any
+  ): Promise<void> {
+    const { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, parseCIFailures } = githubOps;
+
+    if (!gitHubBranch) {
+      log.warn({ runId: run.id }, 'No GitHub branch set, skipping GitHub delivery');
+      return;
+    }
+
+    try {
+      // Push final changes
+      await stageAll(workspace.rootPath);
+      await commit(workspace.rootPath, `AgentGate: Final changes for run ${run.id}`);
+      await push(workspace.rootPath, 'origin', gitHubBranch);
+      log.debug({ runId: run.id, branch: gitHubBranch }, 'Pushed final changes to GitHub');
+
+      // Create PR
+      const config = getGitHubConfigFromEnv();
+      const client = createGitHubClient(config);
+
+      let owner: string;
+      let repo: string;
+
+      if (workOrder.workspaceSource.type === 'github') {
+        owner = workOrder.workspaceSource.owner;
+        repo = workOrder.workspaceSource.repo;
+      } else if (workOrder.workspaceSource.type === 'github-new') {
+        owner = workOrder.workspaceSource.owner;
+        repo = workOrder.workspaceSource.repoName;
+      } else {
+        log.warn({ runId: run.id }, 'Workspace is not GitHub-backed, skipping PR creation');
+        return;
+      }
+
+      const taskSummary = workOrder.taskPrompt.slice(0, 50);
+      const prTitle = `[AgentGate] ${taskSummary}...`;
+      const prBody = `## AgentGate Run Summary
+
+**Run ID:** ${run.id}
+**Work Order:** ${workOrder.id}
+**Iterations:** ${run.iteration}
+**Status:** Verification Passed
+
+### Task
+${workOrder.taskPrompt}
+
+---
+*This PR was automatically created by AgentGate.*`;
+
+      const pr = await createPullRequest(client, {
+        owner,
+        repo,
+        title: prTitle,
+        body: prBody,
+        head: gitHubBranch,
+        base: 'main',
+        draft: workOrder.waitForCI ?? false,
+      });
+
+      run.gitHubPrUrl = pr.url;
+      run.gitHubPrNumber = pr.number;
+      run.gitHubBranch = gitHubBranch;
+      log.info({ runId: run.id, prUrl: pr.url }, 'Created GitHub PR');
+
+      // Poll CI if configured
+      if (workOrder.waitForCI) {
+        log.info({ runId: run.id, owner, repo, ref: gitHubBranch }, 'Polling CI status');
+
+        const ciStatus = await pollCIStatus(client, owner, repo, gitHubBranch, {
+          pollIntervalMs: 30_000,
+          timeoutMs: 30 * 60 * 1000,
+        });
+
+        log.info(
+          {
+            runId: run.id,
+            status: ciStatus.status,
+            conclusion: ciStatus.conclusion,
+            passed: ciStatus.allPassed,
+          },
+          'CI polling completed'
+        );
+
+        if (ciStatus.allPassed && run.gitHubPrNumber) {
+          try {
+            await convertDraftToReady(client, owner, repo, run.gitHubPrNumber);
+            log.info({ runId: run.id, prNumber: run.gitHubPrNumber }, 'PR marked as ready for review');
+          } catch (error) {
+            log.warn({ runId: run.id, error }, 'Failed to convert draft PR to ready');
+          }
+        }
+      }
+    } catch (error) {
+      log.error({ runId: run.id, error }, 'GitHub delivery failed');
+      // Don't throw - run was successful even if GitHub delivery failed
     }
   }
 
