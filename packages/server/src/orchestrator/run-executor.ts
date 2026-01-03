@@ -122,6 +122,7 @@ export interface BuildResult {
 
 /**
  * Options for run execution.
+ * @deprecated v0.2.26: Use ExecutionInput and PhaseServices instead. Will be removed in v0.3.0.
  */
 export interface RunExecutorOptions {
   workOrder: WorkOrder;
@@ -210,8 +211,17 @@ export interface RunExecutorOptions {
 /**
  * Execute a run.
  * Returns when the run reaches a terminal state.
+ *
+ * @deprecated v0.2.26: Use ExecutionEngine.execute() instead. This function will be removed in v0.3.0.
+ * The new ExecutionEngine provides better separation of concerns, metrics collection,
+ * and progress events. Migration guide: docs/DevGuides/DevGuide_v0.2.26/06-migration-guide.md
  */
 export async function executeRun(options: RunExecutorOptions): Promise<Run> {
+  // Log deprecation warning
+  log.warn(
+    { workOrderId: options.workOrder.id },
+    '[DEPRECATED] executeRun() is deprecated. Use ExecutionEngine.execute() instead. Will be removed in v0.3.0.'
+  );
   const {
     workOrder,
     workspace,
