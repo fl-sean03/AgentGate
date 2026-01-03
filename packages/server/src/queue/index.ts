@@ -125,3 +125,14 @@ export {
   HealthChecker,
   type HealthThresholds,
 } from './health-checker.js';
+
+// =============================================================================
+// Facade (Phase 2: Feature Flag Integration)
+// =============================================================================
+
+export {
+  QueueFacade,
+  type QueueFacadeConfig,
+  type QueueFacadeEvents,
+  type QueueFacadeStats,
+} from './queue-facade.js';
