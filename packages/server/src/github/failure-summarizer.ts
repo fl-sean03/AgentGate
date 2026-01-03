@@ -369,6 +369,7 @@ export class FailureSummarizer {
       typecheck: 0,
       build: 0,
       runtime: 0,
+      security: 0,
       other: 0,
     };
 
@@ -394,6 +395,7 @@ export class FailureSummarizer {
       case 'test':
       case 'typecheck':
       case 'build':
+      case 'security':
         return 'high';
       case 'lint':
         return 'medium';
@@ -437,6 +439,8 @@ export class FailureSummarizer {
         return 'Fix lint issues or run `pnpm lint --fix`';
       case 'build':
         return 'Fix build error';
+      case 'security':
+        return `Fix security vulnerability: update vulnerable dependency or use a non-vulnerable version. Run \`pnpm audit\` to see details.`;
       default:
         return `Investigate error: ${error.message.slice(0, 50)}`;
     }
@@ -454,6 +458,8 @@ export class FailureSummarizer {
         return 'Build Errors';
       case 'runtime':
         return 'Runtime Errors';
+      case 'security':
+        return 'Security/Dependency Vulnerabilities';
       default:
         return 'Errors';
     }

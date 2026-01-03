@@ -34,7 +34,7 @@ export interface ParsedLog {
 }
 
 /** Error category */
-export type ErrorCategory = 'test' | 'lint' | 'typecheck' | 'build' | 'runtime' | 'other';
+export type ErrorCategory = 'test' | 'lint' | 'typecheck' | 'build' | 'runtime' | 'security' | 'other';
 
 /** Parsed error information */
 export interface ParsedError {
@@ -93,6 +93,12 @@ const ERROR_PATTERNS = {
   GH_ERROR: /^##\[error\](.+)$/,
   /** Assertion error */
   ASSERTION_ERROR: /^(?:Assertion)?Error:\s*(.+)$/,
+  /** Dependency Review vulnerability */
+  DEPENDENCY_VULN: /(?:vulnerability|vulnerable|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+)/i,
+  /** Security/dependency failure indicators */
+  SECURITY_FAIL: /(?:fail-on-severity|security\s+advisory|vulnerable\s+versions?|patched\s+versions?)/i,
+  /** pnpm/npm audit failure */
+  AUDIT_FAIL: /^\s*(\d+)\s+(?:vulnerabilities?|moderate|high|critical)/i,
 };
 
 // ============================================================================
@@ -372,16 +378,49 @@ export class LogParser {
         continue;
       }
 
-      // Check for GitHub error markers
-      const ghErrorMatch = ERROR_PATTERNS.GH_ERROR.exec(line);
-      if (ghErrorMatch) {
+      // Check for security/dependency vulnerabilities
+      if (ERROR_PATTERNS.DEPENDENCY_VULN.test(line) || ERROR_PATTERNS.SECURITY_FAIL.test(line)) {
         errors.push({
-          message: ghErrorMatch[1] ?? '',
+          message: line.trim(),
           file: null,
           line: null,
           column: null,
           code: null,
-          category: 'other',
+          category: 'security',
+          context: this.getLineContext(lines, i, 3),
+        });
+        continue;
+      }
+
+      // Check for audit failures (pnpm audit, npm audit)
+      const auditMatch = ERROR_PATTERNS.AUDIT_FAIL.exec(line);
+      if (auditMatch) {
+        errors.push({
+          message: `Security audit found ${auditMatch[1]} vulnerabilities`,
+          file: null,
+          line: null,
+          column: null,
+          code: null,
+          category: 'security',
+          context: this.getLineContext(lines, i, 5),
+        });
+        continue;
+      }
+
+      // Check for GitHub error markers
+      const ghErrorMatch = ERROR_PATTERNS.GH_ERROR.exec(line);
+      if (ghErrorMatch) {
+        // Check if this is a security-related error
+        const errorContent = ghErrorMatch[1] ?? '';
+        const isSecurityError = ERROR_PATTERNS.DEPENDENCY_VULN.test(errorContent) ||
+                                ERROR_PATTERNS.SECURITY_FAIL.test(errorContent);
+        errors.push({
+          message: errorContent,
+          file: null,
+          line: null,
+          column: null,
+          code: null,
+          category: isSecurityError ? 'security' : 'other',
           context: null,
         });
         continue;
