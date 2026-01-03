@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { z } from 'zod';
-import { startServer } from '../../server/index.js';
+import { startServer, setQueueFacade } from '../../server/index.js';
 import {
   print,
   printError,
@@ -310,6 +310,9 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
       facadeOptions
     );
 
+    // Register facade for rollout routes (v0.2.22 - Phase 3)
+    setQueueFacade(queueFacade);
+
     log.info(
       {
         useNewQueueSystem: queueConfig.useNewQueueSystem,
@@ -412,6 +415,11 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   print('Run API:');
   print(`  ${cyan('GET')} /api/v1/runs     - List runs`);
   print(`  ${cyan('GET')} /api/v1/runs/:id - Get run details`);
+  print('');
+  print('Queue Rollout API (v0.2.22 - Phase 3):');
+  print(`  ${cyan('GET')}  /api/v1/queue/rollout/status     - Rollout status`);
+  print(`  ${cyan('GET')}  /api/v1/queue/rollout/comparison - Compare systems`);
+  print(`  ${cyan('POST')} /api/v1/queue/rollout/config     - Update config (auth)`);
   print('');
   if (options.autoProcess) {
     print(`${bold('Auto-Processing:')} ${cyan('ENABLED')} - Queued work orders will start automatically`);
