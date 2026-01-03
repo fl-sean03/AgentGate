@@ -28,6 +28,7 @@ import {
   type StreamingOptions,
 } from './streaming-executor.js';
 import { getSandboxManager, type SandboxConfig } from '../sandbox/index.js';
+import { getAgentProcessManager } from '../control-plane/agent-process-manager.js';
 
 const logger = createLogger('agent:claude-code-subscription');
 
@@ -396,6 +397,17 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+
+      // Register process with AgentProcessManager for tracking (v0.2.22 fix)
+      // This enables the stale detector to properly track the process
+      if (request.workOrderId && request.runId && proc.pid) {
+        const processManager = getAgentProcessManager();
+        processManager.register(request.workOrderId, request.runId, proc);
+        logger.debug(
+          { workOrderId: request.workOrderId, runId: request.runId, pid: proc.pid },
+          'Registered process with AgentProcessManager'
+        );
+      }
 
       // Close stdin immediately
       proc.stdin?.end();
