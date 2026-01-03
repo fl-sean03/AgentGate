@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { z } from 'zod';
-import { startServer, setQueueFacade } from '../../server/index.js';
+import { startServer } from '../../server/index.js';
 import {
   print,
   printError,
@@ -8,21 +8,15 @@ import {
   formatValidationErrors,
   bold,
   cyan,
-  yellow,
 } from '../formatter.js';
-import { getConfig, getQueueConfig } from '../../config/index.js';
+import { getConfig } from '../../config/index.js';
 import { getQueueManager } from '../queue-manager.js';
 import { createStaleDetector, type StaleDetector } from '../stale-detector.js';
 import { workOrderStore } from '../work-order-store.js';
 import { createLogger } from '../../utils/logger.js';
 
-// v0.2.22 - New queue system imports (Phase 1: Parallel implementation)
-import {
-  ResourceMonitor,
-  Scheduler,
-  RetryManager,
-  QueueFacade,
-} from '../../queue/index.js';
+// v0.2.22 - New queue system (now the only queue system)
+import { QueueFacade } from '../../queue/index.js';
 
 const log = createLogger('serve-command');
 
@@ -146,38 +140,6 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   }
   print('');
 
-  // New queue system configuration (v0.2.22 - Thrust 7)
-  const queueConfig = getQueueConfig();
-  print(`${bold('New Queue System Configuration:')} ${cyan('(Phase 1: Parallel Implementation)')}`);
-  print(`  ${bold('Use New Queue System:')} ${cyan(queueConfig.useNewQueueSystem ? 'enabled' : 'disabled')}`);
-  print(`  ${bold('Shadow Mode:')} ${cyan(queueConfig.shadowMode ? 'enabled' : 'disabled')}`);
-  print(`  ${bold('Rollout Percent:')} ${cyan(String(queueConfig.rolloutPercent) + '%')}`);
-  print('');
-
-  // v0.2.22 Phase 4: Deprecation warning for legacy queue usage
-  const isUsingLegacyQueue = !queueConfig.useNewQueueSystem || queueConfig.rolloutPercent < 100;
-  if (isUsingLegacyQueue) {
-    print(`${yellow('⚠ DEPRECATION WARNING:')}`);
-    print(`${yellow('  The legacy queue system is deprecated and will be removed in a future release.')}`);
-    if (!queueConfig.useNewQueueSystem) {
-      print(`${yellow('  Set AGENTGATE_QUEUE_USE_NEW_SYSTEM=true to enable the new queue system.')}`);
-    }
-    if (queueConfig.rolloutPercent < 100) {
-      print(`${yellow('  Set AGENTGATE_QUEUE_ROLLOUT_PERCENT=100 to complete the migration.')}`);
-    }
-    print(`${yellow('  See the v0.2.22 migration guide for details.')}`);
-    print('');
-
-    log.warn(
-      {
-        useNewQueueSystem: queueConfig.useNewQueueSystem,
-        rolloutPercent: queueConfig.rolloutPercent,
-        shadowMode: queueConfig.shadowMode,
-      },
-      'Legacy queue system is deprecated - migrate to new queue system'
-    );
-  }
-
   // Start the server - only include apiKey if it's set
   const serverConfig: Parameters<typeof startServer>[0] = {
     port: options.port,
@@ -247,110 +209,34 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     print('');
   }
 
-  // Initialize new queue system components (v0.2.22 - Thrust 7: Phase 1)
-  // These are initialized but NOT wired into the existing system yet
-  // This allows us to verify the new components work correctly in isolation
-  // Note: QueueObservability requires ExecutionManager which needs SandboxProvider
-  // Full observability will be wired in Phase 2
-  let newResourceMonitor: ResourceMonitor | null = null;
-  let newScheduler: Scheduler | null = null;
-  let newRetryManager: RetryManager | null = null;
+  // Initialize new queue system (v0.2.22 - now the only queue system)
+  print(`${bold('Initializing queue system...')}`);
 
-  if (queueConfig.useNewQueueSystem || queueConfig.shadowMode) {
-    print(`${bold('Initializing new queue system components...')}`);
+  const queueFacade = QueueFacade.create({
+    maxConcurrentSlots: config.maxConcurrentRuns,
+    memoryPerSlotMB: options.minMemory,
+    pollIntervalMs: options.pollInterval,
+    staggerDelayMs: options.staggerDelay,
+    priorityEnabled: false,
+  });
 
-    // Create resource monitor with config
-    newResourceMonitor = new ResourceMonitor({
-      maxConcurrentSlots: config.maxConcurrentRuns,
-      memoryPerSlotMB: options.minMemory,
-      pollIntervalMs: options.pollInterval,
-    });
+  // Start the queue system
+  queueFacade.start();
 
-    // Create scheduler
-    newScheduler = new Scheduler(newResourceMonitor, {
+  log.info(
+    {
+      maxSlots: config.maxConcurrentRuns,
       pollIntervalMs: options.pollInterval,
       staggerDelayMs: options.staggerDelay,
-      priorityEnabled: false,
-      maxQueueDepth: 0, // Unlimited
-    });
+    },
+    'Queue system initialized'
+  );
 
-    // Create retry manager
-    newRetryManager = new RetryManager({
-      maxRetries: 3,
-      baseDelayMs: 5000,
-      maxDelayMs: 300000,
-      backoffMultiplier: 2,
-      jitterFactor: 0.1,
-    });
-
-    // Note: ExecutionManager requires SandboxProvider which is not available here
-    // For Phase 1, we only initialize the components that don't require external dependencies
-    // The full wiring will happen in Phase 2 when we integrate with the existing system
-
-    // Log initialization (without creating full observability since we don't have ExecutionManager)
-    log.info(
-      {
-        useNewQueueSystem: queueConfig.useNewQueueSystem,
-        shadowMode: queueConfig.shadowMode,
-        rolloutPercent: queueConfig.rolloutPercent,
-        maxSlots: config.maxConcurrentRuns,
-      },
-      'New queue system components initialized (Phase 1)'
-    );
-
-    // Start resource monitor
-    newResourceMonitor.start();
-
-    print(`  ${bold('Resource Monitor:')} ${cyan('started')}`);
-    print(`  ${bold('Scheduler:')} ${cyan('initialized (not started - awaiting Phase 2 wiring)')}`);
-    print(`  ${bold('Retry Manager:')} ${cyan('initialized')}`);
-    print(`New queue system components ready`);
-    print('');
-  }
-
-  // Initialize QueueFacade for feature flag-based routing (v0.2.22 - Phase 2)
-  let queueFacade: QueueFacade | null = null;
-  if (queueConfig.useNewQueueSystem || queueConfig.shadowMode || queueConfig.rolloutPercent > 0) {
-    print(`${bold('Initializing QueueFacade...')}`);
-
-    // Build options conditionally to avoid exactOptionalPropertyTypes issues
-    const facadeOptions: {
-      scheduler?: Scheduler;
-      resourceMonitor?: ResourceMonitor;
-      retryManager?: RetryManager;
-    } = {};
-    if (newScheduler) {
-      facadeOptions.scheduler = newScheduler;
-    }
-    if (newResourceMonitor) {
-      facadeOptions.resourceMonitor = newResourceMonitor;
-    }
-    if (newRetryManager) {
-      facadeOptions.retryManager = newRetryManager;
-    }
-
-    queueFacade = QueueFacade.fromConfig(
-      queueManager,
-      queueConfig,
-      facadeOptions
-    );
-
-    // Register facade for rollout routes (v0.2.22 - Phase 3)
-    setQueueFacade(queueFacade);
-
-    log.info(
-      {
-        useNewQueueSystem: queueConfig.useNewQueueSystem,
-        shadowMode: queueConfig.shadowMode,
-        rolloutPercent: queueConfig.rolloutPercent,
-      },
-      'QueueFacade initialized (Phase 2)'
-    );
-
-    print(`  ${bold('Active System:')} ${cyan(queueConfig.useNewQueueSystem && queueConfig.rolloutPercent >= 100 ? 'new' : queueConfig.shadowMode ? 'both (shadow)' : 'legacy + gradual rollout')}`);
-    print(`QueueFacade ready`);
-    print('');
-  }
+  print(`  ${bold('Resource Monitor:')} ${cyan('started')}`);
+  print(`  ${bold('Scheduler:')} ${cyan('initialized')}`);
+  print(`  ${bold('Retry Manager:')} ${cyan('initialized')}`);
+  print(`Queue system ready`);
+  print('');
 
   // Handle shutdown signals
   const shutdown = (): void => {
@@ -373,31 +259,17 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
         print('Auto-processing stopped');
       }
 
-      // Stop new queue system components (v0.2.22 - Thrust 7 & Phase 2)
-      if (queueFacade) {
-        const stats = queueFacade.getStats();
-        log.info({ stats: stats.counters }, 'QueueFacade final statistics');
-      }
-      if (newScheduler) {
-        print('Stopping new scheduler...');
-        newScheduler.stop();
-        print('New scheduler stopped');
-      }
-      if (newResourceMonitor) {
-        print('Stopping new resource monitor...');
-        newResourceMonitor.stop();
-        print('New resource monitor stopped');
-      }
-      if (newRetryManager) {
-        print('Cancelling pending retries...');
-        newRetryManager.cancelAll();
-        print('Pending retries cancelled');
-      }
+      // Stop queue system (v0.2.22)
+      print('Stopping queue system...');
+      const stats = queueFacade.getStats();
+      log.info({ stats: stats.counters }, 'QueueFacade final statistics');
+      queueFacade.stop();
+      print('Queue system stopped');
 
       // Wait for running work orders to complete (with timeout)
-      const stats = queueManager.getStats();
-      if (stats.running > 0) {
-        print(`Waiting for ${stats.running} running work order(s) to complete...`);
+      const qmStats = queueManager.getStats();
+      if (qmStats.running > 0) {
+        print(`Waiting for ${qmStats.running} running work order(s) to complete...`);
         // Give running work orders 30 seconds to complete
         const maxWaitMs = 30000;
         const startTime = Date.now();
@@ -441,10 +313,8 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   print(`  ${cyan('GET')} /api/v1/runs     - List runs`);
   print(`  ${cyan('GET')} /api/v1/runs/:id - Get run details`);
   print('');
-  print('Queue Rollout API (v0.2.22 - Phase 3):');
-  print(`  ${cyan('GET')}  /api/v1/queue/rollout/status     - Rollout status`);
-  print(`  ${cyan('GET')}  /api/v1/queue/rollout/comparison - Compare systems`);
-  print(`  ${cyan('POST')} /api/v1/queue/rollout/config     - Update config (auth)`);
+  print('Queue API:');
+  print(`  ${cyan('GET')} /api/v1/queue/health - Queue health status`);
   print('');
   if (options.autoProcess) {
     print(`${bold('Auto-Processing:')} ${cyan('ENABLED')} - Queued work orders will start automatically`);
