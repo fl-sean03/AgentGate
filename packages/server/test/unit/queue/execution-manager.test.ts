@@ -39,7 +39,8 @@ describe('ExecutionManager', () => {
       cleanup: vi.fn().mockResolvedValue(undefined),
     };
 
-    resourceMonitor = new ResourceMonitor({ maxConcurrentSlots: 2 });
+    // Use minimal memory requirement to avoid failures on memory-constrained CI runners
+    resourceMonitor = new ResourceMonitor({ maxConcurrentSlots: 2, memoryPerSlotMB: 1 });
     executionManager = new ExecutionManager(mockProvider, resourceMonitor, {
       executionTimeoutMs: 5000,
       cleanupDelayMs: 10,
