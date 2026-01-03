@@ -50,6 +50,7 @@ const transitions: Record<RunState, Partial<Record<RunEvent, RunState>>> = {
   },
   [RunState.PR_CREATED]: {
     [RunEvent.CI_POLLING_STARTED]: RunState.CI_POLLING,
+    [RunEvent.VERIFY_PASSED]: RunState.SUCCEEDED, // v0.2.22 fix: Allow completion when CI is not enabled but PR was created
     [RunEvent.USER_CANCELED]: RunState.CANCELED,
     [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
   },
