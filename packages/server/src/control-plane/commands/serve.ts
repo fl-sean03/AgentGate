@@ -9,11 +9,18 @@ import {
   bold,
   cyan,
 } from '../formatter.js';
-import { getConfig } from '../../config/index.js';
+import { getConfig, getQueueConfig } from '../../config/index.js';
 import { getQueueManager } from '../queue-manager.js';
 import { createStaleDetector, type StaleDetector } from '../stale-detector.js';
 import { workOrderStore } from '../work-order-store.js';
 import { createLogger } from '../../utils/logger.js';
+
+// v0.2.22 - New queue system imports (Phase 1: Parallel implementation)
+import {
+  ResourceMonitor,
+  Scheduler,
+  RetryManager,
+} from '../../queue/index.js';
 
 const log = createLogger('serve-command');
 
@@ -137,6 +144,14 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   }
   print('');
 
+  // New queue system configuration (v0.2.22 - Thrust 7)
+  const queueConfig = getQueueConfig();
+  print(`${bold('New Queue System Configuration:')} ${cyan('(Phase 1: Parallel Implementation)')}`);
+  print(`  ${bold('Use New Queue System:')} ${cyan(queueConfig.useNewQueueSystem ? 'enabled' : 'disabled')}`);
+  print(`  ${bold('Shadow Mode:')} ${cyan(queueConfig.shadowMode ? 'enabled' : 'disabled')}`);
+  print(`  ${bold('Rollout Percent:')} ${cyan(String(queueConfig.rolloutPercent) + '%')}`);
+  print('');
+
   // Start the server - only include apiKey if it's set
   const serverConfig: Parameters<typeof startServer>[0] = {
     port: options.port,
@@ -206,6 +221,67 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     print('');
   }
 
+  // Initialize new queue system components (v0.2.22 - Thrust 7: Phase 1)
+  // These are initialized but NOT wired into the existing system yet
+  // This allows us to verify the new components work correctly in isolation
+  // Note: QueueObservability requires ExecutionManager which needs SandboxProvider
+  // Full observability will be wired in Phase 2
+  let newResourceMonitor: ResourceMonitor | null = null;
+  let newScheduler: Scheduler | null = null;
+  let newRetryManager: RetryManager | null = null;
+
+  if (queueConfig.useNewQueueSystem || queueConfig.shadowMode) {
+    print(`${bold('Initializing new queue system components...')}`);
+
+    // Create resource monitor with config
+    newResourceMonitor = new ResourceMonitor({
+      maxConcurrentSlots: config.maxConcurrentRuns,
+      memoryPerSlotMB: options.minMemory,
+      pollIntervalMs: options.pollInterval,
+    });
+
+    // Create scheduler
+    newScheduler = new Scheduler(newResourceMonitor, {
+      pollIntervalMs: options.pollInterval,
+      staggerDelayMs: options.staggerDelay,
+      priorityEnabled: false,
+      maxQueueDepth: 0, // Unlimited
+    });
+
+    // Create retry manager
+    newRetryManager = new RetryManager({
+      maxRetries: 3,
+      baseDelayMs: 5000,
+      maxDelayMs: 300000,
+      backoffMultiplier: 2,
+      jitterFactor: 0.1,
+    });
+
+    // Note: ExecutionManager requires SandboxProvider which is not available here
+    // For Phase 1, we only initialize the components that don't require external dependencies
+    // The full wiring will happen in Phase 2 when we integrate with the existing system
+
+    // Log initialization (without creating full observability since we don't have ExecutionManager)
+    log.info(
+      {
+        useNewQueueSystem: queueConfig.useNewQueueSystem,
+        shadowMode: queueConfig.shadowMode,
+        rolloutPercent: queueConfig.rolloutPercent,
+        maxSlots: config.maxConcurrentRuns,
+      },
+      'New queue system components initialized (Phase 1)'
+    );
+
+    // Start resource monitor
+    newResourceMonitor.start();
+
+    print(`  ${bold('Resource Monitor:')} ${cyan('started')}`);
+    print(`  ${bold('Scheduler:')} ${cyan('initialized (not started - awaiting Phase 2 wiring)')}`);
+    print(`  ${bold('Retry Manager:')} ${cyan('initialized')}`);
+    print(`New queue system components ready`);
+    print('');
+  }
+
   // Handle shutdown signals
   const shutdown = (): void => {
     print('');
@@ -225,6 +301,23 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
         print('Stopping auto-processing...');
         await queueManager.stopAutoProcessing();
         print('Auto-processing stopped');
+      }
+
+      // Stop new queue system components (v0.2.22 - Thrust 7)
+      if (newScheduler) {
+        print('Stopping new scheduler...');
+        newScheduler.stop();
+        print('New scheduler stopped');
+      }
+      if (newResourceMonitor) {
+        print('Stopping new resource monitor...');
+        newResourceMonitor.stop();
+        print('New resource monitor stopped');
+      }
+      if (newRetryManager) {
+        print('Cancelling pending retries...');
+        newRetryManager.cancelAll();
+        print('Pending retries cancelled');
       }
 
       // Wait for running work orders to complete (with timeout)
