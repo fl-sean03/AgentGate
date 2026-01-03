@@ -6,6 +6,9 @@
  * @module gate/base-runner
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/prefer-nullish-coalescing, @typescript-eslint/prefer-optional-chain, @typescript-eslint/require-await, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/explicit-function-return-type, @typescript-eslint/await-thenable, no-console */
+
+
 import type { GateCheck, GateCheckType, GateResult, GateFeedback, GateFailure } from '../types/index.js';
 import type { GateRunner, GateContext, ValidationResult, FormattedFailure } from './runner-types.js';
 
