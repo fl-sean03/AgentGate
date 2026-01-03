@@ -97,6 +97,8 @@ export class WorkOrderService {
       },
       // v0.2.15: Pass through skip verification levels (only if defined)
       ...(request.skipVerification && { skipVerification: request.skipVerification }),
+      // Thrust 16 / Issue #71: Pass through waitForCI
+      waitForCI: request.waitForCI ?? false,
       createdAt: now,
       status: WorkOrderStatus.QUEUED,
     };
