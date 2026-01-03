@@ -128,6 +128,70 @@ interface ForceKillResponse {
 }
 
 /**
+ * API response for rollout status (v0.2.22 - Phase 3)
+ */
+interface RolloutStatusResponse {
+  success: boolean;
+  data: {
+    enabled: boolean;
+    shadowMode: boolean;
+    rolloutPercent: number;
+    phase: 'disabled' | 'shadow' | 'partial' | 'full';
+    timestamp: string;
+    counters?: {
+      totalRouted: number;
+      routedToLegacy: number;
+      routedToNew: number;
+      shadowMismatches: number;
+    };
+    recommendation?: string;
+  };
+}
+
+/**
+ * API response for rollout comparison (v0.2.22 - Phase 3)
+ */
+interface RolloutComparisonResponse {
+  success: boolean;
+  data: {
+    legacy: {
+      queueDepth: number;
+      runningCount: number;
+      accepting: boolean;
+      health: string;
+    };
+    newSystem: {
+      queueDepth: number;
+      runningCount: number;
+      accepting: boolean;
+      health: string;
+    } | null;
+    inSync: boolean;
+    differences: string[];
+    shadowMismatches: number;
+    timestamp: string;
+    verdict: 'match' | 'minor_diff' | 'major_diff' | 'new_unavailable';
+  };
+}
+
+/**
+ * API response for rollout config update (v0.2.22 - Phase 3)
+ */
+interface RolloutConfigUpdateResponse {
+  success: boolean;
+  data: {
+    updated: boolean;
+    newPhase: string;
+    appliedUpdates: {
+      rolloutPercent?: number;
+      shadowMode?: boolean;
+      useNewQueueSystem?: boolean;
+    };
+    warning: string;
+  };
+}
+
+/**
  * Get configuration from environment variables.
  * Exits with error if AGENTGATE_API_KEY is not set.
  */
@@ -305,6 +369,67 @@ async function fetchQueueHealth(
   }
 
   const response = (await res.json()) as QueueHealthResponse;
+  return response.data;
+}
+
+/**
+ * Fetch rollout status from API (v0.2.22 - Phase 3).
+ */
+async function fetchRolloutStatus(
+  config: QueueCommandConfig
+): Promise<RolloutStatusResponse['data']> {
+  const res = await fetch(`${config.apiUrl}/api/v1/queue/rollout/status`, {
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
+  const response = (await res.json()) as RolloutStatusResponse;
+  return response.data;
+}
+
+/**
+ * Fetch rollout comparison from API (v0.2.22 - Phase 3).
+ */
+async function fetchRolloutComparison(
+  config: QueueCommandConfig
+): Promise<RolloutComparisonResponse['data']> {
+  const res = await fetch(`${config.apiUrl}/api/v1/queue/rollout/comparison`, {
+    headers: { Authorization: `Bearer ${config.apiKey}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+
+  const response = (await res.json()) as RolloutComparisonResponse;
+  return response.data;
+}
+
+/**
+ * Update rollout configuration via API (v0.2.22 - Phase 3).
+ */
+async function updateRolloutConfig(
+  config: QueueCommandConfig,
+  updates: { rolloutPercent?: number; shadowMode?: boolean; useNewQueueSystem?: boolean }
+): Promise<RolloutConfigUpdateResponse['data']> {
+  const res = await fetch(`${config.apiUrl}/api/v1/queue/rollout/config`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(body.error?.message ?? `API error: ${res.status}`);
+  }
+
+  const response = (await res.json()) as RolloutConfigUpdateResponse;
   return response.data;
 }
 
@@ -543,6 +668,212 @@ export function createQueueCommand(): Command {
         print(`  Queue Depth: ${health.indicators.queueDepth}`);
 
         print('');
+      } catch (error) {
+        printError(formatError(error instanceof Error ? error.message : String(error)));
+        process.exitCode = 1;
+      }
+    });
+
+  // ==========================================================================
+  // Rollout commands (v0.2.22 - Phase 3: Gradual Rollout)
+  // ==========================================================================
+
+  // Rollout status command
+  queue
+    .command('rollout-status')
+    .description('Show gradual rollout status (v0.2.22 Phase 3)')
+    .option('--json', 'Output as JSON')
+    .action(async (options: { json?: boolean }) => {
+      try {
+        const config = getConfig();
+        const status = await fetchRolloutStatus(config);
+
+        if (options.json) {
+          print(formatJson(status));
+          return;
+        }
+
+        // Header with phase
+        const phaseColor =
+          status.phase === 'disabled'
+            ? dim
+            : status.phase === 'shadow'
+              ? yellow
+              : status.phase === 'partial'
+                ? cyan
+                : green;
+        print('');
+        print(bold('Queue System Rollout Status'));
+        print(`  Phase: ${phaseColor(status.phase.toUpperCase())}`);
+        print('');
+
+        // Configuration
+        print(bold('Configuration'));
+        print(`  New System:     ${status.enabled ? green('enabled') : dim('disabled')}`);
+        print(`  Shadow Mode:    ${status.shadowMode ? yellow('active') : dim('inactive')}`);
+        print(`  Rollout:        ${cyan(String(status.rolloutPercent) + '%')}`);
+        print('');
+
+        // Counters (if available)
+        if (status.counters) {
+          print(bold('Routing Statistics'));
+          print(`  Total Routed:   ${status.counters.totalRouted}`);
+          print(`  To Legacy:      ${status.counters.routedToLegacy}`);
+          print(`  To New:         ${status.counters.routedToNew}`);
+          if (status.counters.shadowMismatches > 0) {
+            print(`  Mismatches:     ${red(String(status.counters.shadowMismatches))}`);
+          } else {
+            print(`  Mismatches:     ${green('0')}`);
+          }
+          print('');
+        }
+
+        // Recommendation
+        if (status.recommendation) {
+          print(bold('Recommendation'));
+          print(`  ${yellow(status.recommendation)}`);
+          print('');
+        }
+      } catch (error) {
+        printError(formatError(error instanceof Error ? error.message : String(error)));
+        process.exitCode = 1;
+      }
+    });
+
+  // Rollout comparison command
+  queue
+    .command('rollout-compare')
+    .description('Compare legacy vs new queue system metrics')
+    .option('--json', 'Output as JSON')
+    .action(async (options: { json?: boolean }) => {
+      try {
+        const config = getConfig();
+        const comparison = await fetchRolloutComparison(config);
+
+        if (options.json) {
+          print(formatJson(comparison));
+          return;
+        }
+
+        // Header with verdict
+        const verdictColor =
+          comparison.verdict === 'match'
+            ? green
+            : comparison.verdict === 'minor_diff'
+              ? yellow
+              : comparison.verdict === 'major_diff'
+                ? red
+                : dim;
+        print('');
+        print(bold('System Comparison'));
+        print(`  Verdict: ${verdictColor(comparison.verdict.replace('_', ' ').toUpperCase())}`);
+        print(`  In Sync: ${comparison.inSync ? green('Yes') : red('No')}`);
+        print('');
+
+        // Legacy system
+        print(bold('Legacy System'));
+        print(`  Queue Depth:  ${comparison.legacy.queueDepth}`);
+        print(`  Running:      ${comparison.legacy.runningCount}`);
+        print(`  Accepting:    ${comparison.legacy.accepting ? green('Yes') : red('No')}`);
+        print(`  Health:       ${comparison.legacy.health}`);
+        print('');
+
+        // New system (if available)
+        if (comparison.newSystem) {
+          print(bold('New System'));
+          print(`  Queue Depth:  ${comparison.newSystem.queueDepth}`);
+          print(`  Running:      ${comparison.newSystem.runningCount}`);
+          print(`  Accepting:    ${comparison.newSystem.accepting ? green('Yes') : red('No')}`);
+          print(`  Health:       ${comparison.newSystem.health}`);
+          print('');
+        } else {
+          print(dim('New system not available'));
+          print('');
+        }
+
+        // Differences
+        if (comparison.differences.length > 0) {
+          print(bold('Differences'));
+          for (const diff of comparison.differences) {
+            print(`  ${yellow('!')} ${diff}`);
+          }
+          print('');
+        }
+
+        // Shadow mismatches
+        if (comparison.shadowMismatches > 0) {
+          print(bold('Shadow Mode'));
+          print(`  Mismatches: ${red(String(comparison.shadowMismatches))}`);
+          print('');
+        }
+      } catch (error) {
+        printError(formatError(error instanceof Error ? error.message : String(error)));
+        process.exitCode = 1;
+      }
+    });
+
+  // Rollout set command
+  queue
+    .command('rollout-set')
+    .description('Update rollout configuration (in-memory only)')
+    .option('-p, --percent <n>', 'Set rollout percentage (0-100)')
+    .option('--shadow', 'Enable shadow mode')
+    .option('--no-shadow', 'Disable shadow mode')
+    .option('--new', 'Enable new queue system')
+    .option('--no-new', 'Disable new queue system')
+    .action(async (options: { percent?: string; shadow?: boolean; new?: boolean }) => {
+      try {
+        const config = getConfig();
+
+        // Build updates object
+        const updates: { rolloutPercent?: number; shadowMode?: boolean; useNewQueueSystem?: boolean } = {};
+
+        if (options.percent !== undefined) {
+          const percent = parseInt(options.percent, 10);
+          if (isNaN(percent) || percent < 0 || percent > 100) {
+            printError(formatError('Rollout percent must be 0-100'));
+            process.exitCode = 1;
+            return;
+          }
+          updates.rolloutPercent = percent;
+        }
+
+        if (options.shadow !== undefined) {
+          updates.shadowMode = options.shadow;
+        }
+
+        if (options.new !== undefined) {
+          updates.useNewQueueSystem = options.new;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          printError(formatError('No configuration options provided'));
+          process.exitCode = 1;
+          return;
+        }
+
+        const result = await updateRolloutConfig(config, updates);
+
+        if (result.updated) {
+          print(formatSuccess('Rollout configuration updated'));
+          print(`  New Phase: ${cyan(result.newPhase)}`);
+
+          if (result.appliedUpdates.rolloutPercent !== undefined) {
+            print(`  Rollout:   ${cyan(String(result.appliedUpdates.rolloutPercent) + '%')}`);
+          }
+          if (result.appliedUpdates.shadowMode !== undefined) {
+            print(`  Shadow:    ${result.appliedUpdates.shadowMode ? yellow('enabled') : dim('disabled')}`);
+          }
+          if (result.appliedUpdates.useNewQueueSystem !== undefined) {
+            print(`  New System: ${result.appliedUpdates.useNewQueueSystem ? green('enabled') : dim('disabled')}`);
+          }
+
+          print('');
+          print(formatWarning(result.warning));
+        } else {
+          printError(formatError('Failed to update configuration'));
+          process.exitCode = 1;
+        }
       } catch (error) {
         printError(formatError(error instanceof Error ? error.message : String(error)));
         process.exitCode = 1;
