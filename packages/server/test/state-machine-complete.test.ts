@@ -418,7 +418,7 @@ describe('Bug #65 Scenario Tests', () => {
 
       expect(run.state).toBe(RunState.FAILED);
 
-      // Set result (normally done by run-executor)
+      // Set result (normally done by ExecutionEngine)
       run.result = getResultForEvent(RunEvent.VERIFY_FAILED_TERMINAL);
 
       expect(run.result).toBe(RunResult.FAILED_VERIFICATION);
