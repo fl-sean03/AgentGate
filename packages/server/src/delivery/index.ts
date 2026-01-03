@@ -1,10 +1,15 @@
 /**
- * Delivery Module (v0.2.24)
+ * Delivery Module (v0.2.25)
  *
- * Handles delivery operations: git, PR, and notifications.
+ * Handles delivery operations: git, PR, notifications, and pluggable VCS.
  *
  * @module delivery
  */
+
+// v0.2.25: Pluggable delivery types and registry
+export * from './types.js';
+export { LocalDeliveryManager, type LocalDeliveryManagerOptions } from './local-manager.js';
+export { getDeliveryRegistry, resetDeliveryRegistry } from './registry.js';
 
 // Coordinator
 export {

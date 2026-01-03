@@ -515,14 +515,34 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
       }
 
       // SNAPSHOT PHASE
+      // v0.2.25: Wrap in try-catch to emit SNAPSHOT_FAILED instead of generic SYSTEM_ERROR
       onPhaseStart?.('snapshot', iteration);
-      const snapshot = await onSnapshot(
-        workspace,
-        beforeState,
-        runId,
-        iteration,
-        workOrder.taskPrompt
-      );
+      let snapshot: Snapshot;
+      try {
+        snapshot = await onSnapshot(
+          workspace,
+          beforeState,
+          runId,
+          iteration,
+          workOrder.taskPrompt
+        );
+      } catch (snapshotError) {
+        log.error({ runId, iteration, error: snapshotError }, 'Snapshot phase failed');
+        onPhaseEnd?.('snapshot', iteration);
+
+        run = applyTransition(run, RunEvent.SNAPSHOT_FAILED);
+        run.result = RunResult.FAILED_ERROR;
+        run.error = `Snapshot failed: ${snapshotError instanceof Error ? snapshotError.message : String(snapshotError)}`;
+        await saveRun(run);
+        onStateChange?.(run);
+
+        iterationData.errorType = IterationErrorType.SYSTEM_ERROR;
+        iterationData.errorMessage = run.error;
+        iterationData.completedAt = new Date();
+        onIterationComplete?.(run, iterationData);
+
+        break;
+      }
       onPhaseEnd?.('snapshot', iteration);
       onSnapshotCaptured?.(snapshot, iteration);
 
