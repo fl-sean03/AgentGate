@@ -20,6 +20,7 @@ import {
   ResourceMonitor,
   Scheduler,
   RetryManager,
+  QueueFacade,
 } from '../../queue/index.js';
 
 const log = createLogger('serve-command');
@@ -282,6 +283,47 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
     print('');
   }
 
+  // Initialize QueueFacade for feature flag-based routing (v0.2.22 - Phase 2)
+  let queueFacade: QueueFacade | null = null;
+  if (queueConfig.useNewQueueSystem || queueConfig.shadowMode || queueConfig.rolloutPercent > 0) {
+    print(`${bold('Initializing QueueFacade...')}`);
+
+    // Build options conditionally to avoid exactOptionalPropertyTypes issues
+    const facadeOptions: {
+      scheduler?: Scheduler;
+      resourceMonitor?: ResourceMonitor;
+      retryManager?: RetryManager;
+    } = {};
+    if (newScheduler) {
+      facadeOptions.scheduler = newScheduler;
+    }
+    if (newResourceMonitor) {
+      facadeOptions.resourceMonitor = newResourceMonitor;
+    }
+    if (newRetryManager) {
+      facadeOptions.retryManager = newRetryManager;
+    }
+
+    queueFacade = QueueFacade.fromConfig(
+      queueManager,
+      queueConfig,
+      facadeOptions
+    );
+
+    log.info(
+      {
+        useNewQueueSystem: queueConfig.useNewQueueSystem,
+        shadowMode: queueConfig.shadowMode,
+        rolloutPercent: queueConfig.rolloutPercent,
+      },
+      'QueueFacade initialized (Phase 2)'
+    );
+
+    print(`  ${bold('Active System:')} ${cyan(queueConfig.useNewQueueSystem && queueConfig.rolloutPercent >= 100 ? 'new' : queueConfig.shadowMode ? 'both (shadow)' : 'legacy + gradual rollout')}`);
+    print(`QueueFacade ready`);
+    print('');
+  }
+
   // Handle shutdown signals
   const shutdown = (): void => {
     print('');
@@ -303,7 +345,11 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
         print('Auto-processing stopped');
       }
 
-      // Stop new queue system components (v0.2.22 - Thrust 7)
+      // Stop new queue system components (v0.2.22 - Thrust 7 & Phase 2)
+      if (queueFacade) {
+        const stats = queueFacade.getStats();
+        log.info({ stats: stats.counters }, 'QueueFacade final statistics');
+      }
       if (newScheduler) {
         print('Stopping new scheduler...');
         newScheduler.stop();
