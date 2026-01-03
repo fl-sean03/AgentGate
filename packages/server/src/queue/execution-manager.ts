@@ -162,7 +162,7 @@ export class ExecutionManager extends EventEmitter {
       // Cleanup sandbox if it exists
       if (execution.sandbox) {
         execution.status = 'cleanup';
-        await this.cleanupSandbox(execution.sandbox).catch(cleanupErr => {
+        await this.cleanupSandbox(execution.sandbox).catch((cleanupErr: unknown) => {
           this.logger.error(
             { workOrderId: workOrder.id, err: cleanupErr },
             'Failed to cleanup sandbox after error'
@@ -325,7 +325,7 @@ export class ExecutionManager extends EventEmitter {
 
     // If sandbox exists, destroy it (this will cause execute() to fail)
     if (execution.sandbox) {
-      await execution.sandbox.destroy().catch(err => {
+      await execution.sandbox.destroy().catch((err: unknown) => {
         this.logger.error(
           { workOrderId, err },
           'Error destroying sandbox during cancel'

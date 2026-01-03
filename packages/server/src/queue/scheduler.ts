@@ -264,7 +264,7 @@ export class Scheduler extends EventEmitter {
     this.emit('work-claimed', workOrder, slot);
 
     // Execute (async, don't await)
-    this.executeWorkOrder(workOrder, slot).catch(err => {
+    this.executeWorkOrder(workOrder, slot).catch((err: unknown) => {
       this.logger.error(
         { workOrderId: workOrder.id, err },
         'Execution handler error'
