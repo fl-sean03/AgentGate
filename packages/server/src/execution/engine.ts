@@ -37,6 +37,7 @@ import {
 } from '../orchestrator/state-machine.js';
 import { createRun, saveRun, saveIterationData } from '../orchestrator/run-store.js';
 import { RunEvent, RunResult, RunState, type BeforeState } from '../types/index.js';
+import { captureBeforeState } from '../snapshot/snapshotter.js';
 import { getProgressEmitter } from '../observability/progress-emitter.js';
 import { getMetricsCollector } from '../observability/metrics-collector.js';
 import { createLogger } from '../utils/logger.js';
@@ -169,6 +170,16 @@ export class DefaultExecutionEngine implements ExecutionEngine {
       run = applyTransition(run, RunEvent.WORKSPACE_ACQUIRED);
       await saveRun(run);
 
+      // Capture initial before state from workspace (git HEAD SHA, branch, etc.)
+      // This is critical for snapshot phase to create proper git diffs
+      if (inputWorkspace) {
+        state.beforeState = await captureBeforeState(inputWorkspace);
+        this.logger.info(
+          { runId, beforeSha: state.beforeState.sha, branch: state.beforeState.branch },
+          'Captured initial before state'
+        );
+      }
+
       // Get timeout - parse maxWallClock string if provided (e.g., "2h", "30m")
       const maxWallClockMs = this.parseWallClockTimeout(taskSpec) ?? this.config.defaultTimeoutMs;
 
@@ -269,7 +280,23 @@ export class DefaultExecutionEngine implements ExecutionEngine {
           phaseBreakdown[phase] = (phaseBreakdown[phase] ?? 0) + duration;
         }
 
-        // Apply state transition
+        // Apply intermediate state transitions based on completed phases
+        // The state machine requires: BUILDING -> BUILD_COMPLETED -> SNAPSHOTTING -> SNAPSHOT_COMPLETED -> VERIFYING
+        // Then the final transition (VERIFY_PASSED, VERIFY_FAILED_RETRYABLE, etc.)
+
+        // If build phase succeeded, transition to SNAPSHOTTING
+        if (iterationResult.phases.build?.success) {
+          run = applyTransition(run, RunEvent.BUILD_COMPLETED);
+          await saveRun(run);
+        }
+
+        // If snapshot phase succeeded, transition to VERIFYING
+        if (iterationResult.phases.snapshot?.snapshot) {
+          run = applyTransition(run, RunEvent.SNAPSHOT_COMPLETED);
+          await saveRun(run);
+        }
+
+        // Apply final state transition from PhaseOrchestrator
         run = applyTransition(run, iterationResult.stateTransition as RunEvent);
 
         // Set result for failure states
