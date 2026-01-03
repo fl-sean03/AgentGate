@@ -18,6 +18,8 @@ export interface AgentRequest {
     maxTotalDescendants: number;
   } | null;
   workOrderId?: string | null;
+  /** Run ID for process tracking (used by AgentProcessManager) */
+  runId?: string | null;
 }
 
 /**

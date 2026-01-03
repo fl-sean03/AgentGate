@@ -148,6 +148,7 @@ export interface RunExecutorOptions {
     feedback: string | null,
     iteration: number,
     sessionId: string | null,
+    runId: string, // v0.2.22 fix: Pass runId for AgentProcessManager tracking
     streamingCallback?: StreamingEventCallback
   ) => Promise<BuildResult>;
 
@@ -422,6 +423,7 @@ export async function executeRun(options: RunExecutorOptions): Promise<Run> {
         feedback,
         iteration,
         run.sessionId,
+        runId, // v0.2.22 fix: Pass runId for AgentProcessManager tracking
         streamingCallback
       );
 

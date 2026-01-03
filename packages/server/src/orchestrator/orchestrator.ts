@@ -406,9 +406,9 @@ export class Orchestrator {
         return captureBeforeState(ws);
       },
 
-      onBuild: async (ws, taskPrompt, feedback, iteration, sessionId) => {
+      onBuild: async (ws, taskPrompt, feedback, iteration, sessionId, runId) => {
         log.debug(
-          { workspaceId: ws.id, iteration, hasFeedback: !!feedback },
+          { workspaceId: ws.id, iteration, hasFeedback: !!feedback, runId },
           'Building'
         );
 
@@ -429,6 +429,7 @@ export class Orchestrator {
             sessionId: sessionId,
             spawnLimits: this.config.enableSpawning ? this.config.spawnLimits : null,
             workOrderId: workOrder.id,
+            runId: runId, // v0.2.22 fix: Pass runId for AgentProcessManager tracking
           };
 
           const result = await driver.execute(request);
