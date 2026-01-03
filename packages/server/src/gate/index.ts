@@ -1,7 +1,64 @@
 /**
- * Gate Resolver module.
- * Provides functionality to resolve and generate verification gate plans.
+ * Gate Module (v0.2.24)
+ *
+ * Unified gate framework for verification checkpoints.
+ * Also re-exports legacy gate resolver functionality.
+ *
+ * @module gate
  */
+
+// ═══════════════════════════════════════════════════════════════════════════
+// v0.2.24 GATE RUNNER FRAMEWORK
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Runner types and base class
+export type {
+  GateRunner,
+  GateContext,
+  ValidationResult,
+  FormattedFailure,
+  VerificationDetails,
+  GitHubActionsDetails,
+  CustomCommandDetails,
+  ApprovalDetails,
+  ConvergenceDetails,
+  GateDetails,
+} from './runner-types.js';
+export { BaseGateRunner } from './base-runner.js';
+
+// Registry
+export {
+  GateRunnerRegistry,
+  createGateRunnerRegistry,
+  gateRunnerRegistry,
+  type GateRunnerFactory,
+} from './registry.js';
+
+// Pipeline
+export {
+  GatePipeline,
+  createGatePipeline,
+  type PipelineContext,
+  type PipelineOptions,
+} from './pipeline.js';
+
+// Runners
+export {
+  VerificationGateRunner,
+  createVerificationGateRunner,
+  GitHubActionsGateRunner,
+  createGitHubActionsGateRunner,
+  CustomCommandGateRunner,
+  createCustomCommandGateRunner,
+  ConvergenceGateRunner,
+  createConvergenceGateRunner,
+  ApprovalGateRunner,
+  createApprovalGateRunner,
+} from './runners/index.js';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LEGACY GATE RESOLVER (for backwards compatibility)
+// ═══════════════════════════════════════════════════════════════════════════
 
 // Error types
 export {

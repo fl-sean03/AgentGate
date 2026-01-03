@@ -87,7 +87,8 @@ describe('Scheduler Integration', () => {
     expect(claimed.length).toBe(2);
 
     // After first batch completes, should claim more
-    await new Promise(r => setTimeout(r, 400));
+    // Batch takes 300ms + poll interval, so wait generously
+    await new Promise(r => setTimeout(r, 600));
     expect(claimed.length).toBe(4);
   });
 
