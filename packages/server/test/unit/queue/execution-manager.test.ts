@@ -39,8 +39,14 @@ describe('ExecutionManager', () => {
       cleanup: vi.fn().mockResolvedValue(undefined),
     };
 
-    // Use minimal memory requirement to avoid failures on memory-constrained CI runners
-    resourceMonitor = new ResourceMonitor({ maxConcurrentSlots: 2, memoryPerSlotMB: 1 });
+    // Use minimal memory requirement and disable memory pressure checks
+    // to avoid failures on memory-constrained CI runners (fixes macOS CI)
+    resourceMonitor = new ResourceMonitor({
+      maxConcurrentSlots: 2,
+      memoryPerSlotMB: 1,
+      criticalThreshold: 1,  // Disable critical memory pressure check
+      warningThreshold: 1,   // Disable warning memory pressure check
+    });
     executionManager = new ExecutionManager(mockProvider, resourceMonitor, {
       executionTimeoutMs: 5000,
       cleanupDelayMs: 10,
