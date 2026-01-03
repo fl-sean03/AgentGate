@@ -27,6 +27,11 @@
   "devDependencies": {
     "vitest": "^1.2.0"
   },
+  "pnpm": {
+    "overrides": {
+      "esbuild": ">=0.25.0"
+    }
+  },
   "engines": {
     "node": ">=20.0.0"
   },
