@@ -1,27 +1,26 @@
 # 04: Legacy Removal
 
-## Overview
+## Status: COMPLETE
 
-With the ExecutionEngine fully integrated, we can remove the legacy `executeRun()` function and related code. This document details the deprecation and removal process.
+The legacy `executeRun()` function and related code has been **fully removed** from the codebase.
 
 ---
 
-## Legacy Code to Remove
+## What Was Removed
 
-### Primary Targets
+### Deleted Files
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `run-executor.ts` | 675 | Main legacy executor |
-| `execution/coordinator.ts` | ~400 | Unused coordinator (already deprecated) |
+| `run-executor.ts` | 675 | Legacy executor - **DELETED** |
 
-### Secondary Cleanup
+### Updated Files
 
 | File | Change | Description |
 |------|--------|-------------|
-| `orchestrator.ts` | Remove import | No longer uses executeRun |
-| `execution/index.ts` | Remove export | Clean up exports |
-| `types/run-executor.ts` | Remove | Types no longer needed |
+| `orchestrator.ts` | Refactored | Now uses ExecutionEngine directly |
+| `orchestrator/index.ts` | Updated exports | Exports engine-bridge instead of run-executor |
+| `state-machine-complete.test.ts` | Updated comment | Reference updated to ExecutionEngine |
 
 ---
 

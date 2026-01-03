@@ -1,63 +1,44 @@
 # DevGuide v0.2.26: ExecutionEngine Integration & Legacy Removal
 
 **Version**: 0.2.26
-**Status**: Planning
+**Status**: COMPLETE
 **Author**: AgentGate Team
 **Created**: 2026-01-03
+**Completed**: 2026-01-03
 **Prerequisites**: v0.2.25 complete
 
 ---
 
 ## Executive Summary
 
-v0.2.25 established the modular execution pipeline with phase handlers, ExecutionEngine, and observability. However, the new architecture runs *parallel* to the existing `executeRun()` rather than replacing it. This creates:
+v0.2.26 completes the execution pipeline transition started in v0.2.25. The legacy `executeRun()` function has been **fully removed** and the `ExecutionEngine` is now the sole execution path.
 
-1. **Two code paths** - Both `executeRun()` and `ExecutionEngine` exist
-2. **Maintenance burden** - Bug fixes must be applied to both paths
-3. **Inconsistent behavior** - Edge cases may differ between paths
-4. **Confusion** - Developers unsure which path to use
+### What Was Done
 
-### The Goal
-
-v0.2.26 completes the transition by:
-
-1. **Wiring ExecutionEngine to Orchestrator** - Make it the default execution path
-2. **Deprecating executeRun()** - Mark for removal with clear migration path
-3. **Removing legacy code** - Clean up the codebase
-4. **Full integration testing** - Ensure all workflows work with new engine
+1. **Wired ExecutionEngine to Orchestrator** - Now the default and only execution path
+2. **Created engine-bridge.ts** - Bridges orchestrator callbacks to PhaseServices
+3. **Removed executeRun()** - Legacy `run-executor.ts` deleted entirely
+4. **Full integration testing** - All 1767 tests pass
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    v0.2.25 (Current State)                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   WorkOrder → Orchestrator → executeRun()     ← ACTIVE (legacy)        │
-│                                                                         │
-│   ExecutionEngine → PhaseOrchestrator         ← AVAILABLE (new)        │
-│                                                                         │
-│   Problem: Two parallel paths, neither fully integrated                 │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                              ↓ INTEGRATE ↓
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    v0.2.26 (Target State)                               │
+│                    v0.2.26 Final Architecture                           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │   WorkOrder → Orchestrator.execute()                                    │
 │                      │                                                  │
 │                      ├── resolveTaskSpec()                              │
-│                      ├── createServiceAdapters()                        │
+│                      ├── createServicesFromCallbacks() [engine-bridge]  │
 │                      ├── ExecutionEngine.execute()                      │
 │                      │         │                                        │
 │                      │         ├── PhaseOrchestrator                    │
 │                      │         ├── StateMachine                         │
-│                      │         └── ProgressEmitter                      │
+│                      │         └── ProgressEmitter + MetricsCollector   │
 │                      │                                                  │
-│                      └── DeliveryManager (if GitHub)                    │
+│                      └── handleGitHubDelivery() (if GitHub)             │
 │                                                                         │
-│   executeRun() → REMOVED                                                │
+│   executeRun()      → DELETED (run-executor.ts removed)                 │
+│   RunExecutorOptions → DELETED                                          │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -101,14 +82,14 @@ v0.2.26 completes the transition by:
 
 ---
 
-## Success Criteria
+## Success Criteria (All Met)
 
-1. **All existing tests pass** with new execution path
-2. **executeRun() removed** from codebase
-3. **No duplicate code paths** for execution
-4. **GitHub workflows work** with new engine
+1. **All existing tests pass** with new execution path - 1767 tests pass
+2. **executeRun() removed** from codebase - run-executor.ts deleted
+3. **No duplicate code paths** for execution - ExecutionEngine is sole path
+4. **GitHub workflows work** with new engine - handleGitHubDelivery() implemented
 5. **Observability intact** - Progress events and metrics flow correctly
-6. **Documentation updated** with migration notes
+6. **Documentation updated** with migration notes - DevGuide v0.2.26 complete
 
 ---
 
@@ -131,17 +112,17 @@ v0.2.26 completes the transition by:
 
 ---
 
-## Timeline
+## Implementation Summary
 
-| Phase | Description | Estimated Effort |
-|-------|-------------|------------------|
-| 1 | Wire real services to adapters | ~2 hours |
-| 2 | Refactor Orchestrator to use ExecutionEngine | ~3 hours |
-| 3 | Integration testing | ~2 hours |
-| 4 | Remove executeRun() | ~1 hour |
-| 5 | Documentation and cleanup | ~1 hour |
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Create engine-bridge.ts with service factory | COMPLETE |
+| 2 | Refactor Orchestrator to use ExecutionEngine | COMPLETE |
+| 3 | Integration testing (1767 tests pass) | COMPLETE |
+| 4 | Remove executeRun() and run-executor.ts | COMPLETE |
+| 5 | Documentation and cleanup | COMPLETE |
 
-**Total**: ~9 hours
+**Completion Date**: 2026-01-03
 
 ---
 

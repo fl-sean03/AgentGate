@@ -10,12 +10,12 @@ export {
   type OrchestratorConfig,
 } from './orchestrator.js';
 
-// Run executor
+// Engine bridge (v0.2.26)
 export {
-  executeRun,
-  cancelRun,
-  type RunExecutorOptions,
-} from './run-executor.js';
+  createServicesFromCallbacks,
+  captureInitialBeforeState,
+  type ServiceFactoryOptions,
+} from './engine-bridge.js';
 
 // State machine
 export {
