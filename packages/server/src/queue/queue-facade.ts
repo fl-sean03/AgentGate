@@ -10,6 +10,14 @@
  * - Gradual rollout via percentage-based routing
  *
  * @module queue/queue-facade
+ *
+ * @deprecated Phase 4 Notice: The QueueFacade and its feature flag routing are
+ * deprecated migration tools. Once the new queue system is fully validated:
+ * 1. Set useNewQueueSystem=true and rolloutPercent=100
+ * 2. The facade will be simplified to directly use the new queue system
+ * 3. Legacy queue support will be removed in a future release
+ *
+ * Methods marked as @deprecated will be removed when the legacy queue is removed.
  */
 
 import { EventEmitter } from 'events';
@@ -220,6 +228,10 @@ export class QueueFacade extends EventEmitter {
 
   /**
    * Enqueue to legacy system.
+   *
+   * @deprecated This method routes to the legacy queue which is deprecated.
+   * Set useNewQueueSystem=true and rolloutPercent=100 to use the new queue system.
+   * Legacy queue support will be removed in a future release.
    */
   private enqueueToLegacy(
     workOrderId: string,
@@ -228,7 +240,7 @@ export class QueueFacade extends EventEmitter {
     this.counters.routedToLegacy++;
     this.emit('routed', workOrderId, 'legacy');
 
-    log.debug({ workOrderId }, 'Routing to legacy queue');
+    log.debug({ workOrderId }, 'Routing to legacy queue (deprecated)');
 
     return this.legacyQueue.enqueue(workOrderId, options);
   }
@@ -292,12 +304,16 @@ export class QueueFacade extends EventEmitter {
   /**
    * Enqueue with shadow mode - runs both systems and compares.
    * Primary result comes from legacy system.
+   *
+   * @deprecated Shadow mode is a migration tool for validating the new queue system.
+   * After validation, disable shadow mode and set rolloutPercent=100.
+   * This method will be removed when the legacy queue is removed.
    */
   private enqueueWithShadow(
     workOrderId: string,
     options: EnqueueOptions
   ): EnqueueResult {
-    log.debug({ workOrderId }, 'Shadow mode: running both systems');
+    log.debug({ workOrderId }, 'Shadow mode: running both systems (deprecated migration tool)');
 
     // Run legacy first (this is the source of truth)
     const legacyResult = this.enqueueToLegacy(workOrderId, options);
@@ -485,6 +501,9 @@ export class QueueFacade extends EventEmitter {
 
   /**
    * Get the legacy queue manager for direct access.
+   *
+   * @deprecated The legacy queue is deprecated. Use getScheduler() for the new
+   * queue system instead. This method will be removed when the legacy queue is removed.
    */
   getLegacyQueue(): QueueManager {
     return this.legacyQueue;
@@ -514,6 +533,10 @@ export class QueueFacade extends EventEmitter {
   /**
    * Update configuration dynamically.
    * Useful for runtime feature flag changes.
+   *
+   * @deprecated This method is used for feature flag-based migration which is deprecated.
+   * After completing migration (useNewQueueSystem=true, rolloutPercent=100), runtime
+   * configuration updates will no longer be needed and this method will be removed.
    */
   updateConfig(updates: Partial<QueueFacadeConfig>): void {
     const oldConfig = { ...this.config };
@@ -530,7 +553,7 @@ export class QueueFacade extends EventEmitter {
 
     log.info(
       { oldConfig, newConfig: this.config },
-      'QueueFacade configuration updated'
+      'QueueFacade configuration updated (deprecated migration feature)'
     );
   }
 
