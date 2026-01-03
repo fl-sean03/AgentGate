@@ -122,6 +122,8 @@ describe('QueueFacade Integration', () => {
       maxConcurrentSlots: 2,
       memoryPerSlotMB: 100,
       pollIntervalMs: 100,
+      criticalThreshold: 1,  // Disable memory pressure checks for CI
+      warningThreshold: 1,
     });
 
     scheduler = new Scheduler(resourceMonitor, {

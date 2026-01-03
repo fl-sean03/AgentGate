@@ -8,6 +8,7 @@ import {
   formatValidationErrors,
   bold,
   cyan,
+  yellow,
 } from '../formatter.js';
 import { getConfig, getQueueConfig } from '../../config/index.js';
 import { getQueueManager } from '../queue-manager.js';
@@ -152,6 +153,30 @@ async function executeServe(rawOptions: Record<string, unknown>): Promise<void> 
   print(`  ${bold('Shadow Mode:')} ${cyan(queueConfig.shadowMode ? 'enabled' : 'disabled')}`);
   print(`  ${bold('Rollout Percent:')} ${cyan(String(queueConfig.rolloutPercent) + '%')}`);
   print('');
+
+  // v0.2.22 Phase 4: Deprecation warning for legacy queue usage
+  const isUsingLegacyQueue = !queueConfig.useNewQueueSystem || queueConfig.rolloutPercent < 100;
+  if (isUsingLegacyQueue) {
+    print(`${yellow('⚠ DEPRECATION WARNING:')}`);
+    print(`${yellow('  The legacy queue system is deprecated and will be removed in a future release.')}`);
+    if (!queueConfig.useNewQueueSystem) {
+      print(`${yellow('  Set AGENTGATE_QUEUE_USE_NEW_SYSTEM=true to enable the new queue system.')}`);
+    }
+    if (queueConfig.rolloutPercent < 100) {
+      print(`${yellow('  Set AGENTGATE_QUEUE_ROLLOUT_PERCENT=100 to complete the migration.')}`);
+    }
+    print(`${yellow('  See the v0.2.22 migration guide for details.')}`);
+    print('');
+
+    log.warn(
+      {
+        useNewQueueSystem: queueConfig.useNewQueueSystem,
+        rolloutPercent: queueConfig.rolloutPercent,
+        shadowMode: queueConfig.shadowMode,
+      },
+      'Legacy queue system is deprecated - migrate to new queue system'
+    );
+  }
 
   // Start the server - only include apiKey if it's set
   const serverConfig: Parameters<typeof startServer>[0] = {
