@@ -127,7 +127,7 @@ export {
 } from './health-checker.js';
 
 // =============================================================================
-// Facade (Phase 2: Feature Flag Integration)
+// Facade (v0.2.22 Complete - Direct delegation to new queue system)
 // =============================================================================
 
 export {
@@ -135,4 +135,7 @@ export {
   type QueueFacadeConfig,
   type QueueFacadeEvents,
   type QueueFacadeStats,
+  type EnqueueOptions,
+  type EnqueueResult,
+  type QueuePosition,
 } from './queue-facade.js';

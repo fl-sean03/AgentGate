@@ -74,45 +74,6 @@ const sdkConfigSchema = z.object({
 
 export type SDKConfig = z.infer<typeof sdkConfigSchema>;
 
-/**
- * Queue configuration schema (v0.2.22 - new queue system)
- *
- * @deprecated These feature flags are deprecated as of v0.2.22 Phase 4 and will
- * be removed in a future release. The new queue system will become the default
- * and only implementation. Current behavior:
- * - useNewQueueSystem=false uses legacy queue (deprecated)
- * - useNewQueueSystem=true uses new queue system (recommended)
- * - shadowMode and rolloutPercent are migration tools that will be removed
- *
- * Migration path:
- * 1. Set useNewQueueSystem=true and rolloutPercent=100
- * 2. Verify stability in production
- * 3. These flags will be removed in the next minor release
- */
-const queueConfigSchema = z.object({
-  /**
-   * Enable new queue system (default: false)
-   * @deprecated Set to true and use rolloutPercent=100 for full migration.
-   * Legacy queue support will be removed in a future release.
-   */
-  useNewQueueSystem: z.coerce.boolean().default(false),
-
-  /**
-   * Run in shadow mode - both systems process (default: false)
-   * @deprecated Shadow mode is a migration tool. After validating the new
-   * queue system, disable this and set rolloutPercent=100.
-   */
-  shadowMode: z.coerce.boolean().default(false),
-
-  /**
-   * Rollout percentage for gradual migration (0-100)
-   * @deprecated Set to 100 to complete migration. This flag will be removed
-   * once the new queue system is the only implementation.
-   */
-  rolloutPercent: z.coerce.number().int().min(0).max(100).default(0),
-});
-
-export type QueueConfig = z.infer<typeof queueConfigSchema>;
 
 /**
  * Sandbox configuration schema
@@ -171,9 +132,6 @@ const configSchema = z.object({
 
   // Sandbox configuration
   sandbox: sandboxConfigSchema,
-
-  // Queue configuration (v0.2.22 - new queue system)
-  queue: queueConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -226,12 +184,6 @@ export function loadConfig(): AgentGateConfig {
       timeoutSeconds: process.env.AGENTGATE_SANDBOX_TIMEOUT_SECONDS,
       cleanupIntervalMs: process.env.AGENTGATE_SANDBOX_CLEANUP_INTERVAL_MS,
     },
-    // Queue configuration (v0.2.22 - new queue system)
-    queue: {
-      useNewQueueSystem: process.env.AGENTGATE_QUEUE_USE_NEW_SYSTEM,
-      shadowMode: process.env.AGENTGATE_QUEUE_SHADOW_MODE,
-      rolloutPercent: process.env.AGENTGATE_QUEUE_ROLLOUT_PERCENT,
-    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -253,9 +205,6 @@ export function loadConfig(): AgentGateConfig {
       sdkMaxTurns: result.data.sdk.maxTurns,
       sandboxProvider: result.data.sandbox.provider,
       sandboxImage: result.data.sandbox.image,
-      queueUseNewSystem: result.data.queue.useNewQueueSystem,
-      queueShadowMode: result.data.queue.shadowMode,
-      queueRolloutPercent: result.data.queue.rolloutPercent,
     },
     'Configuration loaded'
   );
@@ -381,14 +330,3 @@ export function buildSandboxManagerConfig(): {
   };
 }
 
-/**
- * Get queue configuration (v0.2.22 - new queue system)
- *
- * @deprecated The queue configuration feature flags are deprecated.
- * Set useNewQueueSystem=true and rolloutPercent=100 to complete migration.
- * These flags will be removed in a future release.
- */
-export function getQueueConfig(): QueueConfig {
-  const config = getConfig();
-  return config.queue;
-}

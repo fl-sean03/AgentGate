@@ -61,16 +61,6 @@ export {
 } from './types.js';
 export { registerHealthRoutes } from './routes/health.js';
 export {
-  registerQueueRolloutRoutes,
-  setQueueFacade,
-  getRegisteredFacade,
-  clearQueueFacade,
-  type RolloutStatusResponse,
-  type RolloutComparisonResponse,
-  type RolloutConfigUpdateResponse,
-  type SystemMetrics,
-} from './routes/queue-rollout.js';
-export {
   EventBroadcaster,
   registerWebSocketRoutes,
   WebSocketErrorCode,

@@ -16,7 +16,7 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 | Priority | Version | Focus | Status |
 |----------|---------|-------|--------|
 | 1 | **v0.2.23** | Queue Tactical Fixes | **✅ COMPLETE** |
-| 2 | **v0.2.22** | Queue Architecture Refactor | **✅ COMPLETE (Phase 1)** |
+| 2 | **v0.2.22** | Queue Architecture Refactor | **✅ COMPLETE** |
 | 3 | **v0.2.20** | Dashboard Enhancement | **IN PROGRESS** |
 | 4 | v0.2.21 | Terminal UI (TUI) | Planning |
 
@@ -44,16 +44,31 @@ v0.2.23 → v0.2.22 → v0.2.20 → v0.2.21
 - Retry manager with exponential backoff
 - Observability with metrics, audit log, health checks
 
-### Phase 2: Feature Flag Rollout - PENDING
+### Phase 2: Feature Flag Rollout - ✅ COMPLETE
 
-Enable new queue system via feature flag:
-```typescript
-// config: queue.useNewQueueSystem: boolean
-```
+| Task | PR | Status | Description |
+|------|-----|--------|-------------|
+| Phase 2 | #89 | ✅ MERGED | QueueFacade with feature flag integration |
 
-### Phase 3: Full Migration - PENDING
+### Phase 3: Gradual Rollout - ✅ COMPLETE
 
-Remove legacy queue implementation after Phase 2 validation
+| Task | PR | Status | Description |
+|------|-----|--------|-------------|
+| Phase 3 | #90 | ✅ MERGED | Rollout routes, shadow mode, percentage-based routing |
+
+### Phase 4: Legacy Removal - ✅ COMPLETE
+
+| Task | PR | Status | Description |
+|------|-----|--------|-------------|
+| Deprecation Notices | #91 | ✅ MERGED | Added deprecation warnings for legacy queue |
+| Legacy Removal | #92 | ✅ MERGED | Removed feature flags, simplified QueueFacade, removed rollout routes |
+
+**Changes in Phase 4 Legacy Removal:**
+- Removed `queueConfigSchema` and `getQueueConfig()` from config
+- Simplified `QueueFacade` to direct delegation to new queue system
+- Removed `queue-rollout.ts` routes (migration complete)
+- Updated `serve.ts` to use new queue system only
+- All tests pass, typecheck pass, lint pass
 
 ---
 

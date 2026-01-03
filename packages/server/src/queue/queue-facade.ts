@@ -1,266 +1,175 @@
 /**
- * Queue Facade - Phase 2 Feature Flag Integration
+ * Queue Facade - Direct delegation to new queue system
  *
- * Provides a unified interface that delegates to either the legacy
- * QueueManager or the new queue system based on feature flags.
- *
- * This enables:
- * - Feature flag-based switching between systems
- * - Shadow mode for result comparison
- * - Gradual rollout via percentage-based routing
+ * After v0.2.22 migration complete, this provides a clean interface
+ * to the new queue system components.
  *
  * @module queue/queue-facade
- *
- * @deprecated Phase 4 Notice: The QueueFacade and its feature flag routing are
- * deprecated migration tools. Once the new queue system is fully validated:
- * 1. Set useNewQueueSystem=true and rolloutPercent=100
- * 2. The facade will be simplified to directly use the new queue system
- * 3. Legacy queue support will be removed in a future release
- *
- * Methods marked as @deprecated will be removed when the legacy queue is removed.
  */
 
 import { EventEmitter } from 'events';
 import { createLogger } from '../utils/logger.js';
-import type {
-  QueueManager,
-  EnqueueOptions,
-  EnqueueResult,
-  QueuePosition,
-  QueueStats,
-} from '../control-plane/queue-manager.js';
 import { Scheduler, QueuedWorkOrder } from './scheduler.js';
-import { ResourceMonitor } from './resource-monitor.js';
+import { ResourceMonitor, type MemoryPressure } from './resource-monitor.js';
 import { RetryManager } from './retry-manager.js';
 import { WorkOrderStateMachine } from './state-machine.js';
-import type { QueueConfig } from '../config/index.js';
 
 const log = createLogger('queue-facade');
 
 /**
- * Configuration for QueueFacade.
+ * Enqueue options for work orders.
  */
-export interface QueueFacadeConfig {
-  /** Enable new queue system (default: false) */
-  useNewQueueSystem: boolean;
+export interface EnqueueOptions {
+  /** Priority (higher = more important) */
+  priority?: number;
+}
 
-  /** Run in shadow mode - both systems process (default: false) */
-  shadowMode: boolean;
+/**
+ * Result of an enqueue operation.
+ */
+export interface EnqueueResult {
+  /** Whether the enqueue succeeded */
+  success: boolean;
+  /** Position info if successful */
+  position: QueuePosition | null;
+  /** Error message if failed */
+  error?: string;
+}
 
-  /** Rollout percentage for gradual migration (0-100) */
-  rolloutPercent: number;
+/**
+ * Position of a work order in the queue.
+ */
+export interface QueuePosition {
+  /** Position in queue (1-indexed) */
+  position: number;
+  /** Estimated wait time in milliseconds */
+  estimatedWaitMs: number | null;
+  /** Number of work orders ahead */
+  ahead: number;
+  /** Current state */
+  state: 'waiting' | 'running';
+  /** When the work order was enqueued */
+  enqueuedAt: Date;
 }
 
 /**
  * Events emitted by QueueFacade.
  */
 export interface QueueFacadeEvents {
-  /** Emitted when shadow mode detects a difference between systems */
-  'shadow-mismatch': (workOrderId: string, legacy: unknown, newSystem: unknown) => void;
+  /** Emitted when a work order is enqueued */
+  'enqueued': (workOrderId: string) => void;
 
-  /** Emitted when a work order is routed to a specific system */
-  'routed': (workOrderId: string, system: 'legacy' | 'new') => void;
+  /** Emitted when a work order starts execution */
+  'started': (workOrderId: string) => void;
+
+  /** Emitted when a work order completes */
+  'completed': (workOrderId: string) => void;
 }
 
 /**
  * Statistics from QueueFacade.
  */
 export interface QueueFacadeStats {
-  /** Current active system */
-  activeSystem: 'legacy' | 'new' | 'both';
-
-  /** Whether shadow mode is enabled */
-  shadowMode: boolean;
-
-  /** Current rollout percentage */
-  rolloutPercent: number;
-
-  /** Stats from legacy system (if active) */
-  legacyStats: QueueStats | undefined;
-
-  /** Stats from new system (if active) */
-  newSystemStats: {
-    queueDepth: number;
-    isRunning: boolean;
-    availableSlots: number;
-    activeSlots: number;
-  } | undefined;
-
+  /** Queue depth (waiting items) */
+  queueDepth: number;
+  /** Whether scheduler is running */
+  isRunning: boolean;
+  /** Available execution slots */
+  availableSlots: number;
+  /** Active execution slots */
+  activeSlots: number;
+  /** Memory pressure level */
+  memoryPressure: MemoryPressure;
   /** Counters */
   counters: {
-    totalRouted: number;
-    routedToLegacy: number;
-    routedToNew: number;
-    shadowMismatches: number;
+    totalEnqueued: number;
+    totalStarted: number;
+    totalCompleted: number;
   };
 }
 
 /**
- * Simple hash function for consistent routing.
+ * Configuration for QueueFacade.
  */
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash);
+export interface QueueFacadeConfig {
+  /** Maximum concurrent slots */
+  maxConcurrentSlots?: number;
+  /** Memory per slot in MB */
+  memoryPerSlotMB?: number;
+  /** Poll interval in ms */
+  pollIntervalMs?: number;
+  /** Stagger delay in ms */
+  staggerDelayMs?: number;
+  /** Enable priority ordering */
+  priorityEnabled?: boolean;
 }
 
 /**
- * Determine if a work order should use the new queue system.
- */
-function shouldUseNewQueue(
-  workOrderId: string,
-  config: QueueFacadeConfig
-): boolean {
-  // If new system is fully enabled, always use it
-  if (config.useNewQueueSystem && config.rolloutPercent >= 100) {
-    return true;
-  }
-
-  // If new system is disabled and no rollout, use legacy
-  if (!config.useNewQueueSystem && config.rolloutPercent === 0) {
-    return false;
-  }
-
-  // Percentage-based routing using consistent hash
-  const hash = hashString(workOrderId);
-  return (hash % 100) < config.rolloutPercent;
-}
-
-/**
- * QueueFacade provides a unified interface that delegates to either
- * the legacy QueueManager or the new queue system based on configuration.
+ * QueueFacade provides a unified interface to the new queue system.
  *
  * Key features:
- * - Feature flag-based switching
- * - Shadow mode for comparing both systems
- * - Percentage-based rollout for gradual migration
- * - Event emission for monitoring routing decisions
+ * - Direct delegation to Scheduler, ResourceMonitor, RetryManager
+ * - Event emission for monitoring
+ * - Simple statistics reporting
  */
 export class QueueFacade extends EventEmitter {
-  private readonly config: QueueFacadeConfig;
-  private readonly legacyQueue: QueueManager;
-  private readonly scheduler: Scheduler | null;
-  private readonly resourceMonitor: ResourceMonitor | null;
-  private readonly retryManager: RetryManager | null;
+  private readonly scheduler: Scheduler;
+  private readonly resourceMonitor: ResourceMonitor;
+  private readonly retryManager: RetryManager;
 
   // Counters for monitoring
   private counters = {
-    totalRouted: 0,
-    routedToLegacy: 0,
-    routedToNew: 0,
-    shadowMismatches: 0,
+    totalEnqueued: 0,
+    totalStarted: 0,
+    totalCompleted: 0,
   };
 
   constructor(
-    legacyQueue: QueueManager,
-    config: QueueFacadeConfig,
-    options?: {
-      scheduler?: Scheduler;
-      resourceMonitor?: ResourceMonitor;
-      retryManager?: RetryManager;
-    }
+    scheduler: Scheduler,
+    resourceMonitor: ResourceMonitor,
+    retryManager: RetryManager
   ) {
     super();
-    this.legacyQueue = legacyQueue;
-    this.config = config;
-    this.scheduler = options?.scheduler ?? null;
-    this.resourceMonitor = options?.resourceMonitor ?? null;
-    this.retryManager = options?.retryManager ?? null;
+    this.scheduler = scheduler;
+    this.resourceMonitor = resourceMonitor;
+    this.retryManager = retryManager;
 
-    log.info(
-      {
-        useNewQueueSystem: config.useNewQueueSystem,
-        shadowMode: config.shadowMode,
-        rolloutPercent: config.rolloutPercent,
-        hasNewSystem: !!this.scheduler,
-      },
-      'QueueFacade initialized'
-    );
+    log.info('QueueFacade initialized with new queue system');
   }
 
   /**
-   * Create a QueueFacade from the queue config.
+   * Create a QueueFacade with default configuration.
    */
-  static fromConfig(
-    legacyQueue: QueueManager,
-    queueConfig: QueueConfig,
-    options?: {
-      scheduler?: Scheduler;
-      resourceMonitor?: ResourceMonitor;
-      retryManager?: RetryManager;
-    }
-  ): QueueFacade {
-    return new QueueFacade(
-      legacyQueue,
-      {
-        useNewQueueSystem: queueConfig.useNewQueueSystem,
-        shadowMode: queueConfig.shadowMode,
-        rolloutPercent: queueConfig.rolloutPercent,
-      },
-      options
-    );
+  static create(config: QueueFacadeConfig = {}): QueueFacade {
+    const resourceMonitor = new ResourceMonitor({
+      maxConcurrentSlots: config.maxConcurrentSlots ?? 5,
+      memoryPerSlotMB: config.memoryPerSlotMB ?? 2048,
+      pollIntervalMs: config.pollIntervalMs ?? 5000,
+    });
+
+    const scheduler = new Scheduler(resourceMonitor, {
+      pollIntervalMs: config.pollIntervalMs ?? 5000,
+      staggerDelayMs: config.staggerDelayMs ?? 30000,
+      priorityEnabled: config.priorityEnabled ?? false,
+      maxQueueDepth: 0, // Unlimited
+    });
+
+    const retryManager = new RetryManager({
+      maxRetries: 3,
+      baseDelayMs: 5000,
+      maxDelayMs: 300000,
+      backoffMultiplier: 2,
+      jitterFactor: 0.1,
+    });
+
+    return new QueueFacade(scheduler, resourceMonitor, retryManager);
   }
 
   /**
-   * Enqueue a work order using the appropriate system.
+   * Enqueue a work order.
    */
   enqueue(workOrderId: string, options: EnqueueOptions = {}): EnqueueResult {
-    this.counters.totalRouted++;
-
-    const useNew = shouldUseNewQueue(workOrderId, this.config);
-
-    // Shadow mode: run both and compare
-    if (this.config.shadowMode && this.scheduler) {
-      return this.enqueueWithShadow(workOrderId, options);
-    }
-
-    // Route to appropriate system
-    if (useNew && this.scheduler) {
-      return this.enqueueToNew(workOrderId, options);
-    }
-
-    return this.enqueueToLegacy(workOrderId, options);
-  }
-
-  /**
-   * Enqueue to legacy system.
-   *
-   * @deprecated This method routes to the legacy queue which is deprecated.
-   * Set useNewQueueSystem=true and rolloutPercent=100 to use the new queue system.
-   * Legacy queue support will be removed in a future release.
-   */
-  private enqueueToLegacy(
-    workOrderId: string,
-    options: EnqueueOptions
-  ): EnqueueResult {
-    this.counters.routedToLegacy++;
-    this.emit('routed', workOrderId, 'legacy');
-
-    log.debug({ workOrderId }, 'Routing to legacy queue (deprecated)');
-
-    return this.legacyQueue.enqueue(workOrderId, options);
-  }
-
-  /**
-   * Enqueue to new queue system.
-   */
-  private enqueueToNew(
-    workOrderId: string,
-    options: EnqueueOptions
-  ): EnqueueResult {
-    if (!this.scheduler) {
-      log.warn({ workOrderId }, 'New queue system not available, falling back to legacy');
-      return this.enqueueToLegacy(workOrderId, options);
-    }
-
-    this.counters.routedToNew++;
-    this.emit('routed', workOrderId, 'new');
-
-    log.debug({ workOrderId }, 'Routing to new queue system');
+    log.debug({ workOrderId, priority: options.priority }, 'Enqueueing work order');
 
     // Create a state machine for this work order
     const stateMachine = new WorkOrderStateMachine({
@@ -281,6 +190,7 @@ export class QueueFacade extends EventEmitter {
     const success = this.scheduler.enqueue(queuedWorkOrder);
 
     if (!success) {
+      log.warn({ workOrderId }, 'Failed to enqueue work order - queue full');
       return {
         success: false,
         position: null,
@@ -288,273 +198,144 @@ export class QueueFacade extends EventEmitter {
       };
     }
 
-    // Return compatible position info
+    this.counters.totalEnqueued++;
+    this.emit('enqueued', workOrderId);
+
+    // Return position info
     const queueDepth = this.scheduler.getQueueDepth();
     const position: QueuePosition = {
       position: queueDepth,
-      estimatedWaitMs: null, // New system doesn't provide estimates yet
+      estimatedWaitMs: null,
       ahead: queueDepth - 1,
       state: 'waiting',
       enqueuedAt: queuedWorkOrder.submittedAt,
     };
 
+    log.debug({ workOrderId, position: queueDepth }, 'Work order enqueued successfully');
     return { success: true, position };
   }
 
   /**
-   * Enqueue with shadow mode - runs both systems and compares.
-   * Primary result comes from legacy system.
-   *
-   * @deprecated Shadow mode is a migration tool for validating the new queue system.
-   * After validation, disable shadow mode and set rolloutPercent=100.
-   * This method will be removed when the legacy queue is removed.
-   */
-  private enqueueWithShadow(
-    workOrderId: string,
-    options: EnqueueOptions
-  ): EnqueueResult {
-    log.debug({ workOrderId }, 'Shadow mode: running both systems (deprecated migration tool)');
-
-    // Run legacy first (this is the source of truth)
-    const legacyResult = this.enqueueToLegacy(workOrderId, options);
-
-    // Run new system for comparison (don't count this in routing stats)
-    if (this.scheduler) {
-      try {
-        const stateMachine = new WorkOrderStateMachine({
-          workOrderId: `shadow-${workOrderId}`,
-          maxRetries: 3,
-        });
-
-        const queuedWorkOrder: QueuedWorkOrder = {
-          id: `shadow-${workOrderId}`,
-          stateMachine,
-          priority: options.priority ?? 0,
-          submittedAt: new Date(),
-          data: { options, shadow: true },
-        };
-
-        const newSuccess = this.scheduler.enqueue(queuedWorkOrder);
-
-        // Compare results
-        if (legacyResult.success !== newSuccess) {
-          this.counters.shadowMismatches++;
-          this.emit('shadow-mismatch', workOrderId, legacyResult, { success: newSuccess });
-
-          log.warn(
-            {
-              workOrderId,
-              legacySuccess: legacyResult.success,
-              newSuccess,
-            },
-            'Shadow mode: mismatch detected'
-          );
-        }
-      } catch (error) {
-        log.error({ workOrderId, error }, 'Shadow mode: new system error');
-      }
-    }
-
-    return legacyResult;
-  }
-
-  /**
-   * Get position of a work order.
+   * Get position of a work order in the queue.
    */
   getPosition(workOrderId: string): QueuePosition | null {
-    // Check legacy system first
-    const legacyPosition = this.legacyQueue.getPosition(workOrderId);
-    if (legacyPosition) {
-      return legacyPosition;
+    const queued = this.scheduler.getQueuedWorkOrders();
+    const index = queued.findIndex(w => w.id === workOrderId);
+
+    if (index === -1) {
+      return null;
     }
 
-    // Check new system
-    if (this.scheduler) {
-      const queued = this.scheduler.getQueuedWorkOrders();
-      const index = queued.findIndex(w => w.id === workOrderId);
-      if (index !== -1) {
-        const wo = queued[index]!;
-        return {
-          position: index + 1,
-          estimatedWaitMs: null,
-          ahead: index,
-          state: 'waiting',
-          enqueuedAt: wo.submittedAt,
-        };
-      }
-    }
-
-    return null;
+    const wo = queued[index]!;
+    return {
+      position: index + 1,
+      estimatedWaitMs: null,
+      ahead: index,
+      state: 'waiting',
+      enqueuedAt: wo.submittedAt,
+    };
   }
 
   /**
-   * Cancel a work order from either system.
+   * Cancel a work order from the queue.
    */
   cancel(workOrderId: string): boolean {
-    // Try legacy system
-    const legacyCancelled = this.legacyQueue.cancel(workOrderId);
-    if (legacyCancelled) {
+    const dequeued = this.scheduler.dequeue(workOrderId);
+    if (dequeued) {
+      log.debug({ workOrderId }, 'Work order cancelled');
       return true;
     }
-
-    // Try new system
-    if (this.scheduler) {
-      const dequeued = this.scheduler.dequeue(workOrderId);
-      if (dequeued) {
-        return true;
-      }
-    }
-
     return false;
   }
 
   /**
-   * Mark a work order as started in the appropriate system.
+   * Mark a work order as started.
    */
-  markStarted(
-    workOrderId: string,
-    options?: { abortController?: AbortController; maxWallClockMs?: number | null }
-  ): void {
-    // Legacy system handles this
-    this.legacyQueue.markStarted(workOrderId, options);
+  markStarted(workOrderId: string): void {
+    this.counters.totalStarted++;
+    this.emit('started', workOrderId);
+    log.debug({ workOrderId }, 'Work order marked as started');
   }
 
   /**
-   * Mark a work order as completed in the appropriate system.
+   * Mark a work order as completed.
    */
   markCompleted(workOrderId: string): void {
-    this.legacyQueue.markCompleted(workOrderId);
+    this.counters.totalCompleted++;
+    this.emit('completed', workOrderId);
+    log.debug({ workOrderId }, 'Work order marked as completed');
   }
 
   /**
    * Check if a work order can start immediately.
    */
   canStartImmediately(): boolean {
-    if (this.config.useNewQueueSystem && this.resourceMonitor) {
-      const health = this.resourceMonitor.getHealthReport();
-      return health.availableSlots > 0 && health.memoryPressure !== 'critical';
-    }
-
-    return this.legacyQueue.canStartImmediately();
+    const health = this.resourceMonitor.getHealthReport();
+    return health.availableSlots > 0 && health.memoryPressure !== 'critical';
   }
 
   /**
-   * Check if a work order is enqueued in either system.
+   * Check if a work order is in the queue.
    */
   isEnqueued(workOrderId: string): boolean {
-    if (this.legacyQueue.isEnqueued(workOrderId)) {
-      return true;
-    }
-
-    if (this.scheduler) {
-      const queued = this.scheduler.getQueuedWorkOrders();
-      return queued.some(w => w.id === workOrderId);
-    }
-
-    return false;
+    const queued = this.scheduler.getQueuedWorkOrders();
+    return queued.some(w => w.id === workOrderId);
   }
 
   /**
-   * Check if a work order is running.
-   */
-  isRunning(workOrderId: string): boolean {
-    return this.legacyQueue.isRunning(workOrderId);
-  }
-
-  /**
-   * Get combined statistics from both systems.
+   * Get queue statistics.
    */
   getStats(): QueueFacadeStats {
-    const legacyStats = this.legacyQueue.getStats();
-
-    let newSystemStats: QueueFacadeStats['newSystemStats'];
-    if (this.scheduler && this.resourceMonitor) {
-      const health = this.resourceMonitor.getHealthReport();
-      newSystemStats = {
-        queueDepth: this.scheduler.getQueueDepth(),
-        isRunning: this.scheduler.getStats().isRunning,
-        availableSlots: health.availableSlots,
-        activeSlots: health.activeSlots,
-      };
-    }
-
-    let activeSystem: 'legacy' | 'new' | 'both';
-    if (this.config.shadowMode) {
-      activeSystem = 'both';
-    } else if (this.config.useNewQueueSystem && this.config.rolloutPercent >= 100) {
-      activeSystem = 'new';
-    } else if (!this.config.useNewQueueSystem && this.config.rolloutPercent === 0) {
-      activeSystem = 'legacy';
-    } else {
-      activeSystem = 'both'; // Partial rollout
-    }
+    const health = this.resourceMonitor.getHealthReport();
+    const schedulerStats = this.scheduler.getStats();
 
     return {
-      activeSystem,
-      shadowMode: this.config.shadowMode,
-      rolloutPercent: this.config.rolloutPercent,
-      legacyStats,
-      newSystemStats,
+      queueDepth: this.scheduler.getQueueDepth(),
+      isRunning: schedulerStats.isRunning,
+      availableSlots: health.availableSlots,
+      activeSlots: health.activeSlots,
+      memoryPressure: health.memoryPressure,
       counters: { ...this.counters },
     };
   }
 
   /**
-   * Get the legacy queue manager for direct access.
-   *
-   * @deprecated The legacy queue is deprecated. Use getScheduler() for the new
-   * queue system instead. This method will be removed when the legacy queue is removed.
+   * Get the scheduler.
    */
-  getLegacyQueue(): QueueManager {
-    return this.legacyQueue;
-  }
-
-  /**
-   * Get the scheduler if available.
-   */
-  getScheduler(): Scheduler | null {
+  getScheduler(): Scheduler {
     return this.scheduler;
   }
 
   /**
-   * Get the resource monitor if available.
+   * Get the resource monitor.
    */
-  getResourceMonitor(): ResourceMonitor | null {
+  getResourceMonitor(): ResourceMonitor {
     return this.resourceMonitor;
   }
 
   /**
-   * Get the retry manager if available.
+   * Get the retry manager.
    */
-  getRetryManager(): RetryManager | null {
+  getRetryManager(): RetryManager {
     return this.retryManager;
   }
 
   /**
-   * Update configuration dynamically.
-   * Useful for runtime feature flag changes.
-   *
-   * @deprecated This method is used for feature flag-based migration which is deprecated.
-   * After completing migration (useNewQueueSystem=true, rolloutPercent=100), runtime
-   * configuration updates will no longer be needed and this method will be removed.
+   * Start the queue system.
    */
-  updateConfig(updates: Partial<QueueFacadeConfig>): void {
-    const oldConfig = { ...this.config };
+  start(): void {
+    this.resourceMonitor.start();
+    log.info('Queue system started');
+  }
 
-    if (updates.useNewQueueSystem !== undefined) {
-      (this.config as { useNewQueueSystem: boolean }).useNewQueueSystem = updates.useNewQueueSystem;
-    }
-    if (updates.shadowMode !== undefined) {
-      (this.config as { shadowMode: boolean }).shadowMode = updates.shadowMode;
-    }
-    if (updates.rolloutPercent !== undefined) {
-      (this.config as { rolloutPercent: number }).rolloutPercent = updates.rolloutPercent;
-    }
-
-    log.info(
-      { oldConfig, newConfig: this.config },
-      'QueueFacade configuration updated (deprecated migration feature)'
-    );
+  /**
+   * Stop the queue system.
+   */
+  stop(): void {
+    this.scheduler.stop();
+    this.resourceMonitor.stop();
+    this.retryManager.cancelAll();
+    log.info('Queue system stopped');
   }
 
   /**
@@ -562,10 +343,9 @@ export class QueueFacade extends EventEmitter {
    */
   resetCounters(): void {
     this.counters = {
-      totalRouted: 0,
-      routedToLegacy: 0,
-      routedToNew: 0,
-      shadowMismatches: 0,
+      totalEnqueued: 0,
+      totalStarted: 0,
+      totalCompleted: 0,
     };
   }
 }
