@@ -75,7 +75,7 @@ export class BuildPhaseHandler
     input: BuildPhaseInput
   ): Promise<BuildPhaseResult> {
     const startTime = Date.now();
-    const { services, workspace, taskSpec, logger } = context;
+    const { services, logger } = context;
 
     logger.info(
       {
@@ -112,7 +112,7 @@ export class BuildPhaseHandler
       await context.services.resultPersister.saveAgentResult(
         context.runId,
         context.iteration,
-        agentResult as import('../../types/index.js').AgentResult
+        agentResult
       );
 
       // Log completion
@@ -208,7 +208,7 @@ export class BuildPhaseHandler
     if (!wallClock) return null;
 
     const match = wallClock.match(/^(\d+)([smhd])$/);
-    if (!match || !match[1] || !match[2]) return null;
+    if (!match?.[1] || !match[2]) return null;
 
     const value = parseInt(match[1], 10);
     const unit = match[2];

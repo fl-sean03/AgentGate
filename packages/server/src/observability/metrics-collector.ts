@@ -113,7 +113,6 @@ export class DefaultMetricsCollector implements MetricsCollector {
   // Export as Prometheus format
   getMetrics(): string {
     const lines: string[] = [];
-    const now = Date.now();
 
     // Add HELP and TYPE comments for known metrics
     lines.push('# HELP agentgate_runs_started_total Total number of runs started');
