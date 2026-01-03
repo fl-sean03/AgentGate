@@ -1,5 +1,6 @@
 import { readFile, writeFile, readdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   getWorkOrdersDir,
   getWorkOrderPath,
@@ -256,7 +257,7 @@ export class WorkOrderStore {
 
     for (const file of jsonFiles) {
       try {
-        const content = await readFile(`${dir}/${file}`, 'utf-8');
+        const content = await readFile(join(dir, file), 'utf-8');
         const data = JSON.parse(content) as SerializedWorkOrder;
         const order = deserialize(data);
 
@@ -356,7 +357,7 @@ export class WorkOrderStore {
     let count = 0;
     for (const file of files.filter(f => f.endsWith('.json'))) {
       try {
-        const content = await readFile(`${dir}/${file}`, 'utf-8');
+        const content = await readFile(join(dir, file), 'utf-8');
         const data = JSON.parse(content) as SerializedWorkOrder;
         if (data.status === status) {
           count++;
@@ -441,7 +442,7 @@ export class WorkOrderStore {
     const corruptedFiles: string[] = [];
 
     for (const fileName of jsonFiles) {
-      const filePath = `${dir}/${fileName}`;
+      const filePath = join(dir, fileName);
       const result = await this.validateFile(fileName, filePath);
       results.push(result);
 
@@ -649,7 +650,7 @@ export class WorkOrderStore {
 
     for (const file of jsonFiles) {
       try {
-        const content = await readFile(`${dir}/${file}`, 'utf-8');
+        const content = await readFile(join(dir, file), 'utf-8');
         const data = JSON.parse(content) as SerializedWorkOrder;
         const order = deserialize(data);
 
