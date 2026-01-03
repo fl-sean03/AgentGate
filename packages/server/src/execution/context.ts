@@ -76,6 +76,12 @@ export interface ExecutionInput {
   workOrder: WorkOrder;
   taskSpec: ResolvedTaskSpec;
   leaseId?: string;
+  /** Optional workspace - if not provided, will be created from work order */
+  workspace?: Workspace;
+  /** Optional gate plan - if not provided, will be built from task spec */
+  gatePlan?: GatePlan;
+  /** Optional services - if not provided, mock services will be used */
+  services?: PhaseServices;
 }
 
 /**

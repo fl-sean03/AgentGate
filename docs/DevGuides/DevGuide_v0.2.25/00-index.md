@@ -1,10 +1,30 @@
 # DevGuide v0.2.25: Execution Pipeline Robustness Overhaul
 
 **Version**: 0.2.25
-**Status**: Planning
+**Status**: Implemented ✅
 **Author**: AgentGate Team
 **Created**: 2026-01-03
+**Updated**: 2026-01-03
 **Prerequisites**: v0.2.24 complete
+
+## Implementation Status
+
+| Thrust | Status | Notes |
+|--------|--------|-------|
+| 1: State Machine | ✅ Complete | FEEDBACK→VERIFY_FAILED_TERMINAL added, validator created |
+| 2: Phase Handlers | ✅ Complete | BuildPhaseHandler, SnapshotPhaseHandler, VerifyPhaseHandler, FeedbackPhaseHandler |
+| 3: ExecutionEngine | ✅ Complete | Unified engine with phase orchestration, can use mock or real services |
+| 4: DeliveryManager | ✅ Complete | Interface defined, LocalDeliveryManager implemented |
+| 5: Observability | ✅ Complete | ProgressEmitter, MetricsCollector |
+
+### Integration Status
+
+- **ExecutionEngine** is available as a modular execution path alongside existing `executeRun()`
+- **Service Adapters** bridge the existing implementations to the new interface
+- **TaskSpec Resolver** converts WorkOrder + HarnessConfig to TaskSpec format
+- Full wiring to replace `executeRun()` is planned for v0.2.26
+
+All 1767 tests pass. Build compiles cleanly.
 
 ---
 
