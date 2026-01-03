@@ -109,7 +109,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
    * Execute a work order to completion
    */
   async execute(input: ExecutionInput): Promise<ExecutionResult> {
-    const { workOrder, taskSpec, leaseId } = input;
+    const { workOrder, taskSpec, leaseId, services: inputServices, workspace: inputWorkspace, gatePlan: inputGatePlan } = input;
     const startTime = Date.now();
 
     // Check concurrency limit
@@ -213,7 +213,10 @@ export class DefaultExecutionEngine implements ExecutionEngine {
           isDirty: false,
           capturedAt: new Date(),
         };
-        const workspace = this.createMockWorkspace(workOrder, workspaceId);
+        // Use provided workspace or create mock
+        const workspace = inputWorkspace ?? this.createMockWorkspace(workOrder, workspaceId);
+        // Use provided services or create mock
+        const services = inputServices ?? this.createMockServices();
 
         const phaseContext: PhaseContext = {
           workOrderId: workOrder.id,
@@ -223,12 +226,12 @@ export class DefaultExecutionEngine implements ExecutionEngine {
           workspace,
           run,
           beforeState: state.beforeState ?? defaultBeforeState,
-          services: this.createMockServices(), // TODO: Wire real services
+          services,
           logger: this.logger,
         };
 
-        // Build gate plan
-        const gatePlan = this.buildGatePlan(taskSpec);
+        // Use provided gate plan or build from task spec
+        const gatePlan = inputGatePlan ?? this.buildGatePlan(taskSpec);
 
         // Execute iteration via PhaseOrchestrator
         const iterationInput: IterationInput = {

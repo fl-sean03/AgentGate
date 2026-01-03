@@ -32,6 +32,24 @@ export {
 // v0.2.25: Phase handlers
 export * from './phases/index.js';
 
+// v0.2.25: TaskSpec resolver
+export {
+  resolveTaskSpec,
+  extractGatePlan,
+  type TaskSpecResolverOptions,
+} from './task-spec-resolver.js';
+
+// v0.2.25: Service adapters
+export {
+  createServiceAdapters,
+  createAgentDriverAdapter,
+  createSnapshotterAdapter,
+  createVerifierAdapter,
+  createFeedbackGeneratorAdapter,
+  createResultPersisterAdapter,
+  type ServiceAdapterOptions,
+} from './service-adapters.js';
+
 // Legacy Coordinator (deprecated - use ExecutionEngine)
 export {
   ExecutionCoordinator,
