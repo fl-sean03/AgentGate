@@ -20,7 +20,7 @@ import { createServicesFromCallbacks } from './engine-bridge.js';
 import { loadRun, getRunStatus } from './run-store.js';
 import { workOrderService } from '../control-plane/work-order-service.js';
 import { createLogger } from '../utils/logger.js';
-import { getConfig } from '../config/index.js';
+import { getConfig, getSDKConfig } from '../config/index.js';
 
 const log = createLogger('orchestrator');
 
@@ -367,9 +367,13 @@ export class Orchestrator {
     }
 
     // Create agent driver based on agent type
+    // Get SDK config for sandbox setting
+    const sdkConfig = getSDKConfig();
+    const useSandbox = sdkConfig.enableSandbox;
+
     let driver: InstanceType<typeof ClaudeCodeDriver> | InstanceType<typeof ClaudeCodeSubscriptionDriver>;
     if (workOrder.agentType === AgentType.CLAUDE_CODE_SUBSCRIPTION) {
-      const subscriptionDriver = new ClaudeCodeSubscriptionDriver();
+      const subscriptionDriver = new ClaudeCodeSubscriptionDriver({ useSandbox });
       const available = await subscriptionDriver.isAvailable();
       if (!available) {
         const subscriptionStatus = subscriptionDriver.getSubscriptionStatus();
@@ -384,13 +388,14 @@ export class Orchestrator {
           subscriptionType: subscriptionStatus?.subscriptionType,
           rateLimitTier: subscriptionStatus?.rateLimitTier,
           billingMethod: 'subscription',
+          useSandbox,
         },
         'Using subscription-based billing'
       );
       driver = subscriptionDriver;
     } else {
-      driver = new ClaudeCodeDriver();
-      log.info({ billingMethod: 'api' }, 'Using API-based billing');
+      driver = new ClaudeCodeDriver({ useSandbox });
+      log.info({ billingMethod: 'api', useSandbox }, 'Using API-based billing');
     }
 
     // v0.2.26: Use ExecutionEngine instead of executeRun
