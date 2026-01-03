@@ -75,6 +75,8 @@ interface SerializedWorkOrder {
   siblingIndex?: number;
   integrationStatus?: WorkOrder['integrationStatus'];
   integrationWorkOrderId?: string;
+  // CI options (v0.2.16 / Issue #71)
+  waitForCI?: boolean;
 }
 
 /**
@@ -125,6 +127,11 @@ function serialize(order: WorkOrder): SerializedWorkOrder {
   }
   if (order.integrationWorkOrderId !== undefined) {
     result.integrationWorkOrderId = order.integrationWorkOrderId;
+  }
+
+  // CI options (v0.2.16 / Issue #71)
+  if (order.waitForCI !== undefined) {
+    result.waitForCI = order.waitForCI;
   }
 
   return result;
@@ -178,6 +185,11 @@ function deserialize(data: SerializedWorkOrder): WorkOrder {
   }
   if (data.integrationWorkOrderId !== undefined) {
     result.integrationWorkOrderId = data.integrationWorkOrderId;
+  }
+
+  // CI options (v0.2.16 / Issue #71)
+  if (data.waitForCI !== undefined) {
+    result.waitForCI = data.waitForCI;
   }
 
   return result;
