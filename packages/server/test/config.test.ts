@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadConfig, resetConfig, getConfig, getConfigLimits, getSDKConfig, buildSDKDriverConfig } from '../src/config/index.js';
+import { loadConfig, resetConfig, getConfig, getConfigLimits, getSDKConfig, buildSDKDriverConfig, getQueueConfig } from '../src/config/index.js';
 
 describe('Configuration Module', () => {
   // Store original env for restoration
@@ -518,6 +518,75 @@ describe('Configuration Module', () => {
       expect(driverConfig.maxTurns).toBe(75);
       expect(driverConfig.hooks.logToolUse).toBe(true);
       expect(driverConfig.hooks.trackFileChanges).toBe(false);
+    });
+  });
+
+  describe('Queue Configuration (v0.2.22)', () => {
+    describe('defaults', () => {
+      it('should return correct queue defaults when no env vars set', () => {
+        const config = loadConfig();
+
+        expect(config.queue.useNewQueueSystem).toBe(false);
+        expect(config.queue.shadowMode).toBe(false);
+        expect(config.queue.rolloutPercent).toBe(0);
+      });
+    });
+
+    describe('environment variable parsing', () => {
+      it('should parse AGENTGATE_QUEUE_USE_NEW_SYSTEM', () => {
+        vi.stubEnv('AGENTGATE_QUEUE_USE_NEW_SYSTEM', 'true');
+        const config = loadConfig();
+        expect(config.queue.useNewQueueSystem).toBe(true);
+      });
+
+      it('should parse AGENTGATE_QUEUE_SHADOW_MODE', () => {
+        vi.stubEnv('AGENTGATE_QUEUE_SHADOW_MODE', 'true');
+        const config = loadConfig();
+        expect(config.queue.shadowMode).toBe(true);
+      });
+
+      it('should parse AGENTGATE_QUEUE_ROLLOUT_PERCENT', () => {
+        vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '50');
+        const config = loadConfig();
+        expect(config.queue.rolloutPercent).toBe(50);
+      });
+    });
+
+    describe('validation', () => {
+      describe('rolloutPercent', () => {
+        it('should reject value below minimum (-1)', () => {
+          vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '-1');
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should reject value above maximum (101)', () => {
+          vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '101');
+          expect(() => loadConfig()).toThrow();
+        });
+
+        it('should accept boundary values (0 and 100)', () => {
+          vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '0');
+          expect(loadConfig().queue.rolloutPercent).toBe(0);
+
+          resetConfig();
+          vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '100');
+          expect(loadConfig().queue.rolloutPercent).toBe(100);
+        });
+      });
+    });
+  });
+
+  describe('getQueueConfig', () => {
+    it('should return queue configuration', () => {
+      vi.stubEnv('AGENTGATE_QUEUE_USE_NEW_SYSTEM', 'true');
+      vi.stubEnv('AGENTGATE_QUEUE_SHADOW_MODE', 'true');
+      vi.stubEnv('AGENTGATE_QUEUE_ROLLOUT_PERCENT', '25');
+
+      const queueConfig = getQueueConfig();
+
+      expect(queueConfig.useNewQueueSystem).toBe(true);
+      expect(queueConfig.shadowMode).toBe(true);
+      expect(queueConfig.rolloutPercent).toBe(25);
     });
   });
 });

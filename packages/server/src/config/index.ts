@@ -75,6 +75,22 @@ const sdkConfigSchema = z.object({
 export type SDKConfig = z.infer<typeof sdkConfigSchema>;
 
 /**
+ * Queue configuration schema (v0.2.22 - new queue system)
+ */
+const queueConfigSchema = z.object({
+  /** Enable new queue system (default: false) */
+  useNewQueueSystem: z.coerce.boolean().default(false),
+
+  /** Run in shadow mode - both systems process (default: false) */
+  shadowMode: z.coerce.boolean().default(false),
+
+  /** Rollout percentage for gradual migration (0-100) */
+  rolloutPercent: z.coerce.number().int().min(0).max(100).default(0),
+});
+
+export type QueueConfig = z.infer<typeof queueConfigSchema>;
+
+/**
  * Sandbox configuration schema
  */
 const sandboxConfigSchema = z.object({
@@ -131,6 +147,9 @@ const configSchema = z.object({
 
   // Sandbox configuration
   sandbox: sandboxConfigSchema,
+
+  // Queue configuration (v0.2.22 - new queue system)
+  queue: queueConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -183,6 +202,12 @@ export function loadConfig(): AgentGateConfig {
       timeoutSeconds: process.env.AGENTGATE_SANDBOX_TIMEOUT_SECONDS,
       cleanupIntervalMs: process.env.AGENTGATE_SANDBOX_CLEANUP_INTERVAL_MS,
     },
+    // Queue configuration (v0.2.22 - new queue system)
+    queue: {
+      useNewQueueSystem: process.env.AGENTGATE_QUEUE_USE_NEW_SYSTEM,
+      shadowMode: process.env.AGENTGATE_QUEUE_SHADOW_MODE,
+      rolloutPercent: process.env.AGENTGATE_QUEUE_ROLLOUT_PERCENT,
+    },
   };
 
   const result = configSchema.safeParse(raw);
@@ -204,6 +229,9 @@ export function loadConfig(): AgentGateConfig {
       sdkMaxTurns: result.data.sdk.maxTurns,
       sandboxProvider: result.data.sandbox.provider,
       sandboxImage: result.data.sandbox.image,
+      queueUseNewSystem: result.data.queue.useNewQueueSystem,
+      queueShadowMode: result.data.queue.shadowMode,
+      queueRolloutPercent: result.data.queue.rolloutPercent,
     },
     'Configuration loaded'
   );
@@ -327,4 +355,12 @@ export function buildSandboxManagerConfig(): {
     },
     cleanupIntervalMs: sandbox.cleanupIntervalMs,
   };
+}
+
+/**
+ * Get queue configuration (v0.2.22 - new queue system)
+ */
+export function getQueueConfig(): QueueConfig {
+  const config = getConfig();
+  return config.queue;
 }
