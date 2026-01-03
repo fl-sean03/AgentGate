@@ -84,13 +84,14 @@ function createAgentDriverFromClaudeCode(
       return driver.execute(fullRequest);
     },
 
-    async cancel(sessionId: string): Promise<void> {
+    cancel(sessionId: string): Promise<void> {
       // Cancellation is handled via AbortSignal passed to driver.execute()
       // The ExecutionEngine should use AbortController to cancel running agents
       log.warn(
         { sessionId },
         'Cancel called on AgentDriver - cancellation should be handled via AbortSignal'
       );
+      return Promise.resolve();
     },
   };
 }
@@ -221,13 +222,13 @@ function createResultPersisterFromSingleton(): ResultPersister {
       }
     },
 
-    async saveSnapshot(
+    saveSnapshot(
       _runId: string,
       _iteration: number,
       _snapshot: Snapshot
     ): Promise<string | null> {
       // Snapshots are saved as part of iteration data
-      return null;
+      return Promise.resolve(null);
     },
   };
 }

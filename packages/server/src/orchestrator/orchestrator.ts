@@ -3,13 +3,11 @@
  * Coordinates all modules to execute work orders.
  */
 
-import { randomUUID } from 'node:crypto';
 import {
   type WorkOrder,
   type Run,
   type GatePlan,
   type Workspace,
-  type AgentRequest,
   WorkspaceTemplate,
 } from '../types/index.js';
 import type { HarnessConfig, ResolvedHarnessConfig } from '../types/harness-config.js';
@@ -152,16 +150,9 @@ export class Orchestrator {
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
     const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
-    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, convertDraftToReady, pollCIStatus, parseCIFailures } = await import('../workspace/github.js');
-    const { captureBeforeState, captureAfterState } = await import(
-      '../snapshot/snapshotter.js'
-    );
-    const { verify } = await import('../verifier/verifier.js');
-    const { generateFeedback } = await import('../feedback/generator.js');
-    const { formatForAgent } = await import('../feedback/formatter.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, convertDraftToReady, pollCIStatus } = await import('../workspace/github.js');
     const { ClaudeCodeDriver } = await import('../agent/claude-code-driver.js');
     const { ClaudeCodeSubscriptionDriver } = await import('../agent/claude-code-subscription-driver.js');
-    const { DEFAULT_AGENT_CONSTRAINTS } = await import('../agent/defaults.js');
     const { AgentType } = await import('../types/work-order.js');
 
     // Create or acquire workspace
@@ -452,7 +443,7 @@ export class Orchestrator {
           run,
           workOrder,
           gitHubBranch,
-          { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, parseCIFailures }
+          { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady }
         );
       }
 
@@ -481,6 +472,7 @@ export class Orchestrator {
    * Handle GitHub delivery after successful execution (v0.2.26)
    * Extracted from legacy callbacks for cleaner separation
    */
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
   private async handleGitHubDelivery(
     workspace: Workspace,
     run: Run,
@@ -489,7 +481,7 @@ export class Orchestrator {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     githubOps: any
   ): Promise<void> {
-    const { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, parseCIFailures } = githubOps;
+    const { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady } = githubOps;
 
     if (!gitHubBranch) {
       log.warn({ runId: run.id }, 'No GitHub branch set, skipping GitHub delivery');
@@ -584,6 +576,7 @@ ${workOrder.taskPrompt}
       // Don't throw - run was successful even if GitHub delivery failed
     }
   }
+  /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
   /**
    * Get status of a run.

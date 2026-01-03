@@ -29,7 +29,6 @@ import {
   PhaseOrchestrator,
   type PhaseContext,
   type IterationInput,
-  Phase,
 } from './phases/index.js';
 import {
   applyTransition,
@@ -37,13 +36,15 @@ import {
   getResultForEvent,
 } from '../orchestrator/state-machine.js';
 import { createRun, saveRun, saveIterationData } from '../orchestrator/run-store.js';
-import { RunEvent, RunResult, RunState, type Run, type BeforeState } from '../types/index.js';
+import { RunEvent, RunResult, RunState, type BeforeState } from '../types/index.js';
 import { getProgressEmitter } from '../observability/progress-emitter.js';
 import { getMetricsCollector } from '../observability/metrics-collector.js';
 import { createLogger } from '../utils/logger.js';
 import type { Logger } from 'pino';
 
-const log = createLogger('execution-engine');
+// Module logger - used for top-level error logging
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _log = createLogger('execution-engine');
 
 /**
  * Execution Engine Interface
@@ -109,7 +110,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
    * Execute a work order to completion
    */
   async execute(input: ExecutionInput): Promise<ExecutionResult> {
-    const { workOrder, taskSpec, leaseId, services: inputServices, workspace: inputWorkspace, gatePlan: inputGatePlan } = input;
+    const { workOrder, taskSpec, services: inputServices, workspace: inputWorkspace, gatePlan: inputGatePlan } = input;
     const startTime = Date.now();
 
     // Check concurrency limit
@@ -392,10 +393,10 @@ export class DefaultExecutionEngine implements ExecutionEngine {
   /**
    * Cancel a running execution
    */
-  async cancel(runId: string, reason: string): Promise<void> {
+  cancel(runId: string, reason: string): Promise<void> {
     const state = this.activeRuns.get(runId);
     if (!state) {
-      throw new RunNotFoundError(runId);
+      return Promise.reject(new RunNotFoundError(runId));
     }
 
     this.logger.info({ runId, reason }, 'Canceling execution');
@@ -406,6 +407,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
     if (this.config.emitProgressEvents) {
       getProgressEmitter().emitRunCanceled(state.context?.workOrderId ?? '', runId, reason);
     }
+    return Promise.resolve();
   }
 
   /**
@@ -444,7 +446,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
 
     // Parse duration string like "2h", "30m", "1d"
     const match = wallClock.match(/^(\d+)([smhd])$/);
-    if (!match || !match[1] || !match[2]) return null;
+    if (!match?.[1] || !match[2]) return null;
 
     const value = parseInt(match[1], 10);
     const unit = match[2];
@@ -503,7 +505,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
   /**
    * Build gate plan from task spec
    */
-  private buildGatePlan(taskSpec: import('../types/index.js').ResolvedTaskSpec): import('../types/index.js').GatePlan {
+  private buildGatePlan(_taskSpec: import('../types/index.js').ResolvedTaskSpec): import('../types/index.js').GatePlan {
     // TODO: Extract from harness config or task spec
     // Return a minimal valid GatePlan
     return {
@@ -538,7 +540,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
   private createMockServices(): import('./phases/types.js').PhaseServices {
     return {
       agentDriver: {
-        execute: async () => ({
+        execute: () => Promise.resolve({
           success: true,
           exitCode: 0,
           stdout: '',
@@ -548,10 +550,10 @@ export class DefaultExecutionEngine implements ExecutionEngine {
           tokensUsed: null,
           durationMs: 0,
         }),
-        cancel: async () => {},
+        cancel: () => Promise.resolve(),
       },
       snapshotter: {
-        capture: async () => ({
+        capture: () => Promise.resolve({
           id: randomUUID(),
           runId: '',
           iteration: 1,
@@ -567,7 +569,7 @@ export class DefaultExecutionEngine implements ExecutionEngine {
         }),
       },
       verifier: {
-        verify: async () => ({
+        verify: () => Promise.resolve({
           id: randomUUID(),
           snapshotId: '',
           runId: '',
@@ -584,12 +586,12 @@ export class DefaultExecutionEngine implements ExecutionEngine {
         }),
       },
       feedbackGenerator: {
-        generate: async () => 'Feedback',
+        generate: () => Promise.resolve('Feedback'),
       },
       resultPersister: {
-        saveAgentResult: async () => null,
-        saveVerificationReport: async () => null,
-        saveSnapshot: async () => null,
+        saveAgentResult: () => Promise.resolve(null),
+        saveVerificationReport: () => Promise.resolve(null),
+        saveSnapshot: () => Promise.resolve(null),
       },
     };
   }

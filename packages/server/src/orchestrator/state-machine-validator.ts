@@ -202,7 +202,7 @@ export class StateMachineValidator {
 
       const stateTransitions = this.transitions[current];
       if (stateTransitions) {
-        for (const nextState of Object.values(stateTransitions) as RunState[]) {
+        for (const nextState of Object.values(stateTransitions)) {
           if (!reachable.has(nextState)) {
             queue.push(nextState);
           }

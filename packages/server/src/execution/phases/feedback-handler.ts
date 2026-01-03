@@ -185,7 +185,7 @@ export class FeedbackPhaseHandler
       if (report.l0Result.checks) {
         for (const check of report.l0Result.checks) {
           if (!check.passed) {
-            lines.push(`- ${check.name}: ${check.message || 'Failed'}`);
+            lines.push(`- ${check.name}: ${check.message ?? 'Failed'}`);
             if (this.options.includeRawOutput && check.details) {
               lines.push('```');
               lines.push(this.truncateOutput(check.details, 500));
@@ -203,7 +203,7 @@ export class FeedbackPhaseHandler
       if (report.l1Result.checks) {
         for (const check of report.l1Result.checks) {
           if (!check.passed) {
-            lines.push(`- ${check.name}: ${check.message || 'Failed'}`);
+            lines.push(`- ${check.name}: ${check.message ?? 'Failed'}`);
             if (this.options.includeRawOutput && check.details) {
               lines.push('```');
               lines.push(this.truncateOutput(check.details, 500));
@@ -221,7 +221,7 @@ export class FeedbackPhaseHandler
       if (report.l2Result.checks) {
         for (const check of report.l2Result.checks) {
           if (!check.passed) {
-            lines.push(`- ${check.name}: ${check.message || 'Failed'}`);
+            lines.push(`- ${check.name}: ${check.message ?? 'Failed'}`);
             if (this.options.includeRawOutput && check.details) {
               lines.push('```');
               lines.push(this.truncateOutput(check.details, 500));
@@ -239,7 +239,7 @@ export class FeedbackPhaseHandler
       if (report.l3Result.checks) {
         for (const check of report.l3Result.checks) {
           if (!check.passed) {
-            lines.push(`- ${check.name}: ${check.message || 'Failed'}`);
+            lines.push(`- ${check.name}: ${check.message ?? 'Failed'}`);
           }
         }
       }

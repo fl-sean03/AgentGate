@@ -193,7 +193,7 @@ export function createFeedbackGeneratorAdapter(
   formatFeedback?: ServiceAdapterOptions['formatFeedback']
 ): FeedbackGenerator {
   return {
-    async generate(
+    generate(
       _snapshot: Snapshot,
       report: VerificationReport,
       _gatePlan: GatePlan,
@@ -201,12 +201,12 @@ export function createFeedbackGeneratorAdapter(
     ): Promise<string> {
       if (generateFeedback && formatFeedback) {
         const structured = generateFeedback(report, report.iteration);
-        return formatFeedback(structured);
+        return Promise.resolve(formatFeedback(structured));
       }
 
       // Default implementation - simple feedback
       if (report.passed) {
-        return 'All verification gates passed.';
+        return Promise.resolve('All verification gates passed.');
       }
 
       const failures: string[] = [];
@@ -215,7 +215,7 @@ export function createFeedbackGeneratorAdapter(
       if (!report.l2Result?.passed) failures.push('L2 (blackbox)');
       if (!report.l3Result?.passed) failures.push('L3 (review)');
 
-      return `Verification failed at levels: ${failures.join(', ')}. Please review the test output and fix the issues.`;
+      return Promise.resolve(`Verification failed at levels: ${failures.join(', ')}. Please review the test output and fix the issues.`);
     },
   };
 }
@@ -250,13 +250,13 @@ export function createResultPersisterAdapter(): ResultPersister {
         return null;
       }
     },
-    async saveSnapshot(
+    saveSnapshot(
       _runId: string,
       _iteration: number,
       _snapshot: Snapshot
     ): Promise<string | null> {
       // Snapshots are saved as part of the iteration data, not separately
-      return null;
+      return Promise.resolve(null);
     },
   };
 }

@@ -13,10 +13,6 @@ import {
   type PhaseContext,
   type IterationInput,
   type IterationResult,
-  type BuildPhaseResult,
-  type SnapshotPhaseResult,
-  type VerifyPhaseResult,
-  type FeedbackPhaseResult,
   Phase,
 } from './types.js';
 import { BuildPhaseHandler } from './build-handler.js';
@@ -199,7 +195,12 @@ export class PhaseOrchestrator {
   /**
    * Get the handlers for testing/inspection
    */
-  getHandlers() {
+  getHandlers(): {
+    build: BuildPhaseHandler;
+    snapshot: SnapshotPhaseHandler;
+    verify: VerifyPhaseHandler;
+    feedback: FeedbackPhaseHandler;
+  } {
     return {
       build: this.buildHandler,
       snapshot: this.snapshotHandler,
