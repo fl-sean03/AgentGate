@@ -24,6 +24,8 @@ import {
 } from '../workspace/git-ops.js';
 import { createLogger } from '../utils/logger.js';
 import { nanoid } from 'nanoid';
+import { createRetryPolicyEngine, type RetryPolicy } from '../orchestrator/retry-policy.js';
+import { BuildErrorType } from '../types/build-error.js';
 
 const log = createLogger('git-handler');
 

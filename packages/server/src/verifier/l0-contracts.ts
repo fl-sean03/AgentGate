@@ -6,6 +6,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import fg from 'fast-glob';
+import Ajv, { type ValidateFunction, type ErrorObject } from 'ajv';
 import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';
@@ -15,6 +16,36 @@ import {
 } from '../security/integration/index.js';
 
 const log = createLogger('l0-contracts');
+
+/**
+ * Schema cache for JSON Schema validation.
+ * Maps schema path to compiled validate function.
+ */
+const schemaCache = new Map<string, ValidateFunction>();
+
+/**
+ * Ajv instance for JSON Schema validation.
+ * Using strict mode and all errors for comprehensive validation.
+ */
+const ajv = new Ajv({
+  strict: true,
+  allErrors: true,
+  verbose: true,
+});
+
+/**
+ * Clear the schema cache. Useful for testing.
+ */
+export function clearSchemaCache(): void {
+  schemaCache.clear();
+}
+
+/**
+ * Get the current schema cache size. Useful for testing.
+ */
+export function getSchemaCacheSize(): number {
+  return schemaCache.size;
+}
 
 /**
  * Run L0 contract verification.
