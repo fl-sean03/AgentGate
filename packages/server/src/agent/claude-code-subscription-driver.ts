@@ -312,8 +312,10 @@ export class ClaudeCodeSubscriptionDriver implements AgentDriver {
 
       // Get sandbox stats for info
       const stats = await sandbox.getStats();
+      // Extract provider from sandbox ID (format: "provider-id", e.g., "subprocess-abc123")
+      const actualProvider = sandbox.id.split('-')[0] ?? sandboxManager.getProviderName();
       const sandboxInfo: SandboxInfo = {
-        provider: sandboxManager.getProviderName(),
+        provider: actualProvider,
         durationMs: Date.now() - sandboxStartTime,
       };
       // Add optional properties only if defined
