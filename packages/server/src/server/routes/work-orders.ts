@@ -886,16 +886,28 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
         });
 
         // Get the run ID from the most recent run (just created)
-        // Since execute is async, we wait a short time for run creation
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const runs = await getRunsForWorkOrder(id);
-        const latestRun = runs.sort((a, b) =>
-          b.startedAt.getTime() - a.startedAt.getTime()
-        )[0];
+        // v0.2.30: Wait longer with retry to ensure run is created before returning
+        let latestRun: import('../../types/index.js').Run | undefined;
+        for (let i = 0; i < 10; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const runs = await getRunsForWorkOrder(id);
+          latestRun = runs.sort((a, b) =>
+            b.startedAt.getTime() - a.startedAt.getTime()
+          )[0];
+          if (latestRun) break;
+        }
+
+        // If run still not found after retries, log warning
+        if (!latestRun) {
+          logger.warn(
+            { workOrderId: id },
+            'Run not found after retries - execution may have failed early'
+          );
+        }
 
         const response: StartRunResponse = {
-          runId: latestRun?.id ?? `run-${id}-${Date.now()}`,
-          status: 'building',
+          runId: latestRun?.id ?? `run-${id}-queued`,
+          status: latestRun ? 'building' : 'queued',
           startedAt: (latestRun?.startedAt ?? startedAt).toISOString(),
         };
 

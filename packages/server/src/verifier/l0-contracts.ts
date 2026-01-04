@@ -6,7 +6,9 @@
 import { access, readFile } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import fg from 'fast-glob';
-import Ajv, { type ValidateFunction, type ErrorObject, type AnySchema } from 'ajv';
+import _Ajv, { type ValidateFunction, type ErrorObject, type AnySchema } from 'ajv';
+// ESM/CJS interop - Ajv default export differs between module systems
+const Ajv = (_Ajv as { default?: typeof _Ajv }).default ?? _Ajv;
 import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';

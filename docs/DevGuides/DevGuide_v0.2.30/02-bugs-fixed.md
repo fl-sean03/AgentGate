@@ -237,16 +237,91 @@ if (Object.keys(resourceLimits).length > 0) {
 
 ## Identified But Not Fixed
 
-### Bug #4: Run Stuck in "building" State on Crash
+### Bug #4: Run Appears Stuck in "building" State
 
-**Problem:** If server crashes during run initialization, the run remains in "building" state forever.
+**Problem:** Runs can appear "stuck" in "building" state for 4-5 minutes.
 
-**Impact:** Medium - requires manual cleanup
+**Clarification:** This is NOT a bug - L3 sanity verification takes ~4.5 minutes on large codebases like AgentGate because it scans thousands of files.
+
+**Impact:** Low - just wait for verification to complete
+
+**Note:** Actual crash recovery (if server crashes during run) is a separate issue that would require WAL-based recovery.
+
+### Bug #8: GitHub Workflow Pushes on Read-Only Tasks (NEW)
+
+**Problem:** When submitting a GitHub-sourced work order for a read-only task (e.g., "analyze the README"), the system still tries to push changes back, resulting in permission errors.
+
+**Impact:** High - GitHub-sourced work orders fail on repos without push access
+
+**Symptoms:**
+```
+GitError: Pushing to https://github.com/owner/repo.git
+remote: Permission to owner/repo.git denied to user.
+fatal: unable to access: The requested URL returned error: 403
+```
 
 **Solution Options:**
-1. WAL-based recovery on startup
-2. Timeout-based cleanup (mark as failed after X minutes)
-3. Health check endpoint that detects orphans
+1. Skip push if no files changed
+2. Detect read-only intent from task prompt
+3. Add `readOnly: true` option to work order
+
+### Bug #9: Run Not Persisted on Early Failure (NEW)
+
+**Problem:** When run creation fails early (e.g., GitHub clone permission error), the API returns success with a run ID but the run is never persisted to disk.
+
+**Impact:** Medium - run ID is unusable, returns 404 when queried
+
+**Symptoms:**
+1. POST `/api/v1/work-orders/{id}/runs` returns `{"runId": "run-xxx-123", "status": "building"}`
+2. GET `/api/v1/runs/run-xxx-123` returns `{"error": "Run not found"}`
+
+**Solution:** Persist run record before starting execution, update status on failure
+
+### Bug #11: Run ID Format Mismatch (NEW)
+
+**Problem:** The API returns run IDs in format `run-{workOrderId}-{timestamp}` but internal storage uses UUID format.
+
+**Impact:** High - returned run IDs can't be used to query the run
+
+**Symptoms:**
+1. Start run: API returns `{"runId": "run-abc123-1767551544891"}`
+2. Query with that ID: Returns 404
+3. Actual run ID is a UUID: `9b4deee1-9fee-4e2b-9135-dd50f8f53c81`
+
+**Root Cause:** The POST `/work-orders/:id/runs` route waits only 100ms for run creation, then falls back to a generated ID if run isn't created yet.
+
+**Fix Applied (v0.2.30):** `src/server/routes/work-orders.ts`
+- Added retry loop (10 attempts, 200ms each) to wait for run creation
+- Fallback ID now uses `run-${id}-queued` to indicate pending state
+- Added warning log when run isn't found after retries
+
+**Note:** Fix written but blocked by pre-existing TypeScript strictness errors (see Bug #12)
+
+### Bug #12: TypeScript exactOptionalPropertyTypes Errors (NEW)
+
+**Problem:** Build fails with many `exactOptionalPropertyTypes` errors throughout codebase.
+
+**Impact:** Medium - blocks building new changes
+
+**Affected Files:**
+- `src/agent/capabilities.ts`
+- `src/control-plane/work-order-store.ts`
+- `src/errors/base.ts`
+- `src/gate/builder.ts`
+- `src/github/rate-limiter.ts`
+- `src/logging/correlation.ts`
+- `src/orchestrator/wal.ts`
+- `src/verifier/l0-contracts.ts`
+
+**Symptoms:**
+```
+error TS2375: Type '{ ... }' is not assignable to type 'X' with 'exactOptionalPropertyTypes: true'.
+error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+```
+
+**Solution:** Either:
+1. Fix all type assignments to handle undefined explicitly
+2. Or disable `exactOptionalPropertyTypes` in tsconfig.json temporarily
 
 ### Bug #5: CLI `serve` Command Exits Immediately
 

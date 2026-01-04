@@ -56,14 +56,18 @@ After v0.2.30 completion:
 | ID | Bug | Status | Fix Location |
 |----|-----|--------|--------------|
 | #3 | L3 large-files false positive on .pnpm-store | Fixed | `l3-sanity.ts:148-158` |
+| #8 | GitHub workflow pushes on read-only tasks | Identified | Git push on unchanged files |
+| #11 | Run ID format mismatch API vs storage | Identified | Routes vs run-store |
 
 ### Medium (Quality Issues)
 
 | ID | Bug | Status | Notes |
 |----|-----|--------|-------|
-| #4 | Run stuck in "building" state on crash | Identified | Needs recovery mechanism |
+| #4 | Run appears stuck in "building" (L3 slow) | Clarified | L3 takes ~4.5 min, not a bug |
 | #5 | CLI `serve` command exits immediately | Identified | Process lifecycle issue |
 | #6 | No workspace path validation at submit | Identified | API accepts nonexistent paths |
+| #9 | Run not persisted on early failure | Identified | Run ID returned but 404 on query |
+| #12 | TypeScript exactOptionalPropertyTypes errors | Identified | Blocks building new changes |
 
 ---
 

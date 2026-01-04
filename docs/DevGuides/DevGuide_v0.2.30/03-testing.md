@@ -43,6 +43,41 @@ This dogfooding session focused on integration testing through actual API usage 
 
 ---
 
+## API Edge Case Testing (v0.2.30 Session)
+
+### Validation Tests
+
+| Test Case | Input | Result | Status |
+|-----------|-------|--------|--------|
+| Empty task prompt | `""` | 400 - minimum 10 chars | PASS |
+| Short task prompt | `"short"` | 400 - minimum 10 chars | PASS |
+| Invalid maxIterations type | `"five"` | 400 - expected number | PASS |
+| Negative maxIterations | `-5` | 400 - must be >= 1 | PASS |
+| Zero maxIterations | `0` | 400 - must be >= 1 | PASS |
+| Unicode in task | `こんにちは 🚀` | 201 - accepted | PASS |
+| Special chars | `\n\t\\` | 201 - accepted | PASS |
+| SQL-like content | `SELECT * FROM...` | 201 - accepted | PASS |
+| Path traversal | `/tmp/../../../etc` | 201 - accepted | **FAIL** |
+| Nonexistent path | `/nonexistent/path` | 201 - accepted | **FAIL** |
+| Invalid JSON | `{invalid}` | 400 - parse error | PASS |
+| Missing workspaceSource | `{"taskPrompt": "..."}` | 400 - required | PASS |
+
+### Timing Tests
+
+| Test | Duration | Notes |
+|------|----------|-------|
+| L3 sanity verification | ~4.5 minutes | Normal for large codebases |
+| Run creation to API response | ~200-2000ms | Depends on orchestrator speed |
+| Agent execution (simple task) | ~6-15 seconds | Varies by complexity |
+
+### Security Considerations
+
+- **Path traversal not blocked at submit** - Bug #6 confirmed
+- **No path canonicalization** - could specify `/../../../etc`
+- **Validation happens at execution time** - work order accepted, run fails later
+
+---
+
 ## Test Scenarios
 
 ### Scenario 1: Basic Subprocess Execution
