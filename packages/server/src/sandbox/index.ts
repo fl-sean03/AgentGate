@@ -7,6 +7,7 @@
 // Types
 export type {
   NetworkMode,
+  ProviderMode,
   ResourceLimits,
   SandboxConfig,
   SandboxStatus,
@@ -44,7 +45,6 @@ export {
   SandboxManager,
   getSandboxManager,
   createSandbox,
-  type ProviderMode,
   type SandboxManagerConfig,
   type SandboxSystemStatus,
 } from './manager.js';

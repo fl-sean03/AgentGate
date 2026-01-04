@@ -129,6 +129,8 @@ class DockerSandbox implements Sandbox {
   private readonly env: Record<string, string>;
   private readonly defaultTimeout: number;
   private readonly onDestroy: (id: string) => void;
+  /** v0.2.30: Track in-flight destroy to prevent race condition */
+  private destroyPromise: Promise<void> | null = null;
 
   constructor(
     id: string,
@@ -319,10 +321,23 @@ class DockerSandbox implements Sandbox {
   }
 
   async destroy(): Promise<void> {
+    // v0.2.30: Prevent race condition by returning existing destroy operation
     if (this.status === 'destroyed') {
       return;
     }
 
+    // If destroy is already in progress, wait for it
+    if (this.destroyPromise) {
+      return this.destroyPromise;
+    }
+
+    // Create and store the destroy promise to prevent concurrent calls
+    this.destroyPromise = this.doDestroy();
+    return this.destroyPromise;
+  }
+
+  /** v0.2.30: Internal destroy implementation */
+  private async doDestroy(): Promise<void> {
     if (this.containerId) {
       try {
         // Stop and remove container
@@ -330,7 +345,11 @@ class DockerSandbox implements Sandbox {
         await this.dockerClient.removeContainer(this.containerId, true);
       } catch (error) {
         // Log but don't throw - best effort cleanup
-        // Error will be handled by caller
+        // Ignore "removal already in progress" errors from Docker
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!errorMessage.includes('removal of container') && !errorMessage.includes('already in progress')) {
+          // Re-throw non-race-condition errors (but still best effort, so just log)
+        }
       }
     }
 
@@ -535,10 +554,19 @@ export class DockerProvider extends BaseSandboxProvider {
           await this.dockerClient.stopContainer(containerId, 5);
           await this.dockerClient.removeContainer(containerId, true);
         } catch (error) {
-          this.logger.error(
-            { containerId, err: error },
-            'Failed to remove orphaned container'
-          );
+          // v0.2.30: Ignore "removal already in progress" race condition errors
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('removal of container') || errorMessage.includes('already in progress')) {
+            this.logger.debug(
+              { containerId },
+              'Container removal already in progress, ignoring'
+            );
+          } else {
+            this.logger.error(
+              { containerId, err: error },
+              'Failed to remove orphaned container'
+            );
+          }
         }
       }
     } catch (error) {

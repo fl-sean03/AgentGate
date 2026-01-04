@@ -6,16 +6,14 @@
  */
 
 import { createLogger } from '../utils/logger.js';
-import type { Sandbox, SandboxConfig, SandboxProvider } from './types.js';
+import type { Sandbox, SandboxConfig, SandboxProvider, ProviderMode } from './types.js';
 import { SubprocessProvider } from './subprocess-provider.js';
 import { DockerProvider } from './docker-provider.js';
 
 const logger = createLogger('sandbox:manager');
 
-/**
- * Provider selection mode.
- */
-export type ProviderMode = 'auto' | 'docker' | 'subprocess';
+// Re-export ProviderMode from types for backwards compatibility
+export type { ProviderMode } from './types.js';
 
 /**
  * Configuration for the sandbox manager.
@@ -173,6 +171,7 @@ export class SandboxManager {
 
   /**
    * Create a sandbox with the given configuration.
+   * (v0.2.30) Supports per-sandbox provider override via config.provider
    */
   async createSandbox(config: SandboxConfig): Promise<Sandbox> {
     if (!this.initialized) {
@@ -181,6 +180,25 @@ export class SandboxManager {
 
     if (!this.selectedProvider) {
       throw new Error('No sandbox provider available');
+    }
+
+    // v0.2.30: Determine provider for this sandbox
+    // Per-sandbox provider override takes precedence over manager default
+    const requestedProvider = config.provider ?? this.config.provider;
+    let provider: SandboxProvider;
+
+    if (requestedProvider === 'subprocess') {
+      provider = this.providers.get('subprocess')!;
+      logger.debug({ reason: 'config.provider=subprocess' }, 'Using subprocess provider per request');
+    } else if (requestedProvider === 'docker') {
+      if (!this.dockerAvailable) {
+        throw new Error('Docker provider requested but Docker is not available');
+      }
+      provider = this.providers.get('docker')!;
+      logger.debug({ reason: 'config.provider=docker' }, 'Using Docker provider per request');
+    } else {
+      // auto mode or undefined - use manager's selected provider
+      provider = this.selectedProvider;
     }
 
     // Merge with defaults
@@ -195,14 +213,15 @@ export class SandboxManager {
     };
 
     try {
-      const sandbox = await this.selectedProvider.createSandbox(mergedConfig);
+      const sandbox = await provider.createSandbox(mergedConfig);
       this.lastError = null;
 
       logger.debug(
         {
           sandboxId: sandbox.id,
-          provider: this.selectedProvider.name,
+          provider: provider.name,
           workspacePath: config.workspacePath,
+          requestedProvider,
         },
         'Created sandbox'
       );
@@ -212,10 +231,8 @@ export class SandboxManager {
       this.lastError = error instanceof Error ? error.message : String(error);
 
       // Try fallback to subprocess if Docker failed in auto mode
-      if (
-        this.config.provider === 'auto' &&
-        this.selectedProvider.name === 'docker'
-      ) {
+      const effectiveMode = requestedProvider ?? 'auto';
+      if (effectiveMode === 'auto' && provider.name === 'docker') {
         logger.warn(
           { err: error },
           'Docker sandbox creation failed, falling back to subprocess'

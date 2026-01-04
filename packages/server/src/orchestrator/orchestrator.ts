@@ -371,9 +371,32 @@ export class Orchestrator {
     const sdkConfig = getSDKConfig();
     const useSandbox = sdkConfig.enableSandbox;
 
+    // v0.2.30: Build sandbox config from harness profile
+    // Only include defined properties to satisfy exactOptionalPropertyTypes
+    const harnessSandbox = harnessConfig.agentDriver?.sandbox;
+    let sandboxConfig: Partial<import('../sandbox/index.js').SandboxConfig> | undefined;
+    if (harnessSandbox) {
+      sandboxConfig = {};
+      if (harnessSandbox.provider) sandboxConfig.provider = harnessSandbox.provider;
+      if (harnessSandbox.image) sandboxConfig.image = harnessSandbox.image;
+      if (harnessSandbox.networkMode) sandboxConfig.networkMode = harnessSandbox.networkMode;
+      // Build resource limits only if any are defined
+      const resourceLimits: import('../sandbox/index.js').ResourceLimits = {};
+      if (harnessSandbox.cpuCount) resourceLimits.cpuCount = harnessSandbox.cpuCount;
+      if (harnessSandbox.memoryMB) resourceLimits.memoryMB = harnessSandbox.memoryMB;
+      if (harnessSandbox.timeoutSeconds) resourceLimits.timeoutSeconds = harnessSandbox.timeoutSeconds;
+      if (Object.keys(resourceLimits).length > 0) {
+        sandboxConfig.resourceLimits = resourceLimits;
+      }
+    }
+
     let driver: InstanceType<typeof ClaudeCodeDriver> | InstanceType<typeof ClaudeCodeSubscriptionDriver>;
     if (workOrder.agentType === AgentType.CLAUDE_CODE_SUBSCRIPTION) {
-      const subscriptionDriver = new ClaudeCodeSubscriptionDriver({ useSandbox });
+      // Only include sandboxConfig if defined to satisfy exactOptionalPropertyTypes
+      const driverConfig = sandboxConfig
+        ? { useSandbox, sandboxConfig }
+        : { useSandbox };
+      const subscriptionDriver = new ClaudeCodeSubscriptionDriver(driverConfig);
       const available = await subscriptionDriver.isAvailable();
       if (!available) {
         const subscriptionStatus = subscriptionDriver.getSubscriptionStatus();
@@ -389,13 +412,21 @@ export class Orchestrator {
           rateLimitTier: subscriptionStatus?.rateLimitTier,
           billingMethod: 'subscription',
           useSandbox,
+          sandboxProvider: harnessSandbox?.provider,
         },
         'Using subscription-based billing'
       );
       driver = subscriptionDriver;
     } else {
-      driver = new ClaudeCodeDriver({ useSandbox });
-      log.info({ billingMethod: 'api', useSandbox }, 'Using API-based billing');
+      // Only include sandboxConfig if defined to satisfy exactOptionalPropertyTypes
+      const driverConfig = sandboxConfig
+        ? { useSandbox, sandboxConfig }
+        : { useSandbox };
+      driver = new ClaudeCodeDriver(driverConfig);
+      log.info(
+        { billingMethod: 'api', useSandbox, sandboxProvider: harnessSandbox?.provider },
+        'Using API-based billing'
+      );
     }
 
     // v0.2.26: Use ExecutionEngine instead of executeRun

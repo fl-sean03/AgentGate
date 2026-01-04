@@ -37,6 +37,12 @@ export interface VolumeMount {
 }
 
 /**
+ * Provider selection mode for per-sandbox override.
+ * (v0.2.30)
+ */
+export type ProviderMode = 'auto' | 'docker' | 'subprocess';
+
+/**
  * Configuration for creating a sandbox.
  */
 export interface SandboxConfig {
@@ -58,6 +64,8 @@ export interface SandboxConfig {
   additionalMounts?: VolumeMount[];
   /** Mount Claude CLI from host (auto-detected paths) */
   mountClaudeCli?: boolean;
+  /** Override provider selection for this sandbox (v0.2.30) */
+  provider?: ProviderMode;
 }
 
 /**

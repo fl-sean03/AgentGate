@@ -107,6 +107,24 @@ export const loopStrategyConfigSchema = z.discriminatedUnion('mode', [
 
 export type LoopStrategyConfig = z.infer<typeof loopStrategyConfigSchema>;
 
+// Sandbox Provider Configuration for Agent Driver
+export const sandboxProviderConfigSchema = z.object({
+  /** Sandbox provider: 'auto' | 'docker' | 'subprocess' */
+  provider: z.enum(['auto', 'docker', 'subprocess']).optional(),
+  /** Docker image to use */
+  image: z.string().optional(),
+  /** Network mode: 'none' | 'bridge' | 'host' */
+  networkMode: z.enum(['none', 'bridge', 'host']).optional(),
+  /** CPU count limit */
+  cpuCount: z.number().int().min(1).max(16).optional(),
+  /** Memory limit in MB */
+  memoryMB: z.number().int().min(256).max(32768).optional(),
+  /** Timeout in seconds */
+  timeoutSeconds: z.number().int().min(60).max(86400).optional(),
+});
+
+export type SandboxProviderConfig = z.infer<typeof sandboxProviderConfigSchema>;
+
 // Agent Driver Config Schema
 export const agentDriverConfigSchema = z.object({
   type: z.enum(['claude-code-api', 'claude-code-subscription', 'claude-agent-sdk']),
@@ -116,6 +134,8 @@ export const agentDriverConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   tools: z.array(z.string()).optional(),
   mcpServers: z.record(z.unknown()).optional(),
+  /** Sandbox configuration (v0.2.30) */
+  sandbox: sandboxProviderConfigSchema.optional(),
 });
 
 export type AgentDriverConfig = z.infer<typeof agentDriverConfigSchema>;

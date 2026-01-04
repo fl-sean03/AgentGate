@@ -51,6 +51,7 @@ const transitions: Record<RunState, Partial<Record<RunEvent, RunState>>> = {
   },
   [RunState.FEEDBACK]: {
     [RunEvent.FEEDBACK_GENERATED]: RunState.BUILDING,
+    [RunEvent.BUILD_STARTED]: RunState.BUILDING, // v0.2.30: Allow iteration to start build directly from feedback
     [RunEvent.VERIFY_FAILED_TERMINAL]: RunState.FAILED, // v0.2.25: CI retry exhausted or max iterations reached
     [RunEvent.USER_CANCELED]: RunState.CANCELED,
     [RunEvent.SYSTEM_ERROR]: RunState.FAILED,
