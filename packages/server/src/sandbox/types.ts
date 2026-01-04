@@ -25,6 +25,18 @@ export interface ResourceLimits {
 }
 
 /**
+ * Additional volume mount configuration.
+ */
+export interface VolumeMount {
+  /** Host path to mount */
+  hostPath: string;
+  /** Container path to mount at */
+  containerPath: string;
+  /** Mount mode: 'ro' for read-only, 'rw' for read-write */
+  mode?: 'ro' | 'rw';
+}
+
+/**
  * Configuration for creating a sandbox.
  */
 export interface SandboxConfig {
@@ -42,6 +54,10 @@ export interface SandboxConfig {
   env?: Record<string, string>;
   /** User to run as inside container */
   user?: string;
+  /** Additional volume mounts (for Claude CLI, etc.) */
+  additionalMounts?: VolumeMount[];
+  /** Mount Claude CLI from host (auto-detected paths) */
+  mountClaudeCli?: boolean;
 }
 
 /**

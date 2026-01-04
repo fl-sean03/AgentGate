@@ -75,7 +75,9 @@ export class SandboxManager {
     this.config = {
       provider: config.provider ?? 'auto',
       defaultImage: config.defaultImage ?? 'agentgate/agent:latest',
-      defaultNetworkMode: config.defaultNetworkMode ?? 'none',
+      // Default to 'bridge' to allow network access for Claude CLI, git, npm, etc.
+      // Use 'none' explicitly for stricter isolation if needed.
+      defaultNetworkMode: config.defaultNetworkMode ?? 'bridge',
       defaultResourceLimits: config.defaultResourceLimits ?? {
         cpuCount: 2,
         memoryMB: 4096,
