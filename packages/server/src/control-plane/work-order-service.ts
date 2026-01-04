@@ -97,6 +97,9 @@ export class WorkOrderService {
       },
       // v0.2.15: Pass through skip verification levels (only if defined)
       ...(request.skipVerification && { skipVerification: request.skipVerification }),
+      // v0.2.16: Pass through harness profile and loop strategy mode (only if defined)
+      ...(request.harnessProfile && { harnessProfile: request.harnessProfile }),
+      ...(request.loopStrategyMode && { loopStrategyMode: request.loopStrategyMode }),
       // Thrust 16 / Issue #71: Pass through waitForCI
       waitForCI: request.waitForCI ?? false,
       createdAt: now,
