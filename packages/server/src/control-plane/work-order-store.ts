@@ -77,6 +77,10 @@ interface SerializedWorkOrder {
   integrationWorkOrderId?: string;
   // CI options (v0.2.16 / Issue #71)
   waitForCI?: boolean;
+  // Harness options (v0.2.31)
+  harnessProfile?: string;
+  loopStrategyMode?: string;
+  skipVerification?: string[];
 }
 
 /**
@@ -132,6 +136,17 @@ function serialize(order: WorkOrder): SerializedWorkOrder {
   // CI options (v0.2.16 / Issue #71)
   if (order.waitForCI !== undefined) {
     result.waitForCI = order.waitForCI;
+  }
+
+  // Harness options (v0.2.31)
+  if (order.harnessProfile !== undefined) {
+    result.harnessProfile = order.harnessProfile;
+  }
+  if (order.loopStrategyMode !== undefined) {
+    result.loopStrategyMode = order.loopStrategyMode;
+  }
+  if (order.skipVerification !== undefined) {
+    result.skipVerification = order.skipVerification;
   }
 
   return result;
@@ -190,6 +205,17 @@ function deserialize(data: SerializedWorkOrder): WorkOrder {
   // CI options (v0.2.16 / Issue #71)
   if (data.waitForCI !== undefined) {
     result.waitForCI = data.waitForCI;
+  }
+
+  // Harness options (v0.2.31)
+  if (data.harnessProfile !== undefined) {
+    result.harnessProfile = data.harnessProfile;
+  }
+  if (data.loopStrategyMode !== undefined) {
+    result.loopStrategyMode = data.loopStrategyMode;
+  }
+  if (data.skipVerification !== undefined) {
+    result.skipVerification = data.skipVerification;
   }
 
   return result;
