@@ -20,7 +20,10 @@ import type {
   SandboxStats,
   ExecOptions,
   ExecResult,
+  VolumeMount,
 } from './types.js';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
 
 /**
  * Label used to identify AgentGate sandbox containers.
@@ -42,6 +45,60 @@ const DEFAULT_USER = 'agentgate';
  */
 function generateSandboxId(): string {
   return `docker-${randomBytes(8).toString('hex')}`;
+}
+
+/**
+ * Detect Claude CLI installation paths on the host.
+ * Returns volume mounts if Claude CLI is found.
+ *
+ * Note: Claude CLI is typically installed as:
+ *   ~/.local/bin/claude -> ~/.local/share/claude/versions/X.Y.Z
+ *
+ * We need to:
+ * 1. Mount the versioned binary directory
+ * 2. The container entrypoint will create a proper symlink
+ */
+function detectClaudeCliMounts(): VolumeMount[] {
+  const homeDir = os.homedir();
+  const mounts: VolumeMount[] = [];
+
+  // Check for Claude CLI binary - follow the symlink to get the real path
+  const claudeBinPath = path.join(homeDir, '.local', 'bin', 'claude');
+  const claudeConfigPath = path.join(homeDir, '.claude');
+
+  // Find the actual Claude binary (follow symlink)
+  if (fs.existsSync(claudeBinPath)) {
+    try {
+      const realPath = fs.realpathSync(claudeBinPath);
+      // Mount the actual binary file
+      mounts.push({
+        hostPath: realPath,
+        containerPath: '/home/agentgate/.local/bin/claude',
+        mode: 'ro',
+      });
+    } catch {
+      // If we can't resolve the symlink, try mounting the directory
+      const claudeSharePath = path.join(homeDir, '.local', 'share', 'claude');
+      if (fs.existsSync(claudeSharePath)) {
+        mounts.push({
+          hostPath: claudeSharePath,
+          containerPath: '/home/agentgate/.local/share/claude',
+          mode: 'ro',
+        });
+      }
+    }
+  }
+
+  // Mount Claude config directory (contains credentials)
+  if (fs.existsSync(claudeConfigPath)) {
+    mounts.push({
+      hostPath: claudeConfigPath,
+      containerPath: '/home/agentgate/.claude',
+      mode: 'rw', // Claude needs to write session data
+    });
+  }
+
+  return mounts;
 }
 
 /**
@@ -330,6 +387,46 @@ export class DockerProvider extends BaseSandboxProvider {
     const id = generateSandboxId();
     const resourceLimits = appliedConfig.resourceLimits!;
 
+    // Build volume binds
+    const binds: string[] = [`${appliedConfig.workspacePath}:${workspaceMount}:rw`];
+
+    // Add Claude CLI mounts if requested (default: true for convenience)
+    const mountClaudeCli = appliedConfig.mountClaudeCli ?? true;
+    let claudeMounts: VolumeMount[] = [];
+    if (mountClaudeCli) {
+      claudeMounts = detectClaudeCliMounts();
+      for (const mount of claudeMounts) {
+        binds.push(`${mount.hostPath}:${mount.containerPath}:${mount.mode ?? 'ro'}`);
+      }
+      if (claudeMounts.length > 0) {
+        this.logger.info(
+          { claudeMounts: claudeMounts.map((m) => m.containerPath) },
+          'Mounting Claude CLI from host'
+        );
+      } else {
+        this.logger.warn('Claude CLI not found on host, sandbox may not be able to run claude command');
+      }
+    }
+
+    // Add additional custom mounts
+    if (appliedConfig.additionalMounts) {
+      for (const mount of appliedConfig.additionalMounts) {
+        binds.push(`${mount.hostPath}:${mount.containerPath}:${mount.mode ?? 'ro'}`);
+      }
+    }
+
+    // Determine tmpfs mounts and read-only filesystem settings
+    // When Claude CLI is mounted, it needs to write to various files in /home/agentgate
+    // (e.g., .claude.json), so we can't use read-only root filesystem
+    const hasClaudeHomeMounts = claudeMounts.some((m) => m.containerPath.startsWith('/home/agentgate/'));
+    const tmpfs: Record<string, string> = {
+      '/tmp': 'rw,noexec,nosuid,size=512m',
+    };
+    if (!hasClaudeHomeMounts) {
+      // Only mount /home/agentgate as tmpfs if we're not mounting Claude paths there
+      tmpfs['/home/agentgate'] = 'rw,noexec,nosuid,size=256m';
+    }
+
     // Build container creation options
     const containerOptions = {
       name: `agentgate-sandbox-${id}`,
@@ -344,8 +441,8 @@ export class DockerProvider extends BaseSandboxProvider {
         'agentgate.sandbox.created': new Date().toISOString(),
       },
       HostConfig: {
-        // Mount workspace
-        Binds: [`${appliedConfig.workspacePath}:${workspaceMount}:rw`],
+        // Mount workspace and additional volumes
+        Binds: binds,
         // Network isolation
         NetworkMode: appliedConfig.networkMode ?? 'none',
         // Resource limits
@@ -355,12 +452,11 @@ export class DockerProvider extends BaseSandboxProvider {
         // Security hardening
         SecurityOpt: ['no-new-privileges'],
         CapDrop: ['ALL'],
-        // Read-only root filesystem with writable /tmp and /home
-        ReadonlyRootfs: true,
-        Tmpfs: {
-          '/tmp': 'rw,noexec,nosuid,size=512m',
-          '/home/agentgate': 'rw,noexec,nosuid,size=256m',
-        },
+        // Read-only root filesystem with writable /tmp
+        // When Claude CLI is mounted, we disable read-only root because Claude
+        // needs to write session files to /home/agentgate/.claude.json
+        ReadonlyRootfs: !hasClaudeHomeMounts,
+        Tmpfs: tmpfs,
       },
     };
 

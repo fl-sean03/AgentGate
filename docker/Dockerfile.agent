@@ -49,8 +49,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for agent execution
-RUN groupadd --gid 1000 agentgate \
-    && useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home agentgate
+# Note: GID/UID 1000 may already exist as 'node' user in the base image
+# We use --force to ensure idempotency
+RUN groupadd --gid 1000 agentgate 2>/dev/null || groupmod -n agentgate node || true \
+    && (useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home agentgate 2>/dev/null || \
+        usermod -l agentgate -d /home/agentgate -m node 2>/dev/null || true) \
+    && mkdir -p /home/agentgate \
+    && chown -R 1000:1000 /home/agentgate
 
 # Create workspace and set permissions
 RUN mkdir -p /workspace \
@@ -66,13 +71,19 @@ RUN mkdir -p ~/.npm-global ~/.local/bin
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Install Claude Code CLI
-# Note: This assumes Claude CLI is available via npm or pre-installed
-# For production, you may need to copy the binary from a build stage
-RUN npm install -g @anthropic-ai/claude-code || echo "Claude CLI will be mounted"
+# Claude Code CLI is mounted from host at runtime by the Docker sandbox provider.
+# This approach ensures:
+# 1. Claude CLI version matches what's installed on the host
+# 2. Claude credentials/config from host are available
+# 3. No need to manage Claude CLI updates in the container image
+#
+# The following directories are mounted at runtime:
+#   /home/agentgate/.local/share/claude - Claude CLI binaries
+#   /home/agentgate/.local/bin/claude   - Claude CLI symlink
+#   /home/agentgate/.claude             - Claude configuration and credentials
 
-# Create directories for Claude configuration
-RUN mkdir -p ~/.claude
+# Create directories that will be used for mounts
+RUN mkdir -p ~/.local/share/claude ~/.local/bin ~/.claude
 
 # Copy entrypoint script
 COPY --chown=agentgate:agentgate docker/agent-entrypoint.sh /home/agentgate/entrypoint.sh
