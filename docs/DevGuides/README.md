@@ -261,6 +261,8 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
+| [v0.2.29](./DevGuide_v0.2.29/00-index.md) | **SaaS Website & Dashboard** | Planning | Next.js SaaS frontend with Stripe billing, GitHub OAuth, API key management |
+| [v0.2.28](./DevGuide_v0.2.28/00-index.md) | **Terminal User Interface (TUI)** | Planning | React + Ink terminal UI for task submission and monitoring |
 | [v0.2.18](./DevGuide_v0.2.18/00-index.md) | **Security Verification Refactor** | Not Started | Content-based secret detection, entropy analysis, tiered sensitivity levels, policy inheritance, audit logging |
 | [v0.2.17](./DevGuide_v0.2.17/00-index.md) | **Comprehensive API Extension** | Complete | Extended work order schema, profile CRUD API, audit trail API, SSE streaming, OpenAPI docs, TypeScript client SDK |
 | [v0.2.16](./DevGuide_v0.2.16/00-index.md) | **Work Order Harness Configuration** | Complete | Configurable harness system with named profiles, pluggable loop strategies (fixed, hybrid, ralph, custom), audit trails |
