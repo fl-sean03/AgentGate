@@ -74,10 +74,12 @@ export const workspaceSourceSchema = z.discriminatedUnion('type', [
     projectName: z.string().optional(),
   }),
   // GitHub source - existing GitHub repository (v0.2.4)
+  // Accepts either url OR owner+repo (validated at runtime in manager)
   z.object({
     type: z.literal('github'),
-    owner: z.string().min(1),
-    repo: z.string().min(1),
+    url: z.string().url().optional(),
+    owner: z.string().min(1).optional(),
+    repo: z.string().min(1).optional(),
     branch: z.string().optional(),
   }),
   // GitHub New source - create new GitHub repository (v0.2.4)

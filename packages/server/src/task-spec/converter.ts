@@ -49,6 +49,7 @@ import {
 } from '../types/execution-spec.js';
 import { type DeliverySpec, type GitSpec, type PRSpec, type GitModeType } from '../types/delivery-spec.js';
 import { resolveTaskSpec } from './resolver.js';
+import { extractGitHubOwnerRepo } from '../workspace/github.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONVERTER INTERFACE
@@ -451,10 +452,11 @@ function convertWorkspaceSource(workOrder: Partial<WorkOrder>): WorkspaceSpec {
     }
 
     case 'github': {
+      const { owner, repo } = extractGitHubOwnerRepo(source);
       const result: WorkspaceSpec = {
         source: 'github',
-        owner: source.owner,
-        repo: source.repo,
+        owner,
+        repo,
       };
       if (source.branch) (result as import('../types/execution-spec.js').GitHubWorkspace).ref = source.branch;
       return result;

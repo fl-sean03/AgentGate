@@ -392,6 +392,8 @@ import {
   createRepository as createGitHubRepository,
   getAuthenticatedRemoteUrl,
   buildCloneUrl,
+  parseGitHubUrl,
+  extractGitHubOwnerRepo,
 } from './github.js';
 import {
   addRemote,
@@ -423,8 +425,13 @@ export interface CreateFromGitHubOptions {
  *
  * @example
  * ```typescript
- * const source: GitHubSource = { type: 'github', owner: 'owner', repo: 'repo' };
+ * // Using URL (v0.2.26+)
+ * const source: GitHubSource = { type: 'github', url: 'https://github.com/owner/repo' };
  * const workspace = await createFromGitHub(source);
+ *
+ * // Using owner and repo
+ * const source2: GitHubSource = { type: 'github', owner: 'owner', repo: 'repo' };
+ * const workspace2 = await createFromGitHub(source2);
  * ```
  */
 export async function createFromGitHub(
@@ -438,21 +445,36 @@ export async function createFromGitHub(
   const config = getGitHubConfigFromEnv();
   const client = createGitHubClient(config);
 
+  // Extract owner and repo - either from url or from direct fields
+  let owner: string;
+  let repo: string;
+  if (source.url) {
+    const parsed = parseGitHubUrl(source.url);
+    owner = parsed.owner;
+    repo = parsed.repo;
+    log.debug({ url: source.url, owner, repo }, 'Parsed GitHub URL');
+  } else if (source.owner && source.repo) {
+    owner = source.owner;
+    repo = source.repo;
+  } else {
+    throw new Error('GitHub source must have either url or both owner and repo');
+  }
+
   // Verify repository exists
-  const exists = await repositoryExists(client, source.owner, source.repo);
+  const exists = await repositoryExists(client, owner, repo);
   if (!exists) {
-    throw new Error(`GitHub repository ${source.owner}/${source.repo} not found or not accessible`);
+    throw new Error(`GitHub repository ${owner}/${repo} not found or not accessible`);
   }
 
   // Get repository info
-  const repoInfo = await getRepository(client, source.owner, source.repo);
+  const repoInfo = await getRepository(client, owner, repo);
 
   // Determine local path
   const rootPath = options.destPath
     ? resolve(options.destPath)
     : resolve(getAgentGateRoot(), 'workspaces', id);
 
-  log.info({ id, owner: source.owner, repo: source.repo, destPath: rootPath }, 'Cloning GitHub repository');
+  log.info({ id, owner, repo, destPath: rootPath }, 'Cloning GitHub repository');
 
   // Clone with authenticated URL
   const authenticatedUrl = getAuthenticatedRemoteUrl(repoInfo.cloneUrl, config.token);
@@ -466,10 +488,19 @@ export async function createFromGitHub(
   // Update remote to use authenticated URL (for future push/pull)
   await setRemoteUrl(rootPath, 'origin', authenticatedUrl);
 
+  // Normalize the source to always include owner and repo
+  // This ensures downstream code can always access these fields
+  const normalizedSource: GitHubSource = {
+    type: 'github',
+    owner,
+    repo,
+    branch: source.branch,
+  };
+
   const workspace: Workspace = {
     id,
     rootPath,
-    source,
+    source: normalizedSource,
     leaseId: null,
     leasedAt: null,
     status: WorkspaceStatus.AVAILABLE,
@@ -479,7 +510,7 @@ export async function createFromGitHub(
   };
 
   await saveWorkspace(workspace);
-  log.info({ id, rootPath, owner: source.owner, repo: source.repo }, 'GitHub workspace created');
+  log.info({ id, rootPath, owner, repo }, 'GitHub workspace created');
 
   return workspace;
 }
@@ -627,12 +658,16 @@ export async function syncWithGitHub(workspace: Workspace): Promise<PullResult> 
 
   // Ensure remote is configured with current token
   const config = getGitHubConfigFromEnv();
-  const owner = workspace.source.type === 'github'
-    ? workspace.source.owner
-    : workspace.source.owner;
-  const repo = workspace.source.type === 'github'
-    ? workspace.source.repo
-    : workspace.source.repoName;
+  let owner: string;
+  let repo: string;
+  if (workspace.source.type === 'github') {
+    const extracted = extractGitHubOwnerRepo(workspace.source);
+    owner = extracted.owner;
+    repo = extracted.repo;
+  } else {
+    owner = workspace.source.owner;
+    repo = workspace.source.repoName;
+  }
 
   const cloneUrl = buildCloneUrl(owner, repo);
   const authenticatedUrl = getAuthenticatedRemoteUrl(cloneUrl, config.token);
@@ -671,12 +706,16 @@ export async function pushToGitHub(
 
   // Ensure remote is configured with current token
   const config = getGitHubConfigFromEnv();
-  const owner = workspace.source.type === 'github'
-    ? workspace.source.owner
-    : workspace.source.owner;
-  const repo = workspace.source.type === 'github'
-    ? workspace.source.repo
-    : workspace.source.repoName;
+  let owner: string;
+  let repo: string;
+  if (workspace.source.type === 'github') {
+    const extracted = extractGitHubOwnerRepo(workspace.source);
+    owner = extracted.owner;
+    repo = extracted.repo;
+  } else {
+    owner = workspace.source.owner;
+    repo = workspace.source.repoName;
+  }
 
   const cloneUrl = buildCloneUrl(owner, repo);
   const authenticatedUrl = getAuthenticatedRemoteUrl(cloneUrl, config.token);
@@ -710,7 +749,7 @@ export function isGitHubWorkspace(workspace: Workspace): boolean {
  */
 export function getGitHubInfo(workspace: Workspace): { owner: string; repo: string } | null {
   if (workspace.source.type === 'github') {
-    return { owner: workspace.source.owner, repo: workspace.source.repo };
+    return extractGitHubOwnerRepo(workspace.source);
   }
   if (workspace.source.type === 'github-new') {
     return { owner: workspace.source.owner, repo: workspace.source.repoName };

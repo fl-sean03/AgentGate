@@ -549,6 +549,25 @@ export function buildGitHubUrl(owner: string, repo: string): string {
 }
 
 /**
+ * Extract owner and repo from a GitHubSource
+ *
+ * Handles both URL-based and owner/repo-based sources.
+ *
+ * @param source - GitHubSource with either url or owner+repo
+ * @returns { owner, repo }
+ * @throws Error if neither url nor owner+repo are provided
+ */
+export function extractGitHubOwnerRepo(source: { url?: string | undefined; owner?: string | undefined; repo?: string | undefined }): { owner: string; repo: string } {
+  if (source.url) {
+    return parseGitHubUrl(source.url);
+  }
+  if (source.owner && source.repo) {
+    return { owner: source.owner, repo: source.repo };
+  }
+  throw new Error('GitHub source must have either url or both owner and repo');
+}
+
+/**
  * Build GitHub clone URL from owner and repo
  */
 export function buildCloneUrl(owner: string, repo: string): string {

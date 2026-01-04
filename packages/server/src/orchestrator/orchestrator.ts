@@ -150,7 +150,7 @@ export class Orchestrator {
     const { acquire, release } = await import('../workspace/lease.js');
     const { resolveGatePlan } = await import('../gate/resolver.js');
     const { createBranch, checkout, stageAll, commit, push } = await import('../workspace/git-ops.js');
-    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, convertDraftToReady, pollCIStatus } = await import('../workspace/github.js');
+    const { createGitHubClient, getGitHubConfigFromEnv, createPullRequest, convertDraftToReady, pollCIStatus, extractGitHubOwnerRepo } = await import('../workspace/github.js');
     const { ClaudeCodeDriver } = await import('../agent/claude-code-driver.js');
     const { ClaudeCodeSubscriptionDriver } = await import('../agent/claude-code-subscription-driver.js');
     const { AgentType } = await import('../types/work-order.js');
@@ -448,7 +448,7 @@ export class Orchestrator {
           run,
           workOrder,
           gitHubBranch,
-          { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady }
+          { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, extractGitHubOwnerRepo }
         );
       }
 
@@ -486,7 +486,7 @@ export class Orchestrator {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     githubOps: any
   ): Promise<void> {
-    const { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady } = githubOps;
+    const { stageAll, commit, push, createGitHubClient, getGitHubConfigFromEnv, createPullRequest, pollCIStatus, convertDraftToReady, extractGitHubOwnerRepo } = githubOps;
 
     if (!gitHubBranch) {
       log.warn({ runId: run.id }, 'No GitHub branch set, skipping GitHub delivery');
@@ -508,8 +508,9 @@ export class Orchestrator {
       let repo: string;
 
       if (workOrder.workspaceSource.type === 'github') {
-        owner = workOrder.workspaceSource.owner;
-        repo = workOrder.workspaceSource.repo;
+        const extracted = extractGitHubOwnerRepo(workOrder.workspaceSource);
+        owner = extracted.owner;
+        repo = extracted.repo;
       } else if (workOrder.workspaceSource.type === 'github-new') {
         owner = workOrder.workspaceSource.owner;
         repo = workOrder.workspaceSource.repoName;
