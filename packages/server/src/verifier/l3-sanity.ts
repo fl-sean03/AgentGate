@@ -145,7 +145,17 @@ async function checkLargeFiles(
       cwd: workDir,
       dot: true,
       onlyFiles: true,
-      ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/build/**',
+        // Package manager caches (v0.2.31)
+        '**/.pnpm-store/**',
+        '**/.yarn/**',
+        '**/.cache/**',
+        '**/coverage/**',
+      ],
     });
 
     const largeFiles: Array<{ file: string; size: number }> = [];
