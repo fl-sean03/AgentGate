@@ -108,13 +108,13 @@ LAPTOP (Workshop)                    HOME SERVER (Storefront)
 ### Laptop (Development Machine)
 
 ```
-~/Workspace/main/
-├── 43-AgentGate/                 # OSS - cloned from GitHub
+~/Workspace/main/43-AgentGate/
+├── agentgate/                    # OSS - cloned from GitHub
 │   ├── packages/server/          # Core orchestration
 │   ├── packages/shared/          # Types
 │   └── packages/tui/             # Terminal UI
 │
-└── 44-AgentGate-Internal/        # Private - cloned from GitHub
+└── agentgate-internal/           # Private - cloned from GitHub
     ├── packages/saas-server/     # Extended server
     ├── packages/dashboard/       # Customer UI
     ├── packages/web/             # Marketing site
@@ -183,11 +183,11 @@ LAPTOP (Workshop)                    HOME SERVER (Storefront)
 ### Developer (on laptop)
 
 ```bash
-cd ~/Workspace/main
-git clone git@github.com:org/agentgate.git 43-AgentGate
-git clone git@github.com:org/agentgate-internal.git 44-AgentGate-Internal
-cd 43-AgentGate && pnpm install && pnpm test
-cd ../44-AgentGate-Internal && pnpm install && pnpm test
+cd ~/Workspace/main/43-AgentGate
+git clone git@github.com:org/agentgate.git agentgate
+git clone git@github.com:org/agentgate-internal.git agentgate-internal
+cd agentgate && pnpm install && pnpm test
+cd ../agentgate-internal && pnpm install && pnpm test
 ```
 
 ### Home Server Operator

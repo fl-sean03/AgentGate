@@ -71,12 +71,12 @@ usage:
 #### 1.3.4 Verify Local Server Runs
 
 ```bash
-cd ~/Workspace/main/43-AgentGate/packages/server
-pnpm dev
+cd ~/Workspace/main/43-AgentGate/agentgate/packages/server
+pnpm build && node dist/index.js serve --port 3001
 
 # In another terminal
-curl http://localhost:3001/api/v1/health
-# Expected: {"status":"ok","version":"..."}
+curl http://localhost:3001/health
+# Expected: {"success":true,"data":{"status":"ok","version":"..."}}
 ```
 
 #### 1.3.5 Test Work Order Submission (Local)
@@ -105,7 +105,7 @@ curl -X POST http://localhost:3001/api/v1/work-orders \
 | File | Action |
 |------|--------|
 | `~/.agentgate/config.yaml` | Created |
-| `~/Workspace/main/43-AgentGate/` | Cloned |
+| `~/Workspace/main/43-AgentGate/agentgate/` | Cloned |
 
 ---
 
@@ -312,11 +312,11 @@ Before publishing to npm, developers need to test cross-repo changes locally. Th
 
 ```bash
 # Terminal 1: Create global link from public repo
-cd ~/Workspace/main/43-AgentGate/packages/server
+cd ~/Workspace/main/43-AgentGate/agentgate/packages/server
 pnpm link --global
 
 # Terminal 2: Use link in private repo
-cd ~/Workspace/main/44-AgentGate-Internal
+cd ~/Workspace/main/43-AgentGate/agentgate-internal
 pnpm link @agentgate/server
 ```
 
@@ -389,11 +389,11 @@ Run both servers simultaneously:
 
 ```bash
 # Terminal 1: OSS server on port 3001
-cd ~/Workspace/main/43-AgentGate/packages/server
+cd ~/Workspace/main/43-AgentGate/agentgate/packages/server
 PORT=3001 pnpm dev
 
 # Terminal 2: SaaS server on port 3002
-cd ~/Workspace/main/44-AgentGate-Internal/packages/saas-server
+cd ~/Workspace/main/43-AgentGate/agentgate-internal/packages/saas-server
 PORT=3002 pnpm dev
 
 # Terminal 3: Test both
@@ -406,7 +406,7 @@ curl http://localhost:3002/api/v1/health  # SaaS
 When done with local testing:
 
 ```bash
-cd ~/Workspace/main/44-AgentGate-Internal
+cd ~/Workspace/main/43-AgentGate/agentgate-internal
 pnpm unlink @agentgate/server
 
 # Re-install from npm
@@ -437,10 +437,10 @@ After completing Phase 1, you have:
 
 ```
 LAPTOP (Workshop)
-├── ~/Workspace/main/43-AgentGate/           # OSS - working, tested
+├── ~/Workspace/main/43-AgentGate/agentgate/           # OSS - working, tested
 │   └── packages/server/                     # Can run locally on :3001
 │
-├── ~/Workspace/main/44-AgentGate-Internal/  # Private - scaffolded
+├── ~/Workspace/main/43-AgentGate/agentgate-internal/  # Private - scaffolded
 │   └── packages/saas-server/                # Can import OSS, run on :3002
 │
 └── ~/.agentgate/config.yaml                 # Local configuration

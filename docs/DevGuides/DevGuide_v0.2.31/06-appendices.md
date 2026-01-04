@@ -281,7 +281,7 @@ grep -r "saas" packages/ --include="*.ts" -i
 ### G.2 Private Repo Verification
 
 ```bash
-cd ~/Workspace/main/44-AgentGate-Internal
+cd ~/Workspace/main/43-AgentGate/agentgate-internal
 pnpm install
 pnpm typecheck
 pnpm build
@@ -368,14 +368,14 @@ If only specific packages need rollback:
 cd ~/Workspace/main/43-AgentGate && pnpm dev
 
 # Start SaaS server (linked)
-cd ~/Workspace/main/44-AgentGate-Internal && pnpm dev
+cd ~/Workspace/main/43-AgentGate/agentgate-internal && pnpm dev
 
 # Link for cross-repo testing
-cd ~/Workspace/main/43-AgentGate/packages/server && pnpm link --global
-cd ~/Workspace/main/44-AgentGate-Internal && pnpm link @agentgate/server
+cd ~/Workspace/main/43-AgentGate/agentgate/packages/server && pnpm link --global
+cd ~/Workspace/main/43-AgentGate/agentgate-internal && pnpm link @agentgate/server
 
 # Unlink after testing
-cd ~/Workspace/main/44-AgentGate-Internal && pnpm unlink @agentgate/server
+cd ~/Workspace/main/43-AgentGate/agentgate-internal && pnpm unlink @agentgate/server
 ```
 
 ### J.2 Production (Home Server)

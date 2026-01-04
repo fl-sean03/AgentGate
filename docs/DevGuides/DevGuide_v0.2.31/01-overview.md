@@ -186,7 +186,7 @@ When you need to change OSS and test in Internal before publishing:
 LAPTOP:
 
 1. Reproduce the bug
-   $ cd ~/Workspace/main/43-AgentGate
+   $ cd ~/Workspace/main/43-AgentGate/agentgate
    $ pnpm dev                    # Start local server
    $ curl localhost:3001/...    # Trigger the bug
 
@@ -213,7 +213,7 @@ HOME SERVER:
 LAPTOP:
 
 1. Develop the feature
-   $ cd ~/Workspace/main/44-AgentGate-Internal
+   $ cd ~/Workspace/main/43-AgentGate/agentgate-internal
    $ code packages/saas-server/src/...  # Edit
    $ pnpm test                          # Run tests
 
@@ -236,21 +236,21 @@ HOME SERVER:
 LAPTOP:
 
 1. Make OSS change
-   $ cd ~/Workspace/main/43-AgentGate
+   $ cd ~/Workspace/main/43-AgentGate/agentgate
    $ code packages/server/src/...  # Edit core
    $ pnpm test                     # OSS tests pass
 
 2. Link and test Internal
-   $ cd ~/Workspace/main/43-AgentGate/packages/server && pnpm link --global
-   $ cd ~/Workspace/main/44-AgentGate-Internal && pnpm link @agentgate/server
+   $ cd ~/Workspace/main/43-AgentGate/agentgate/packages/server && pnpm link --global
+   $ cd ~/Workspace/main/43-AgentGate/agentgate-internal && pnpm link @agentgate/server
    $ pnpm test                     # Internal tests pass with linked OSS
 
 3. Push OSS, wait for npm publish
-   $ cd ~/Workspace/main/43-AgentGate && git push
+   $ cd ~/Workspace/main/43-AgentGate/agentgate && git push
    # CI publishes @agentgate/server@0.3.1
 
 4. Update Internal to use published version
-   $ cd ~/Workspace/main/44-AgentGate-Internal
+   $ cd ~/Workspace/main/43-AgentGate/agentgate-internal
    $ pnpm update @agentgate/server
    $ git add . && git commit -m "chore: update agentgate" && git push
 

@@ -32,7 +32,18 @@ export async function registerUsageRoutes(fastify: FastifyInstance): Promise<voi
     Querystring: UsageQuery;
   }>('/api/v1/usage', {
     schema: {
-      querystring: usageQuerySchema,
+      querystring: {
+        type: 'object',
+        properties: {
+          workOrderId: { type: 'string' },
+          runId: { type: 'string' },
+          model: { type: 'string' },
+          startDate: { type: 'string' },
+          endDate: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 1000, default: 100 },
+          offset: { type: 'integer', minimum: 0, default: 0 },
+        },
+      },
       response: {
         200: {
           type: 'object',
@@ -108,7 +119,18 @@ export async function registerUsageRoutes(fastify: FastifyInstance): Promise<voi
     Querystring: UsageQuery;
   }>('/api/v1/usage/summary', {
     schema: {
-      querystring: usageQuerySchema,
+      querystring: {
+        type: 'object',
+        properties: {
+          workOrderId: { type: 'string' },
+          runId: { type: 'string' },
+          model: { type: 'string' },
+          startDate: { type: 'string' },
+          endDate: { type: 'string' },
+          limit: { type: 'integer', minimum: 1, maximum: 1000, default: 100 },
+          offset: { type: 'integer', minimum: 0, default: 0 },
+        },
+      },
     },
   }, async (request, reply) => {
     try {
@@ -152,7 +174,13 @@ export async function registerUsageRoutes(fastify: FastifyInstance): Promise<voi
     Params: WorkOrderUsageParams;
   }>('/api/v1/usage/work-orders/:workOrderId', {
     schema: {
-      params: workOrderUsageParamsSchema,
+      params: {
+        type: 'object',
+        properties: {
+          workOrderId: { type: 'string' },
+        },
+        required: ['workOrderId'],
+      },
     },
   }, async (request, reply) => {
     try {
