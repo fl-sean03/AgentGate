@@ -234,6 +234,7 @@ export class DockerClient {
 
   /**
    * Execute a command inside a running container.
+   * (v0.2.27 - Thrust 2: Added AbortSignal support)
    */
   async execInContainer(
     containerId: string,
@@ -242,8 +243,18 @@ export class DockerClient {
       env?: string[];
       workingDir?: string;
       timeout?: number;
+      signal?: AbortSignal;
     } = {}
   ): Promise<ContainerExecResult> {
+    // Check if already aborted (v0.2.27 - Thrust 2)
+    if (options.signal?.aborted) {
+      return {
+        exitCode: -1,
+        stdout: '',
+        stderr: 'Operation was aborted before execution',
+      };
+    }
+
     const container = this.docker.getContainer(containerId);
 
     // Create exec instance
@@ -261,6 +272,7 @@ export class DockerClient {
     // Collect output
     let stdout = '';
     let stderr = '';
+    let aborted = false;
 
     return new Promise<ContainerExecResult>((resolve, reject) => {
       // Set up timeout if specified
@@ -270,6 +282,17 @@ export class DockerClient {
           stream.destroy();
           reject(new Error(`Exec timed out after ${options.timeout}ms`));
         }, options.timeout);
+      }
+
+      // Handle AbortSignal (v0.2.27 - Thrust 2)
+      const abortHandler = (): void => {
+        aborted = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        stream.destroy();
+      };
+
+      if (options.signal) {
+        options.signal.addEventListener('abort', abortHandler, { once: true });
       }
 
       // Demultiplex stdout/stderr from Docker stream
@@ -304,6 +327,19 @@ export class DockerClient {
 
       stream.on('end', () => {
         if (timeoutId) clearTimeout(timeoutId);
+        if (options.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
+
+        // If aborted, return partial result with abort indicator
+        if (aborted) {
+          resolve({
+            exitCode: -1,
+            stdout,
+            stderr: `${stderr}\nOperation was aborted`.trim(),
+          });
+          return;
+        }
 
         // Get exit code
         exec.inspect()
@@ -318,6 +354,9 @@ export class DockerClient {
 
       stream.on('error', (error) => {
         if (timeoutId) clearTimeout(timeoutId);
+        if (options.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
         reject(error);
       });
     });

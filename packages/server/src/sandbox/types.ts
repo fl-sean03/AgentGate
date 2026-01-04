@@ -82,6 +82,8 @@ export interface ExecOptions {
   timeout?: number;
   /** Input to provide to stdin */
   stdin?: string;
+  /** AbortSignal for cancellation (v0.2.27 - Thrust 2) */
+  signal?: AbortSignal;
 }
 
 /**

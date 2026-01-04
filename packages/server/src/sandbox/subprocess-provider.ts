@@ -96,6 +96,18 @@ class SubprocessSandbox implements Sandbox {
 
     const startTime = Date.now();
     let timedOut = false;
+    let aborted = false;
+
+    // Check if already aborted (v0.2.27 - Thrust 2)
+    if (options?.signal?.aborted) {
+      return {
+        exitCode: -1,
+        stdout: '',
+        stderr: 'Operation was aborted before execution',
+        timedOut: false,
+        durationMs: 0,
+      };
+    }
 
     return new Promise((resolve, reject) => {
       const proc = spawn(command, args, {
@@ -128,24 +140,53 @@ class SubprocessSandbox implements Sandbox {
       // Set up timeout
       const timeoutId = setTimeout(() => {
         timedOut = true;
-        proc.kill('SIGKILL');
+        proc.kill('SIGTERM');
+        // Give process time to terminate gracefully, then force kill
+        setTimeout(() => {
+          if (!proc.killed && this.currentProcess === proc) {
+            proc.kill('SIGKILL');
+          }
+        }, 5000);
       }, timeout);
+
+      // Handle AbortSignal (v0.2.27 - Thrust 2)
+      const abortHandler = (): void => {
+        aborted = true;
+        clearTimeout(timeoutId);
+        proc.kill('SIGTERM');
+        // Give process time to terminate gracefully, then force kill
+        setTimeout(() => {
+          if (!proc.killed && this.currentProcess === proc) {
+            proc.kill('SIGKILL');
+          }
+        }, 5000);
+      };
+
+      if (options?.signal) {
+        options.signal.addEventListener('abort', abortHandler, { once: true });
+      }
 
       proc.on('close', (code) => {
         clearTimeout(timeoutId);
+        if (options?.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
         this.currentProcess = null;
 
         resolve({
           exitCode: code ?? -1,
           stdout,
-          stderr,
-          timedOut,
+          stderr: aborted ? `${stderr}\nOperation was aborted`.trim() : stderr,
+          timedOut: timedOut || aborted,
           durationMs: Date.now() - startTime,
         });
       });
 
       proc.on('error', (err) => {
         clearTimeout(timeoutId);
+        if (options?.signal) {
+          options.signal.removeEventListener('abort', abortHandler);
+        }
         this.currentProcess = null;
         reject(err);
       });

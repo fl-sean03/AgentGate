@@ -5,6 +5,12 @@
 
 import { RunState, RunEvent, RunResult, type Run } from '../types/index.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  writeAheadTransition,
+  markWALComplete,
+  getWALConfig,
+  type WALConfig,
+} from './wal.js';
 
 const log = createLogger('state-machine');
 
@@ -193,4 +199,77 @@ export function getProgressDescription(run: Run): string {
     default:
       return 'Unknown state';
   }
+}
+
+/**
+ * Result of a WAL-backed transition.
+ * (v0.2.27 - Thrust 1: Write-Ahead State Persistence)
+ */
+export interface WALTransitionResult {
+  /** The updated run after transition */
+  run: Run;
+  /** The WAL entry ID (for marking complete after persistence) */
+  walEntryId: string;
+}
+
+/**
+ * Apply a state transition with write-ahead logging.
+ * This ensures the transition intent is logged before it's applied,
+ * enabling crash recovery.
+ *
+ * Usage:
+ * 1. Call applyTransitionWithWAL to get the updated run and WAL entry ID
+ * 2. Persist the run to disk
+ * 3. Call markWALComplete to mark the transition as complete
+ *
+ * (v0.2.27 - Thrust 1: Write-Ahead State Persistence)
+ */
+export async function applyTransitionWithWAL(
+  run: Run,
+  event: RunEvent,
+  metadata?: Record<string, unknown>,
+  walConfig?: WALConfig
+): Promise<WALTransitionResult> {
+  const config = walConfig || getWALConfig();
+
+  // First, determine what the next state will be
+  const nextState = getNextState(run.state, event);
+
+  if (nextState === null) {
+    const error = `Invalid transition: ${run.state} + ${event}`;
+    log.error({ runId: run.id, currentState: run.state, event }, error);
+    throw new Error(error);
+  }
+
+  // Write the intent to WAL before applying
+  const walEntryId = await writeAheadTransition(
+    run,
+    event,
+    nextState,
+    metadata,
+    config
+  );
+
+  // Apply the transition (this is now safe - intent is logged)
+  const updatedRun = applyTransition(run, event);
+
+  return {
+    run: updatedRun,
+    walEntryId,
+  };
+}
+
+/**
+ * Complete a WAL-backed transition after persistence.
+ * Call this after successfully persisting the run to disk.
+ *
+ * (v0.2.27 - Thrust 1: Write-Ahead State Persistence)
+ */
+export async function completeWALTransition(
+  runId: string,
+  walEntryId: string,
+  walConfig?: WALConfig
+): Promise<void> {
+  const config = walConfig || getWALConfig();
+  await markWALComplete(runId, walEntryId, config);
 }

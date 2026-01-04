@@ -164,6 +164,17 @@ class DockerSandbox implements Sandbox {
       throw new Error('Container ID not available');
     }
 
+    // Check if already aborted (v0.2.27 - Thrust 2)
+    if (options?.signal?.aborted) {
+      return {
+        exitCode: -1,
+        stdout: '',
+        stderr: 'Operation was aborted before execution',
+        timedOut: false,
+        durationMs: 0,
+      };
+    }
+
     const startTime = Date.now();
     const timeout = ((options?.timeout ?? this.defaultTimeout) * 1000);
 
@@ -191,9 +202,11 @@ class DockerSandbox implements Sandbox {
         env?: string[];
         workingDir?: string;
         timeout?: number;
+        signal?: AbortSignal;
       } = {
         workingDir: cwd,
         timeout,
+        signal: options?.signal,
       };
       if (envArray.length > 0) {
         execOptions.env = envArray;
@@ -205,11 +218,14 @@ class DockerSandbox implements Sandbox {
         execOptions
       );
 
+      // Check if result indicates abort (v0.2.27 - Thrust 2)
+      const isAborted = result.stderr.includes('Operation was aborted');
+
       return {
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
-        timedOut: false,
+        timedOut: isAborted,
         durationMs: Date.now() - startTime,
       };
     } catch (error) {

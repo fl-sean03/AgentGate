@@ -76,6 +76,23 @@ export type SDKConfig = z.infer<typeof sdkConfigSchema>;
 
 
 /**
+ * WAL (Write-Ahead Log) configuration schema
+ * (v0.2.27 - Thrust 1: Write-Ahead State Persistence)
+ */
+const walConfigSchema = z.object({
+  /** Enable WAL for crash recovery */
+  enabled: z.coerce.boolean().default(true),
+  /** WAL storage directory */
+  directory: z.string().optional(),
+  /** Days to retain completed WAL entries */
+  retentionDays: z.coerce.number().int().min(1).max(365).default(7),
+  /** Maximum entries per run before compaction */
+  maxEntriesPerRun: z.coerce.number().int().min(100).max(10000).default(1000),
+});
+
+export type WALConfig = z.infer<typeof walConfigSchema>;
+
+/**
  * Sandbox configuration schema
  */
 const sandboxConfigSchema = z.object({
@@ -132,6 +149,9 @@ const configSchema = z.object({
 
   // Sandbox configuration
   sandbox: sandboxConfigSchema,
+
+  // WAL configuration (v0.2.27 - Thrust 1)
+  wal: walConfigSchema,
 });
 
 export type AgentGateConfig = z.infer<typeof configSchema>;
@@ -183,6 +203,13 @@ export function loadConfig(): AgentGateConfig {
       memoryMB: process.env.AGENTGATE_SANDBOX_MEMORY_MB,
       timeoutSeconds: process.env.AGENTGATE_SANDBOX_TIMEOUT_SECONDS,
       cleanupIntervalMs: process.env.AGENTGATE_SANDBOX_CLEANUP_INTERVAL_MS,
+    },
+    // WAL configuration (v0.2.27 - Thrust 1)
+    wal: {
+      enabled: process.env.AGENTGATE_WAL_ENABLED,
+      directory: process.env.AGENTGATE_WAL_DIRECTORY,
+      retentionDays: process.env.AGENTGATE_WAL_RETENTION_DAYS,
+      maxEntriesPerRun: process.env.AGENTGATE_WAL_MAX_ENTRIES,
     },
   };
 
@@ -328,5 +355,14 @@ export function buildSandboxManagerConfig(): {
     },
     cleanupIntervalMs: sandbox.cleanupIntervalMs,
   };
+}
+
+/**
+ * Get WAL configuration
+ * (v0.2.27 - Thrust 1: Write-Ahead State Persistence)
+ */
+export function getWALConfigFromEnv(): WALConfig {
+  const config = getConfig();
+  return config.wal;
 }
 

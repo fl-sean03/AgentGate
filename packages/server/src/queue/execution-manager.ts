@@ -11,6 +11,11 @@ import {
   ExecutionStatus,
   classifyError,
 } from './execution-types.js';
+import {
+  createTimeout,
+  TimeoutError,
+  isTimeoutError,
+} from '../utils/timeout.js';
 
 /**
  * Configuration for execution manager.
@@ -234,7 +239,8 @@ export class ExecutionManager extends EventEmitter {
   }
 
   /**
-   * Run a command in the sandbox with timeout.
+   * Run a command in the sandbox with timeout using AbortSignal.
+   * (v0.2.27 - Thrust 2: AbortSignal-based timeout)
    */
   private async runWithTimeout(
     sandbox: Sandbox,
@@ -242,25 +248,44 @@ export class ExecutionManager extends EventEmitter {
     args: string[],
     timeoutMs: number
   ): Promise<{ exitCode: number; output: string }> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error(`Execution timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
+    const { signal, cancel } = createTimeout(
+      timeoutMs,
+      `Execution timed out after ${timeoutMs}ms`
+    );
 
-      sandbox
-        .execute(command, args)
-        .then(result => {
-          clearTimeout(timeout);
-          resolve({
-            exitCode: result.exitCode,
-            output: result.stdout + result.stderr,
-          });
-        })
-        .catch(error => {
-          clearTimeout(timeout);
-          reject(error);
-        });
-    });
+    try {
+      const result = await sandbox.execute(command, args, { signal });
+
+      // Check if the result indicates timeout/abort
+      if (result.timedOut) {
+        throw new TimeoutError(
+          `Execution timed out after ${timeoutMs}ms`,
+          timeoutMs,
+          signal
+        );
+      }
+
+      return {
+        exitCode: result.exitCode,
+        output: result.stdout + result.stderr,
+      };
+    } catch (error) {
+      // Re-throw timeout errors as-is
+      if (isTimeoutError(error)) {
+        throw error;
+      }
+      // Wrap abort errors in timeout error if signal was aborted
+      if (signal.aborted) {
+        throw new TimeoutError(
+          `Execution timed out after ${timeoutMs}ms`,
+          timeoutMs,
+          signal
+        );
+      }
+      throw error;
+    } finally {
+      cancel();
+    }
   }
 
   /**
