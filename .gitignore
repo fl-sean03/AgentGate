@@ -47,6 +47,12 @@ yarn.lock
 .prettiercache
 *.cache
 
+# pnpm store (should never be committed)
+.pnpm-store/
+
+# Next.js build cache
+.next/
+
 # Temporary files
 tmp/
 temp/
