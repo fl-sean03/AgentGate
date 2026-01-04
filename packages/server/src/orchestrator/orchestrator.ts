@@ -374,17 +374,21 @@ export class Orchestrator {
     // v0.2.30: Build sandbox config from harness profile
     // Only include defined properties to satisfy exactOptionalPropertyTypes
     const harnessSandbox = harnessConfig.agentDriver?.sandbox;
+    const executionLimits = harnessConfig.executionLimits;
     let sandboxConfig: Partial<import('../sandbox/index.js').SandboxConfig> | undefined;
-    if (harnessSandbox) {
+    if (harnessSandbox || executionLimits) {
       sandboxConfig = {};
-      if (harnessSandbox.provider) sandboxConfig.provider = harnessSandbox.provider;
-      if (harnessSandbox.image) sandboxConfig.image = harnessSandbox.image;
-      if (harnessSandbox.networkMode) sandboxConfig.networkMode = harnessSandbox.networkMode;
-      // Build resource limits only if any are defined
+      if (harnessSandbox?.provider) sandboxConfig.provider = harnessSandbox.provider;
+      if (harnessSandbox?.image) sandboxConfig.image = harnessSandbox.image;
+      if (harnessSandbox?.networkMode) sandboxConfig.networkMode = harnessSandbox.networkMode;
+      // Build resource limits from both agentDriver.sandbox and executionLimits (v0.2.31)
+      // executionLimits takes precedence as it's the more explicit config
       const resourceLimits: import('../sandbox/index.js').ResourceLimits = {};
-      if (harnessSandbox.cpuCount) resourceLimits.cpuCount = harnessSandbox.cpuCount;
-      if (harnessSandbox.memoryMB) resourceLimits.memoryMB = harnessSandbox.memoryMB;
-      if (harnessSandbox.timeoutSeconds) resourceLimits.timeoutSeconds = harnessSandbox.timeoutSeconds;
+      if (harnessSandbox?.cpuCount) resourceLimits.cpuCount = harnessSandbox.cpuCount;
+      // v0.2.31: Use executionLimits.maxMemoryMb as fallback/override for sandbox memory
+      const memoryMB = executionLimits?.maxMemoryMb ?? harnessSandbox?.memoryMB;
+      if (memoryMB) resourceLimits.memoryMB = memoryMB;
+      if (harnessSandbox?.timeoutSeconds) resourceLimits.timeoutSeconds = harnessSandbox.timeoutSeconds;
       if (Object.keys(resourceLimits).length > 0) {
         sandboxConfig.resourceLimits = resourceLimits;
       }
