@@ -91,40 +91,6 @@ export interface UsageAggregate {
 }
 
 /**
- * User/Organization credit balance
- */
-export interface CreditBalance {
-  /** User/Organization ID */
-  userId: string;
-  /** Current credit balance in USD */
-  balanceUsd: number;
-  /** Lifetime credits purchased */
-  lifetimePurchasedUsd: number;
-  /** Lifetime credits used */
-  lifetimeUsedUsd: number;
-  /** Credit limit (0 = unlimited) */
-  limitUsd: number;
-  /** Alert threshold percentage (e.g., 0.2 = alert at 20% remaining) */
-  alertThreshold: number;
-  /** Last updated */
-  updatedAt: Date;
-}
-
-/**
- * Budget alert
- */
-export interface BudgetAlert {
-  id: string;
-  userId: string;
-  type: 'low_balance' | 'limit_reached' | 'unusual_usage';
-  message: string;
-  balanceUsd: number;
-  thresholdUsd: number;
-  timestamp: Date;
-  acknowledged: boolean;
-}
-
-/**
  * Usage query filters
  */
 export interface UsageQueryFilters {

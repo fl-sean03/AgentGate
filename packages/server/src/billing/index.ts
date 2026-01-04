@@ -1,11 +1,10 @@
 /**
  * Billing Module
- * v0.2.31 - Token tracking and usage billing for SaaS
+ * v0.2.31 - Local usage tracking for self-hosted AgentGate
  *
  * Provides:
  * - Token usage tracking per execution
  * - Cost calculation based on model pricing
- * - Credit balance management
  * - Usage aggregation and reporting
  */
 
@@ -15,8 +14,6 @@ export type {
   SupportedModel,
   UsageRecord,
   UsageAggregate,
-  CreditBalance,
-  BudgetAlert,
   UsageQueryFilters,
   CostEstimate,
 } from './types.js';

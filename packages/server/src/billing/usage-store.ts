@@ -13,8 +13,6 @@ import { nanoid } from 'nanoid';
 import type {
   UsageRecord,
   UsageAggregate,
-  CreditBalance,
-  BudgetAlert,
   UsageQueryFilters,
 } from './types.js';
 
@@ -22,8 +20,6 @@ const logger = createLogger('usage-store');
 
 const BILLING_DIR = path.join(os.homedir(), '.agentgate', 'billing');
 const USAGE_DIR = path.join(BILLING_DIR, 'usage');
-const CREDITS_FILE = path.join(BILLING_DIR, 'credits.json');
-const ALERTS_FILE = path.join(BILLING_DIR, 'alerts.json');
 
 /**
  * Usage Store for billing data persistence
@@ -117,11 +113,6 @@ export class UsageStore {
       },
       'Usage recorded'
     );
-
-    // Deduct from credits if applicable
-    if (data.userId && data.billingMethod === 'api-key') {
-      await this.deductCredits(data.userId, data.costUsd);
-    }
 
     return record;
   }
@@ -244,185 +235,6 @@ export class UsageStore {
    */
   async getWorkOrderUsage(workOrderId: string): Promise<UsageAggregate> {
     return this.getUsageAggregate({ workOrderId });
-  }
-
-  /**
-   * Get credit balance for a user
-   */
-  async getCreditBalance(userId: string): Promise<CreditBalance | null> {
-    await this.initialize();
-
-    try {
-      const content = await fs.readFile(CREDITS_FILE, 'utf-8');
-      const credits = JSON.parse(content) as Record<string, CreditBalance>;
-      return credits[userId] ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Set credit balance for a user
-   */
-  async setCreditBalance(balance: CreditBalance): Promise<void> {
-    await this.initialize();
-
-    let credits: Record<string, CreditBalance> = {};
-    try {
-      const content = await fs.readFile(CREDITS_FILE, 'utf-8');
-      credits = JSON.parse(content) as Record<string, CreditBalance>;
-    } catch {
-      // File doesn't exist yet
-    }
-
-    credits[balance.userId] = {
-      ...balance,
-      updatedAt: new Date(),
-    };
-
-    await fs.writeFile(CREDITS_FILE, JSON.stringify(credits, null, 2));
-    logger.info({ userId: balance.userId, balanceUsd: balance.balanceUsd }, 'Credit balance updated');
-  }
-
-  /**
-   * Add credits to a user's balance
-   */
-  async addCredits(userId: string, amountUsd: number): Promise<CreditBalance> {
-    const current = await this.getCreditBalance(userId);
-
-    const balance: CreditBalance = current ?? {
-      userId,
-      balanceUsd: 0,
-      lifetimePurchasedUsd: 0,
-      lifetimeUsedUsd: 0,
-      limitUsd: 0,
-      alertThreshold: 0.2,
-      updatedAt: new Date(),
-    };
-
-    balance.balanceUsd += amountUsd;
-    balance.lifetimePurchasedUsd += amountUsd;
-
-    await this.setCreditBalance(balance);
-    return balance;
-  }
-
-  /**
-   * Deduct credits from a user's balance
-   */
-  async deductCredits(userId: string, amountUsd: number): Promise<CreditBalance | null> {
-    const balance = await this.getCreditBalance(userId);
-    if (!balance) return null;
-
-    balance.balanceUsd -= amountUsd;
-    balance.lifetimeUsedUsd += amountUsd;
-
-    await this.setCreditBalance(balance);
-
-    // Check for alerts
-    await this.checkBudgetAlerts(balance);
-
-    return balance;
-  }
-
-  /**
-   * Check and create budget alerts
-   */
-  private async checkBudgetAlerts(balance: CreditBalance): Promise<void> {
-    const alerts: BudgetAlert[] = [];
-
-    // Check low balance
-    if (balance.limitUsd > 0) {
-      const remainingPercent = balance.balanceUsd / balance.limitUsd;
-      if (remainingPercent <= balance.alertThreshold) {
-        alerts.push({
-          id: nanoid(),
-          userId: balance.userId,
-          type: 'low_balance',
-          message: `Credit balance is low: ${((1 - remainingPercent) * 100).toFixed(1)}% used`,
-          balanceUsd: balance.balanceUsd,
-          thresholdUsd: balance.limitUsd * balance.alertThreshold,
-          timestamp: new Date(),
-          acknowledged: false,
-        });
-      }
-    }
-
-    // Check limit reached
-    if (balance.balanceUsd <= 0 && balance.limitUsd > 0) {
-      alerts.push({
-        id: nanoid(),
-        userId: balance.userId,
-        type: 'limit_reached',
-        message: 'Credit limit reached. Please add credits to continue.',
-        balanceUsd: balance.balanceUsd,
-        thresholdUsd: 0,
-        timestamp: new Date(),
-        acknowledged: false,
-      });
-    }
-
-    // Save alerts
-    if (alerts.length > 0) {
-      await this.saveAlerts(alerts);
-    }
-  }
-
-  /**
-   * Save budget alerts
-   */
-  private async saveAlerts(newAlerts: BudgetAlert[]): Promise<void> {
-    let alerts: BudgetAlert[] = [];
-    try {
-      const content = await fs.readFile(ALERTS_FILE, 'utf-8');
-      alerts = JSON.parse(content) as BudgetAlert[];
-    } catch {
-      // File doesn't exist yet
-    }
-
-    alerts.push(...newAlerts);
-
-    // Keep only last 100 alerts
-    if (alerts.length > 100) {
-      alerts = alerts.slice(-100);
-    }
-
-    await fs.writeFile(ALERTS_FILE, JSON.stringify(alerts, null, 2));
-    logger.info({ count: newAlerts.length }, 'Budget alerts saved');
-  }
-
-  /**
-   * Get alerts for a user
-   */
-  async getAlerts(userId: string, unacknowledgedOnly = true): Promise<BudgetAlert[]> {
-    try {
-      const content = await fs.readFile(ALERTS_FILE, 'utf-8');
-      const alerts = JSON.parse(content) as BudgetAlert[];
-      return alerts.filter(a => {
-        if (a.userId !== userId) return false;
-        if (unacknowledgedOnly && a.acknowledged) return false;
-        return true;
-      });
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * Acknowledge an alert
-   */
-  async acknowledgeAlert(alertId: string): Promise<void> {
-    try {
-      const content = await fs.readFile(ALERTS_FILE, 'utf-8');
-      const alerts = JSON.parse(content) as BudgetAlert[];
-      const alert = alerts.find(a => a.id === alertId);
-      if (alert) {
-        alert.acknowledged = true;
-        await fs.writeFile(ALERTS_FILE, JSON.stringify(alerts, null, 2));
-      }
-    } catch {
-      // Ignore
-    }
   }
 }
 
