@@ -106,7 +106,7 @@ export async function loadIterationData(
     const content = await readFile(iterFile, 'utf-8');
     const data = JSON.parse(content) as Record<string, unknown>;
 
-    // v0.2.31: Handle both field naming conventions for backward compatibility
+    // v0.2.30: Handle both field naming conventions for backward compatibility
     // Engine uses startTime/endTime, but older format used startedAt/completedAt
     const startTimeRaw = (data['startedAt'] as string) ?? (data['startTime'] as string);
     const endTimeRaw = (data['completedAt'] as string) ?? (data['endTime'] as string);

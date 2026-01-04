@@ -381,11 +381,11 @@ export class Orchestrator {
       if (harnessSandbox?.provider) sandboxConfig.provider = harnessSandbox.provider;
       if (harnessSandbox?.image) sandboxConfig.image = harnessSandbox.image;
       if (harnessSandbox?.networkMode) sandboxConfig.networkMode = harnessSandbox.networkMode;
-      // Build resource limits from both agentDriver.sandbox and executionLimits (v0.2.31)
+      // Build resource limits from both agentDriver.sandbox and executionLimits (v0.2.30)
       // executionLimits takes precedence as it's the more explicit config
       const resourceLimits: import('../sandbox/index.js').ResourceLimits = {};
       if (harnessSandbox?.cpuCount) resourceLimits.cpuCount = harnessSandbox.cpuCount;
-      // v0.2.31: Use executionLimits.maxMemoryMb as fallback/override for sandbox memory
+      // v0.2.30: Use executionLimits.maxMemoryMb as fallback/override for sandbox memory
       const memoryMB = executionLimits?.maxMemoryMb ?? harnessSandbox?.memoryMB;
       if (memoryMB) resourceLimits.memoryMB = memoryMB;
       if (harnessSandbox?.timeoutSeconds) resourceLimits.timeoutSeconds = harnessSandbox.timeoutSeconds;

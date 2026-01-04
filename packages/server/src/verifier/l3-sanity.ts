@@ -150,7 +150,7 @@ async function checkLargeFiles(
         '**/.git/**',
         '**/dist/**',
         '**/build/**',
-        // Package manager caches (v0.2.31)
+        // Package manager caches (v0.2.30)
         '**/.pnpm-store/**',
         '**/.yarn/**',
         '**/.cache/**',

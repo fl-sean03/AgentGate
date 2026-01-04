@@ -77,7 +77,7 @@ interface SerializedWorkOrder {
   integrationWorkOrderId?: string;
   // CI options (v0.2.16 / Issue #71)
   waitForCI?: boolean;
-  // Harness options (v0.2.31)
+  // Harness options (v0.2.30)
   harnessProfile?: string;
   loopStrategyMode?: string;
   skipVerification?: string[];
@@ -138,7 +138,7 @@ function serialize(order: WorkOrder): SerializedWorkOrder {
     result.waitForCI = order.waitForCI;
   }
 
-  // Harness options (v0.2.31)
+  // Harness options (v0.2.30)
   if (order.harnessProfile !== undefined) {
     result.harnessProfile = order.harnessProfile;
   }
@@ -207,7 +207,7 @@ function deserialize(data: SerializedWorkOrder): WorkOrder {
     result.waitForCI = data.waitForCI;
   }
 
-  // Harness options (v0.2.31)
+  // Harness options (v0.2.30)
   if (data.harnessProfile !== undefined) {
     result.harnessProfile = data.harnessProfile;
   }
