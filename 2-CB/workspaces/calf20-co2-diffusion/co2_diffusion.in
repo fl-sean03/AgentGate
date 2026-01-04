@@ -1,0 +1,149 @@
+# LAMMPS INPUT SCRIPT
+# -----------------------------
+# CALF-20 (3x3x3) + 27 CO2
+# Rigid framework, CO2 diffusion (MSD)
+# Self-diffusion coefficient D extraction
+# -----------------------------
+
+# ---- Simulation Parameters
+variable        DATA       string calf20_333_co2_27.data
+variable        T          equal  298.0         # Temperature (K)
+variable        DT         equal  1.0           # Timestep (fs)
+variable        LJ_CUT     equal  12.0          # LJ cutoff (Angstrom)
+variable        COUL_CUT   equal  12.0          # Coulomb cutoff (Angstrom)
+variable        PPPM_ACC   equal  1.0e-5        # PPPM accuracy
+variable        SEED       equal  12345         # Random seed
+
+# Run lengths (steps)
+variable        MIN_STEPS  equal  5000          # Max minimization steps
+variable        EQ_STEPS   equal  50000         # 50 ps equilibration
+variable        PR_STEPS   equal  1000000       # 1 ns production
+
+# Output frequencies
+variable        THERMO_N   equal  500           # Thermo output every 0.5 ps
+variable        DUMP_N     equal  1000          # Trajectory dump every 1 ps
+variable        MSD_N      equal  100           # MSD output every 0.1 ps
+
+# ---- Initialization
+units           real
+atom_style      full
+dimension       3
+boundary        p p p
+
+# ---- Force Field Styles (MUST be declared BEFORE read_data)
+pair_style      lj/cut/coul/long ${LJ_CUT} ${COUL_CUT}
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  harmonic
+improper_style  cvff
+
+# ---- Read System Configuration
+read_data       ${DATA}
+
+# ---- Force Field Settings (AFTER read_data)
+pair_modify     mix geometric tail yes
+kspace_style    pppm ${PPPM_ACC}
+special_bonds   lj/coul 0.0 0.0 0.5
+
+# ---- Neighbor List Settings
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+# ---- Define Groups
+# Framework: Zn_MO(1), N_MOF(2), O_MOF(3), C_MOF(4), H_MOF(5)
+# CO2: cdc(6), cdo(7)
+group           framework type 1 2 3 4 5
+group           co2       type 6 7
+# CO2 carbons only (27 atoms) = molecular COMs for symmetric O=C=O
+group           co2_com   type 6
+
+# ---- Freeze Framework Atoms
+velocity        framework set 0.0 0.0 0.0
+fix             freeze framework setforce 0.0 0.0 0.0
+
+# ---- Timestep
+timestep        ${DT}
+
+# ---- Initialize CO2 Velocities
+velocity        co2 create ${T} ${SEED} mom yes rot yes dist gaussian
+
+# ---- Temperature Compute for CO2 Only
+compute         Tco2 co2 temp
+
+# ---- Thermodynamic Output Settings
+thermo          ${THERMO_N}
+thermo_style    custom step time temp c_Tco2 etotal pe ke evdwl ecoul elong ebond eangle edihed eimp press vol density
+thermo_modify   temp Tco2
+
+# ---- Energy Check (zero-step run)
+run             0
+
+# ---- Minimization Phase
+# Relax CO2 positions while framework is frozen
+print           "=== Starting Minimization ==="
+min_style       cg
+minimize        1.0e-4 1.0e-6 ${MIN_STEPS} 10000
+
+# ---- Reset for Dynamics
+reset_timestep  0
+
+# ---- NVT Thermostat for CO2 Only
+fix             nvt_co2 co2 nvt temp ${T} ${T} 100.0
+fix_modify      nvt_co2 temp Tco2
+
+# ---- Remove COM Drift of CO2
+fix             mom_co2 co2 momentum 100 linear 1 1 1
+
+# ---- Equilibration Phase
+print           "=== Starting Equilibration: 50 ps ==="
+
+# Equilibration trajectory (optional, can comment out to save space)
+dump            eq_traj co2 custom ${DUMP_N} equil.lammpstrj id mol type x y z xu yu zu vx vy vz
+dump_modify     eq_traj sort id
+
+run             ${EQ_STEPS}
+
+undump          eq_traj
+print           "=== Equilibration Complete ==="
+
+# ---- Production Phase
+print           "=== Starting Production: 1 ns ==="
+reset_timestep  0
+
+# Production trajectory - unwrapped coordinates for diffusion analysis
+dump            prod_traj all custom ${DUMP_N} prod.lammpstrj id mol type q x y z xu yu zu ix iy iz
+dump_modify     prod_traj sort id
+
+# ---- MSD Computation for CO2 Molecular Centers-of-Mass
+# For symmetric O=C=O: carbon position = molecular COM exactly
+# Track 27 carbon atoms, com yes removes group drift
+compute         msd_co2 co2_com msd com yes
+
+# ---- MSD Output to File
+# Columns: TimeStep MSD_x MSD_y MSD_z MSD_total
+fix             msd_out all ave/time ${MSD_N} 1 ${MSD_N} &
+                c_msd_co2[1] c_msd_co2[2] c_msd_co2[3] c_msd_co2[4] &
+                file msd.dat mode scalar
+
+# ---- Production Run
+run             ${PR_STEPS}
+
+print           "=== Production Complete ==="
+
+# ---- Final Output
+write_restart   restart.final
+write_data      final.data nocoeff
+
+# ---- Print Analysis Instructions
+print           "========================================"
+print           "Simulation Complete"
+print           "========================================"
+print           "MSD data written to: msd.dat"
+print           "Trajectory written to: prod.lammpstrj"
+print           ""
+print           "To extract self-diffusion coefficient D:"
+print           "  D = lim(t->inf) MSD / (6*t)"
+print           "  Fit linear region of MSD vs time"
+print           "  D units: Angstrom^2/fs -> multiply by 0.1 for cm^2/s"
+print           "  Or: D [m^2/s] = D [A^2/fs] * 1e-5"
+print           "========================================"

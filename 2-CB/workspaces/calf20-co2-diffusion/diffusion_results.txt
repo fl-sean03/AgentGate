@@ -1,0 +1,28 @@
+============================================================
+CO2 Self-Diffusion Analysis Results
+============================================================
+
+--- Fitting Parameters ---
+Fit range: 200.0 - 500.0 ps
+Number of points: 3001
+R² (goodness of fit): 0.599782
+
+--- MSD Linear Fit ---
+Slope: 0.003683 Å²/ps
+Intercept: 1.304906 Å²
+
+--- Self-Diffusion Coefficient D ---
+D = 6.138314e-04 Å²/ps
+D = 6.138314e-12 m²/s
+D = 6.138314e-08 cm²/s
+
+--- Kinetic Timescale τ ---
+Length scale L: 10.0 Å
+τ = L²/D = 162.911 ns
+τ = 0.162911 µs
+τ = 0.000162911 ms
+
+--- DAC Performance Metric ---
+M_DAC = (Δq × S_CO₂/N₂) / τ
+Use τ = 162.911 ns in your DAC ranking
+============================================================

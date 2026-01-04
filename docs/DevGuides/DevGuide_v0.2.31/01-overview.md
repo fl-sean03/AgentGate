@@ -1,258 +1,357 @@
-# Overview: OSS/SaaS Repository Split
+# Overview: Workshop & Storefront Architecture
 
 ---
 
-## Current State
+## The Core Model
 
-AgentGate currently exists as a single monorepo containing:
-
-```
-packages/
-├── server/          # Core orchestration (OSS-appropriate)
-├── dashboard/       # React dashboard (SaaS-focused)
-├── web/             # Next.js SaaS website (Stripe, OAuth)
-├── tui/             # Terminal UI (mixed - has credit references)
-├── shared/          # Shared types (OSS-appropriate)
-└── ...
-```
-
-### Problems with Current State
-
-1. **User confusion**: Open-source users see SaaS features they can't use
-2. **Security exposure**: SaaS infrastructure code is public
-3. **Bloated installation**: Users download code they don't need
-4. **Mixed messaging**: README talks about credits when users use own keys
-5. **Contribution friction**: Contributors unsure what's public vs internal
-
----
-
-## Target State
-
-### Public Repository: `agentgate` (Open Source)
-
-Purpose: Community-usable AI coding agent orchestrator
+Development and production are completely separate environments with different purposes:
 
 ```
-packages/
-├── server/          # Core orchestration engine
-├── tui/             # Terminal UI (simplified, no credits)
-├── shared/          # Shared TypeScript types
-└── ...
-
-Features:
-- Work order submission and execution
-- Verification gates (L0-L3)
-- Sandbox isolation
-- Local usage tracking (user's own costs)
-- GitHub integration
-- Session resume
-```
-
-### Private Repository: `agentgate-internal` (SaaS)
-
-Purpose: Production SaaS deployment infrastructure
-
-```
-packages/
-├── core/            # -> imports from public agentgate
-├── saas-server/     # Extended server with billing
-├── dashboard/       # Customer dashboard (migrated)
-├── web/             # SaaS website (migrated)
-├── billing/         # Credit-based billing system
-└── infra/           # Deployment, monitoring, etc.
-
-Features:
-- Everything from public repo
-- Credit-based billing
-- Multi-tenant isolation
-- Customer dashboard
-- Stripe integration
-- GitHub OAuth
-- Usage limits and quotas
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  WORKSHOP (Laptop - WSL)              STOREFRONT (Home Server - Dell)   │
+│  ════════════════════════             ═══════════════════════════════   │
+│                                                                         │
+│  Purpose: Build and test              Purpose: Run production           │
+│                                                                         │
+│  ┌─────────────────────┐              ┌─────────────────────┐          │
+│  │ ~/repos/agentgate   │              │                     │          │
+│  │ (OSS - cloned)      │───push───────│    GitHub           │          │
+│  └─────────────────────┘      │       │    (source of       │          │
+│                               │       │     truth)          │          │
+│  ┌─────────────────────┐      │       │                     │          │
+│  │ ~/repos/agentgate-  │──────┘       └──────────┬──────────┘          │
+│  │ internal (Private)  │                         │                      │
+│  └─────────────────────┘                         │ pull                 │
+│                                                  ▼                      │
+│  Activities:                          ┌─────────────────────┐          │
+│  • Edit code                          │ /opt/agentgate/     │          │
+│  • Run tests                          │ Docker containers   │          │
+│  • Start local server                 │ Always running      │          │
+│  • Debug with live logs               │ Serves users        │          │
+│  • Submit test work orders            └─────────────────────┘          │
+│                                                                         │
+│  You are here: Claude Code            Operator: Another person or       │
+│  running in this environment          automated deploy system           │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Architecture Decision: Import vs Fork
+## Why This Separation?
 
-**Decision**: Private repo imports public as dependency
+### Workshop (Laptop)
 
-Rationale:
-1. Single source of truth for core functionality
-2. Bug fixes in core automatically available to SaaS
-3. Clear separation of concerns
-4. Community contributions go to the right place
+| Benefit | Description |
+|---------|-------------|
+| **Fast iteration** | Edit → test → see results in seconds |
+| **Full visibility** | Logs stream directly to your terminal |
+| **No dependencies** | Works even if home server is offline |
+| **Direct debugging** | Add console.logs, breakpoints, whatever you need |
+| **Both repos accessible** | Can test OSS and Internal together |
 
-Implementation:
-```json
-// agentgate-internal/package.json
-{
-  "dependencies": {
-    "@agentgate/server": "npm:agentgate@latest",
-    "@agentgate/shared": "npm:agentgate-shared@latest"
-  }
-}
+### Storefront (Home Server)
+
+| Benefit | Description |
+|---------|-------------|
+| **Always on** | Runs 24/7 without your laptop |
+| **Production-like** | Docker containers, proper isolation |
+| **Stable** | Only runs tested, pushed code |
+| **Serves users** | External access if needed |
+| **Automated** | Can auto-update, auto-restart |
+
+---
+
+## Repository Architecture
+
+### Public Repository: `agentgate`
+
+**Location**: GitHub (public), cloned to laptop
+
+**Purpose**: Open-source AI coding agent orchestrator that anyone can use
+
+**Contents**:
+```
+agentgate/
+├── packages/
+│   ├── server/              # Core orchestration engine
+│   │   ├── orchestrator/    # State machine, WAL
+│   │   ├── execution/       # Work order execution
+│   │   ├── verifier/        # L0-L3 verification gates
+│   │   ├── sandbox/         # Docker/subprocess isolation
+│   │   ├── agent/           # Claude Code drivers
+│   │   ├── billing/         # Local usage tracking (simplified)
+│   │   └── ...
+│   │
+│   ├── shared/              # TypeScript types
+│   └── tui/                 # Terminal UI (simplified)
+│
+├── docs/                    # Documentation
+├── examples/                # Usage examples
+└── .github/workflows/       # OSS CI (tests, lint, npm publish)
+```
+
+**Users**: Open-source community, self-hosters using their own API keys
+
+---
+
+### Private Repository: `agentgate-internal`
+
+**Location**: GitHub (private), cloned to laptop, deployed to home server
+
+**Purpose**: SaaS layer + continuous improvement infrastructure
+
+**Contents**:
+```
+agentgate-internal/
+├── packages/
+│   ├── saas-server/         # Extended server
+│   │   ├── src/
+│   │   │   ├── billing/     # Credit-based billing (Stripe)
+│   │   │   ├── auth/        # GitHub OAuth, sessions
+│   │   │   ├── multi-tenant/# User/org isolation
+│   │   │   └── index.ts     # Imports and extends @agentgate/server
+│   │   └── package.json     # depends on @agentgate/server
+│   │
+│   ├── dashboard/           # Customer dashboard (React)
+│   ├── web/                 # Marketing site (Next.js)
+│   │
+│   ├── scheduler/           # (Future) Task queue
+│   ├── discovery/           # (Future) Task discovery plugins
+│   └── worker/              # (Future) Continuous improvement daemon
+│
+├── infra/
+│   ├── docker/              # Dockerfiles, compose
+│   └── scripts/             # Deployment scripts
+│
+└── .github/workflows/       # Private CI (tests + deploy)
+```
+
+**Users**: You (for SaaS), potentially future customers
+
+---
+
+## How They Connect
+
+### Dependency Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│  agentgate (OSS)                                                 │
+│  ├── Published to npm as @agentgate/server                       │
+│  └── Published to npm as @agentgate/shared                       │
+│                                                                  │
+│                            ▼                                     │
+│                                                                  │
+│  agentgate-internal (Private)                                    │
+│  └── package.json:                                               │
+│      {                                                           │
+│        "dependencies": {                                         │
+│          "@agentgate/server": "^0.3.0",                          │
+│          "@agentgate/shared": "^0.3.0"                           │
+│        }                                                         │
+│      }                                                           │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Development Flow (Cross-Repo Changes)
+
+When you need to change OSS and test in Internal before publishing:
+
+```
+1. Make changes in ~/repos/agentgate/packages/server/
+
+2. Link locally:
+   cd ~/repos/agentgate/packages/server && pnpm link --global
+   cd ~/repos/agentgate-internal && pnpm link @agentgate/server
+
+3. Test Internal with local OSS changes
+
+4. When working:
+   - Push OSS changes, publish to npm
+   - Update Internal to use npm version
+   - Push Internal changes
 ```
 
 ---
 
-## What Stays in Public Repo
+## Development Workflow Detail
 
-### Keep: Core Orchestration (`packages/server/`)
+### Scenario: Fix a Bug in OSS
 
-| Module | Rationale |
-|--------|-----------|
-| `orchestrator/` | Core state machine, WAL |
-| `execution/` | Execution engine, phases |
-| `verifier/` | L0-L3 verification |
-| `sandbox/` | Docker/subprocess isolation |
-| `delivery/` | Git operations, PR creation |
-| `agent/` | Agent drivers |
-| `config/` | Configuration system |
-| `errors/` | Error framework |
-| `gate/` | Gate runners |
-| `queue/` | Execution queue |
+```
+LAPTOP:
 
-### Keep: Usage Tracking (Modified)
+1. Reproduce the bug
+   $ cd ~/Workspace/main/43-AgentGate
+   $ pnpm dev                    # Start local server
+   $ curl localhost:3001/...    # Trigger the bug
 
-| What | Keep | Remove |
-|------|------|--------|
-| Token counting | Yes | - |
-| Cost calculation | Yes | - |
-| Usage persistence | Yes (local) | Multi-tenant |
-| Credit balance | - | Yes |
-| Budget alerts | - | Yes |
-| User/org billing | - | Yes |
+2. Find and fix
+   $ code packages/server/src/...  # Edit
+   $ pnpm test                     # Run tests
 
-### Keep: Terminal UI (Modified)
+3. Verify fix
+   $ pnpm dev                      # Restart server
+   $ curl localhost:3001/...      # Bug fixed!
 
-| Feature | Keep | Remove |
-|---------|------|--------|
-| Work order submission | Yes | - |
-| Run monitoring | Yes | - |
-| Usage display | Yes (local costs) | Credit balance |
-| Login/OAuth | - | Yes (SaaS) |
-| API key input | - | Yes (SaaS) |
+4. Push
+   $ git add . && git commit -m "fix: ..." && git push
+
+HOME SERVER:
+
+5. Deploy (auto or manual)
+   $ cd /opt/agentgate && git pull && docker-compose restart
+```
+
+### Scenario: Add Feature to SaaS
+
+```
+LAPTOP:
+
+1. Develop the feature
+   $ cd ~/Workspace/main/44-AgentGate-Internal
+   $ code packages/saas-server/src/...  # Edit
+   $ pnpm test                          # Run tests
+
+2. Test locally
+   $ pnpm dev                           # Start local SaaS server
+   $ curl localhost:3001/...           # Test new endpoint
+
+3. Push when working
+   $ git add . && git commit -m "feat: ..." && git push
+
+HOME SERVER:
+
+4. Deploy
+   $ cd /opt/agentgate && git pull && docker-compose restart
+```
+
+### Scenario: OSS Change Affects Internal
+
+```
+LAPTOP:
+
+1. Make OSS change
+   $ cd ~/Workspace/main/43-AgentGate
+   $ code packages/server/src/...  # Edit core
+   $ pnpm test                     # OSS tests pass
+
+2. Link and test Internal
+   $ cd ~/Workspace/main/43-AgentGate/packages/server && pnpm link --global
+   $ cd ~/Workspace/main/44-AgentGate-Internal && pnpm link @agentgate/server
+   $ pnpm test                     # Internal tests pass with linked OSS
+
+3. Push OSS, wait for npm publish
+   $ cd ~/Workspace/main/43-AgentGate && git push
+   # CI publishes @agentgate/server@0.3.1
+
+4. Update Internal to use published version
+   $ cd ~/Workspace/main/44-AgentGate-Internal
+   $ pnpm update @agentgate/server
+   $ git add . && git commit -m "chore: update agentgate" && git push
+
+HOME SERVER:
+
+5. Deploy Internal with new OSS
+   $ cd /opt/agentgate && git pull && docker-compose restart
+```
 
 ---
 
-## What Moves to Private Repo
+## What Changes from Current State
 
-### Move: Dashboard (`packages/dashboard/`)
+### In Public Repo (agentgate)
 
-Entire package is SaaS-focused:
-- Customer usage views
-- Billing management
-- Team/org management
-- API key management
+| Change | Before | After |
+|--------|--------|-------|
+| `packages/dashboard/` | Exists | Deleted |
+| `packages/web/` | Exists | Deleted |
+| `packages/tui/` | Has SaaS features | Simplified for local use |
+| `packages/server/src/billing/` | Has credits | Only local usage tracking |
+| README | Mixed messaging | Focus on self-hosted |
 
-### Move: SaaS Website (`packages/web/`)
+### In Private Repo (agentgate-internal)
 
-Entire package is SaaS infrastructure:
-- Marketing pages
-- Pricing/plans
-- Stripe checkout
-- GitHub OAuth
-- Account management
-
-### Move: SaaS Billing Logic
-
-From `packages/server/src/billing/`:
-- `CreditBalance` type and operations
-- `BudgetAlert` system
-- Multi-tenant usage queries
-- User-based billing method
+| Change | Before | After |
+|--------|--------|-------|
+| Repository | Doesn't exist | Created |
+| `packages/dashboard/` | - | Migrated from public |
+| `packages/web/` | - | Migrated from public |
+| `packages/saas-server/` | - | New, extends OSS |
 
 ---
 
-## Configuration Strategy
+## Configuration
 
-### Public Repo Config
+### Local Development (Laptop)
 
-```yaml
-# ~/.agentgate/config.yaml (user's machine)
+```
+# ~/.agentgate/config.yaml
+server:
+  port: 3001
+  host: localhost
+
 agentDriver:
-  type: claude-code-subscription  # or api-key
+  type: claude-code-subscription
   sandbox:
     provider: subprocess
+
 usage:
-  trackLocally: true  # Local cost tracking
-  displayCosts: true  # Show in TUI
+  trackLocally: true
+  displayCosts: true
 ```
 
-### Private Repo Config (extends public)
-
-```yaml
-# SaaS deployment config
-extends: "@agentgate/server/config"
-billing:
-  enabled: true
-  provider: stripe
-  creditsPerDollar: 100
-multiTenant:
-  enabled: true
-  isolation: strict
-```
-
----
-
-## Migration Strategy
-
-### Phase 1: Preparation
-
-1. Create private repo with proper structure
-2. Define clear interfaces between core and SaaS
-3. Add feature flags for SaaS-specific code
-
-### Phase 2: Migration
-
-4. Copy dashboard package to private repo
-5. Copy web package to private repo
-6. Extract SaaS billing from server to private repo
-
-### Phase 3: Cleanup
-
-7. Remove SaaS packages from public repo
-8. Update TUI to remove credit references
-9. Refine billing module for local-only use
-10. Update all documentation
-
----
-
-## API Compatibility
-
-### Public API (Preserved)
+### Production (Home Server)
 
 ```
-POST /api/v1/work-orders     # Submit work order
-GET  /api/v1/work-orders/:id # Get work order
-GET  /api/v1/runs/:id        # Get run details
-GET  /api/v1/usage/summary   # Local usage stats
-```
+# /opt/agentgate/.env
+NODE_ENV=production
+PORT=8080
 
-### SaaS API (Private Repo Only)
+# SaaS features
+STRIPE_SECRET_KEY=sk_live_...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+DATABASE_URL=postgres://...
 
-```
-POST /api/v1/credits/purchase  # Buy credits
-GET  /api/v1/billing/usage     # Billing usage
-GET  /api/v1/organization      # Org management
-POST /api/v1/auth/github       # OAuth
+# Core config
+AGENTGATE_API_KEY=...
 ```
 
 ---
 
-## Documentation Updates Needed
+## Future: Continuous Improvement
 
-### Public Repo
+Once the foundation is solid, we add automation:
 
-- README: Focus on self-hosted usage
-- Installation: Just core packages
-- Configuration: Local API keys only
-- Contributing: Core orchestration focus
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HOME SERVER (Extended)                        │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                     AgentGate SaaS                          │ │
+│  │                     (serving users)                         │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                              +                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                  Continuous Improvement                     │ │
+│  │                                                             │ │
+│  │  ┌──────────┐   ┌──────────┐   ┌──────────┐               │ │
+│  │  │Discovery │ → │Scheduler │ → │ Worker   │               │ │
+│  │  │          │   │          │   │          │               │ │
+│  │  │• Issues  │   │• Queue   │   │• Execute │               │ │
+│  │  │• Deps    │   │• Priority│   │• Submit  │               │ │
+│  │  │• Tests   │   │• Order   │   │• PRs     │               │ │
+│  │  └──────────┘   └──────────┘   └──────────┘               │ │
+│  │                                                             │ │
+│  │  Result: PRs created automatically for you to review       │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-### Private Repo
-
-- Deployment guide
-- SaaS architecture
-- Billing integration
-- Multi-tenant setup
+This is Phase 4 (Thrusts 10-12) - not part of initial setup.

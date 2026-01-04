@@ -2,7 +2,7 @@
 
 ---
 
-## A. Component Inventory {#component-inventory}
+## A. Component Inventory
 
 ### A.1 Public Repository Components
 
@@ -32,7 +32,7 @@
 | `process/` | Core | Keep |
 | `utils/` | Core | Keep |
 | `types/` | Core | Keep |
-| `billing/` | Hybrid | Simplify - keep usage tracking |
+| `billing/` | Hybrid | Simplify - keep usage tracking only |
 | `extensibility/` | Core | Keep |
 | `artifacts/` | Core | Keep |
 | `github/` | Core | Keep |
@@ -42,53 +42,73 @@
 
 ---
 
-## B. Migration Checklist {#migration-checklist}
+## B. Migration Checklist
 
-### B.1 Pre-Migration
+### B.1 Pre-Migration (Phase 1)
 
-- [ ] Private repository created
-- [ ] Private repo structure verified
-- [ ] Dependencies configured
+- [ ] Development environment set up on laptop
+- [ ] Public repo cloned and tested
+- [ ] Local config created (`~/.agentgate/config.yaml`)
+- [ ] Private repository created on GitHub
+- [ ] Private repo structure initialized
 - [ ] TypeScript compilation works
+- [ ] `pnpm link` tested between repos
 
-### B.2 Package Migration
+### B.2 Package Migration (Phase 2)
 
 - [ ] Dashboard copied to private repo
-- [ ] Dashboard imports updated
-- [ ] Dashboard builds successfully
+- [ ] Dashboard imports updated to use npm packages
+- [ ] Dashboard builds successfully in private repo
 - [ ] Web package copied to private repo
 - [ ] Web imports updated
-- [ ] Web builds successfully
-- [ ] SaaS billing code extracted
+- [ ] Web builds successfully in private repo
+- [ ] Pre-split tag created in public repo (`pre-split-v0.2.31`)
 
-### B.3 Public Cleanup
+### B.3 Public Cleanup (Phase 2)
 
-- [ ] Dashboard deleted from public
-- [ ] Web deleted from public
+- [ ] Dashboard deleted from public repo
+- [ ] Web deleted from public repo
 - [ ] TUI SaaS features removed
-- [ ] Billing module simplified
-- [ ] README updated
+- [ ] Billing module simplified (credits removed)
+- [ ] `pnpm-workspace.yaml` updated
+- [ ] README rewritten for OSS
 - [ ] CLAUDE.md updated
-- [ ] DevGuides list updated
+- [ ] DevGuides README updated
 
-### B.4 CI/CD
+### B.4 Deployment (Phase 3)
 
-- [ ] Public CI simplified
-- [ ] Private CI created
-- [ ] Sync mechanism configured
-- [ ] Release process tested
+- [ ] Docker configuration created
+- [ ] Docker Compose file tested
+- [ ] Deploy script created
+- [ ] Home server directory set up (`/opt/agentgate`)
+- [ ] Environment file created (`.env`)
+- [ ] Systemd service configured
+- [ ] Initial deployment successful
+- [ ] Health check passing
 
-### B.5 Verification
+### B.5 CI/CD (Phase 3)
 
-- [ ] Public repo installs standalone
-- [ ] Public repo tests pass
+- [ ] Public CI workflow updated
+- [ ] Public release workflow updated
+- [ ] Private CI workflow created
+- [ ] Private deploy workflow created
+- [ ] OSS sync workflow created
+- [ ] Secrets configured in GitHub
+
+### B.6 Verification (Final)
+
+- [ ] Public repo installs standalone (`pnpm install`)
+- [ ] Public repo tests pass (`pnpm test`)
+- [ ] Public repo builds (`pnpm build`)
 - [ ] Private repo builds
 - [ ] Private repo imports public correctly
 - [ ] No SaaS references in public grep
+- [ ] Production server healthy
+- [ ] Auto-deploy works
 
 ---
 
-## C. API Surface Changes {#api-changes}
+## C. API Surface Changes
 
 ### C.1 Public API (Preserved)
 
@@ -118,7 +138,7 @@
 | `POST /api/v1/auth/github` | SaaS OAuth |
 | `GET /api/v1/subscription` | SaaS plans |
 
-### C.3 Private-Only API (New)
+### C.3 Private-Only API (SaaS)
 
 | Endpoint | Description |
 |----------|-------------|
@@ -241,7 +261,7 @@ Files to delete from public repo after migration:
 
 ```bash
 # Should all pass without SaaS components
-cd agentgate
+cd ~/Workspace/main/43-AgentGate
 pnpm install
 pnpm typecheck
 pnpm test
@@ -261,7 +281,7 @@ grep -r "saas" packages/ --include="*.ts" -i
 ### G.2 Private Repo Verification
 
 ```bash
-cd agentgate-internal
+cd ~/Workspace/main/44-AgentGate-Internal
 pnpm install
 pnpm typecheck
 pnpm build
@@ -271,6 +291,21 @@ node -e "require('@agentgate/server')"
 
 # Run full test suite
 pnpm test
+```
+
+### G.3 Production Verification
+
+```bash
+# On home server
+curl http://localhost:8080/api/v1/health
+# Expected: {"status":"ok",...}
+
+# Check containers
+docker ps
+# Expected: saas-server and dashboard running
+
+# Check logs
+docker logs agentgate-saas-server --tail 50
 ```
 
 ---
@@ -296,3 +331,68 @@ If only specific packages need rollback:
 1. Cherry-pick deleted files from backup branch
 2. Restore package.json references
 3. Update pnpm-workspace.yaml
+
+---
+
+## I. Environment Variables Reference
+
+### I.1 Public Repo (Local Development)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | Server port | `3001` |
+| `LOG_LEVEL` | Logging verbosity | `info` |
+| `AGENTGATE_CONFIG` | Config file path | `~/.agentgate/config.yaml` |
+
+### I.2 Private Repo (Production)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `PORT` | Server port | No (default 8080) |
+| `NODE_ENV` | Environment | Yes |
+| `STRIPE_SECRET_KEY` | Stripe API key | Yes |
+| `GITHUB_CLIENT_ID` | OAuth client ID | Yes |
+| `GITHUB_CLIENT_SECRET` | OAuth client secret | Yes |
+| `DATABASE_URL` | PostgreSQL connection | Yes |
+| `REDIS_URL` | Redis connection | No |
+| `LOG_LEVEL` | Logging verbosity | No |
+
+---
+
+## J. Quick Reference Commands
+
+### J.1 Development (Laptop)
+
+```bash
+# Start OSS server
+cd ~/Workspace/main/43-AgentGate && pnpm dev
+
+# Start SaaS server (linked)
+cd ~/Workspace/main/44-AgentGate-Internal && pnpm dev
+
+# Link for cross-repo testing
+cd ~/Workspace/main/43-AgentGate/packages/server && pnpm link --global
+cd ~/Workspace/main/44-AgentGate-Internal && pnpm link @agentgate/server
+
+# Unlink after testing
+cd ~/Workspace/main/44-AgentGate-Internal && pnpm unlink @agentgate/server
+```
+
+### J.2 Production (Home Server)
+
+```bash
+# Deploy latest
+cd /opt/agentgate && ./infra/scripts/deploy.sh
+
+# View logs
+./infra/scripts/logs.sh saas-server 100
+
+# Check health
+curl http://localhost:8080/api/v1/health
+
+# Restart services
+docker-compose -f infra/docker/docker-compose.yml restart
+
+# Check status
+sudo systemctl status agentgate
+```

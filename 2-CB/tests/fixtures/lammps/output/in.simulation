@@ -1,0 +1,55 @@
+# LAMMPS input script for water simulation
+# Generated from water.data file guide
+
+# Initialization
+units real
+dimension 3
+boundary p p p
+atom_style full
+
+# Read structure file
+read_data water.data
+
+# Force field parameters
+# Note: Specific pair coefficients from water.data (2 coefficients found)
+# Using TIP3P water model parameters (standard for water simulations)
+pair_style lj/cut/coul/long 10.0
+pair_coeff 1 1 0.1521 3.1507  # O-O interaction (TIP3P oxygen)
+pair_coeff 2 2 0.0000 0.0000  # H-H interaction (TIP3P hydrogen)
+pair_coeff 1 2 0.0000 0.0000  # O-H interaction (TIP3P cross-term)
+
+# Bond parameters (assuming flexible water model)
+bond_style harmonic
+bond_coeff 1 450.0 0.9572  # O-H bond (typical TIP3P flexible)
+
+# Angle parameters
+angle_style harmonic
+angle_coeff 1 55.0 104.52  # H-O-H angle (typical water)
+
+# Long-range electrostatics
+kspace_style pppm 1.0e-4
+
+# Neighbor list settings
+neighbor 2.0 bin
+neigh_modify delay 0 every 20 check no
+
+# Thermodynamic output
+thermo_style custom step temp pe ke etotal press vol
+thermo 100
+
+# Equilibration run (NVT ensemble)
+velocity all create 300.0 12345
+fix nvt all nvt temp 300.0 300.0 100.0
+timestep 1.0
+run 10000
+unfix nvt
+
+# Production run (NPT ensemble)
+fix npt all npt temp 300.0 300.0 100.0 iso 1.0 1.0 1000.0
+run 50000
+
+# Output trajectory
+dump traj all atom 500 water.lammpstrj
+dump_modify traj sort id
+
+write_restart water_final.restart
