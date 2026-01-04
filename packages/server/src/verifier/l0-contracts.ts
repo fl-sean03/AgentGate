@@ -6,7 +6,7 @@
 import { access, readFile } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import fg from 'fast-glob';
-import Ajv, { type ValidateFunction, type ErrorObject } from 'ajv';
+import Ajv, { type ValidateFunction, type ErrorObject, type AnySchema } from 'ajv';
 import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';
@@ -448,7 +448,7 @@ async function validateJsonSchema(
     }
 
     let schemaContent: string;
-    let schema: unknown;
+    let schema: AnySchema;
 
     try {
       schemaContent = await readFile(absoluteSchemaPath, 'utf-8');
@@ -473,7 +473,8 @@ async function validateJsonSchema(
   }
 
   // Validate the data against the schema
-  const valid = validate(data);
+  // At this point validate is guaranteed to be set (either from cache or compiled)
+  const valid = validate!(data);
 
   if (valid) {
     return { passed: true, message: '' };
@@ -481,7 +482,7 @@ async function validateJsonSchema(
 
   return {
     passed: false,
-    message: `JSON Schema validation failed: ${formatAjvErrors(validate.errors)}`,
+    message: `JSON Schema validation failed: ${formatAjvErrors(validate!.errors)}`,
   };
 }
 

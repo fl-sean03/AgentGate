@@ -60,7 +60,10 @@ export function withCorrelation<T>(
 ): T {
   const fullContext: CorrelationContext = {
     correlationId: context.correlationId ?? generateCorrelationId(),
-    ...context,
+    workOrderId: context.workOrderId,
+    runId: context.runId,
+    iteration: context.iteration,
+    metadata: context.metadata,
   };
   return correlationStorage.run(fullContext, fn);
 }
@@ -74,7 +77,10 @@ export async function withCorrelationAsync<T>(
 ): Promise<T> {
   const fullContext: CorrelationContext = {
     correlationId: context.correlationId ?? generateCorrelationId(),
-    ...context,
+    workOrderId: context.workOrderId,
+    runId: context.runId,
+    iteration: context.iteration,
+    metadata: context.metadata,
   };
   return correlationStorage.run(fullContext, fn);
 }

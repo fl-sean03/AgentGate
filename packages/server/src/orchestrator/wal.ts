@@ -113,7 +113,7 @@ export function createWALEntry(
   event: RunEvent,
   metadata?: Record<string, unknown>
 ): WALEntry {
-  return {
+  const entry: WALEntry = {
     id: randomUUID(),
     timestamp: new Date().toISOString(),
     runId,
@@ -121,8 +121,11 @@ export function createWALEntry(
     targetState,
     event,
     status: WALStatus.PENDING,
-    metadata,
   };
+  if (metadata !== undefined) {
+    entry.metadata = metadata;
+  }
+  return entry;
 }
 
 /**
