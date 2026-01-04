@@ -11,6 +11,10 @@ export const FailureType = {
   BUILD_ERROR: 'build_error',
   RUNTIME_ERROR: 'runtime_error',
   RESOURCE_EXCEEDED: 'resource_exceeded',
+  LINT_ERROR: 'lint_error',
+  WARNING: 'warning',
+  STYLE: 'style',
+  UNKNOWN: 'unknown',
 } as const;
 
 export type FailureType = (typeof FailureType)[keyof typeof FailureType];
