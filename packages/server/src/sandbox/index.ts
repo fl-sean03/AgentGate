@@ -48,3 +48,24 @@ export {
   type SandboxManagerConfig,
   type SandboxSystemStatus,
 } from './manager.js';
+
+// Sandbox Registry (v0.2.27 - Thrust 4: Guaranteed Sandbox Cleanup)
+export {
+  SandboxRegistry,
+  getSandboxRegistry,
+  type SandboxRegistryEntry,
+  type SandboxType,
+  type RegistryStatus,
+  type RegistryConfig,
+} from './registry.js';
+
+// Orphan Detector (v0.2.27 - Thrust 4: Guaranteed Sandbox Cleanup)
+export {
+  detectAndCleanupOrphans,
+  runStartupCleanup,
+  cleanupSandboxById,
+  forceCleanupAll,
+  getCleanupStats,
+  type OrphanCleanupResult,
+  type CleanupConfig,
+} from './orphan-detector.js';

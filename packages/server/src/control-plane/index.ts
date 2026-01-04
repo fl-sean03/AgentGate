@@ -70,3 +70,17 @@ export {
   createListCommand,
   createCancelCommand,
 } from './cli.js';
+
+// Shutdown Manager (v0.2.27 - Thrust 3)
+export {
+  ShutdownManager,
+  ShutdownPhase,
+  getShutdownManager,
+  registerShutdownHandler,
+  installSignalHandlers,
+  waitForShutdown,
+  type ShutdownHandler,
+  type ShutdownState,
+  type ShutdownResult,
+  type ShutdownConfig,
+} from './shutdown-manager.js';
