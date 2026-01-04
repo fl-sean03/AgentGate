@@ -13,6 +13,7 @@ import type {
   DeliverySpec,
   DeliveryResult,
   NotificationResult,
+  PRSpec,
 } from '../types/delivery-spec.js';
 import type { ResolvedTaskSpec, Workspace } from '../types/index.js';
 import type { ConvergenceResult } from '../types/convergence.js';
@@ -20,6 +21,7 @@ import { createGitHandler, type GitHandler } from './git-handler.js';
 import { createPRHandler, type PRHandler } from './pr-handler.js';
 import { createNotificationHandler, type NotificationHandler } from './notification-handler.js';
 import { createLogger } from '../utils/logger.js';
+import { detectConflicts, type ConflictDetectionResult } from '../git/conflict-detector.js';
 
 const log = createLogger('delivery-coordinator');
 
@@ -144,8 +146,18 @@ export class DeliveryCoordinator {
         deliverySpec.pr?.create &&
         gitResult.push?.success
       ) {
+        // Perform conflict pre-flight check
+        const baseBranch = deliverySpec.pr.base || 'main';
+        const conflictResult = await this.checkForConflicts(workspace, baseBranch);
+
+        // Prepare PR spec with potential modifications based on conflicts
+        const prSpecWithConflictHandling = this.prepareConflictAwarePRSpec(
+          deliverySpec.pr,
+          conflictResult
+        );
+
         const prResult = await this.prHandler.createPR({
-          prSpec: deliverySpec.pr,
+          prSpec: prSpecWithConflictHandling,
           workspaceSpec: taskSpec.spec.execution.workspace,
           branchName,
           taskName,
@@ -205,6 +217,107 @@ export class DeliveryCoordinator {
 
       return result;
     }
+  }
+
+  /**
+   * Check for merge conflicts with the base branch
+   */
+  private async checkForConflicts(
+    workspace: Workspace,
+    baseBranch: string
+  ): Promise<ConflictDetectionResult> {
+    log.debug({ workspacePath: workspace.rootPath, baseBranch }, 'Checking for merge conflicts');
+
+    const result = await detectConflicts(workspace.rootPath, {
+      targetBranch: baseBranch,
+      fetchFirst: true,
+      remote: 'origin',
+    });
+
+    if (result.hasConflicts) {
+      log.warn(
+        { conflictCount: result.conflictCount, files: result.conflicts.map(c => c.path) },
+        'Merge conflicts detected with base branch'
+      );
+    } else if (result.error) {
+      log.warn({ error: result.error }, 'Conflict detection failed, proceeding anyway');
+    } else {
+      log.debug('No merge conflicts detected');
+    }
+
+    return result;
+  }
+
+  /**
+   * Prepare PR spec with conflict-aware modifications
+   *
+   * If conflicts are detected:
+   * - Mark PR as draft
+   * - Append conflict information to PR body
+   */
+  private prepareConflictAwarePRSpec(
+    originalSpec: PRSpec,
+    conflictResult: ConflictDetectionResult
+  ): PRSpec {
+    if (!conflictResult.hasConflicts) {
+      return originalSpec;
+    }
+
+    // Create a modified spec with draft=true and conflict info in body
+    const modifiedSpec: PRSpec = {
+      ...originalSpec,
+      draft: true,
+    };
+
+    // Generate conflict info section
+    const conflictInfo = this.formatConflictInfo(conflictResult);
+
+    // Append conflict info to body
+    const originalBody = originalSpec.body || '';
+    modifiedSpec.body = originalBody
+      ? `${originalBody}\n\n${conflictInfo}`
+      : conflictInfo;
+
+    log.info(
+      { conflictCount: conflictResult.conflictCount },
+      'PR will be created as draft due to detected conflicts'
+    );
+
+    return modifiedSpec;
+  }
+
+  /**
+   * Format conflict information for PR body
+   */
+  private formatConflictInfo(conflictResult: ConflictDetectionResult): string {
+    const lines: string[] = [
+      '---',
+      '',
+      '⚠️ **Merge Conflicts Detected**',
+      '',
+      `This PR has potential merge conflicts with \`${conflictResult.targetBranch}\`.`,
+      '',
+      `- **Conflicting files:** ${conflictResult.conflictCount}`,
+      `- **Commits ahead:** ${conflictResult.commitsAhead}`,
+      `- **Commits behind:** ${conflictResult.commitsBehind}`,
+      '',
+      '**Files with conflicts:**',
+    ];
+
+    for (const conflict of conflictResult.conflicts.slice(0, 10)) {
+      lines.push(`- \`${conflict.path}\` (${conflict.type})`);
+    }
+
+    if (conflictResult.conflicts.length > 10) {
+      lines.push(`- ... and ${conflictResult.conflicts.length - 10} more`);
+    }
+
+    lines.push('');
+    lines.push('Please resolve conflicts before merging.');
+    lines.push('');
+    lines.push('*This PR was marked as draft automatically due to detected conflicts.*');
+
+    return lines.join('\n');
   }
 
   /**

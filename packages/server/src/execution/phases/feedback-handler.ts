@@ -17,6 +17,7 @@ import {
   Phase,
 } from './types.js';
 import type { VerificationReport } from '../../types/index.js';
+import { checkAborted } from '../../utils/timeout.js';
 
 /**
  * Feedback phase handler options
@@ -82,7 +83,10 @@ export class FeedbackPhaseHandler
     input: FeedbackPhaseInput
   ): Promise<FeedbackPhaseResult> {
     const startTime = Date.now();
-    const { services, logger } = context;
+    const { services, logger, signal } = context;
+
+    // Check for early cancellation
+    checkAborted(signal);
 
     logger.info(
       {
@@ -110,6 +114,9 @@ export class FeedbackPhaseHandler
         };
       }
 
+      // Check for cancellation before feedback generation
+      checkAborted(signal);
+
       // Generate feedback using the feedback generator
       const feedback = await services.feedbackGenerator.generate(
         input.snapshot,
@@ -120,6 +127,9 @@ export class FeedbackPhaseHandler
           iteration: context.iteration,
         }
       );
+
+      // Check for cancellation after feedback generation
+      checkAborted(signal);
 
       // Truncate if too long
       const truncatedFeedback = this.truncateFeedback(feedback);

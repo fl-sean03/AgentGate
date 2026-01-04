@@ -19,6 +19,7 @@ import {
   Phase,
 } from './types.js';
 import type { VerificationReport } from '../../types/index.js';
+import { checkAborted } from '../../utils/timeout.js';
 
 /**
  * Verify phase handler options
@@ -77,7 +78,10 @@ export class VerifyPhaseHandler
     input: VerifyPhaseInput
   ): Promise<VerifyPhaseResult> {
     const startTime = Date.now();
-    const { services, taskSpec, logger } = context;
+    const { services, taskSpec, logger, signal } = context;
+
+    // Check for early cancellation
+    checkAborted(signal);
 
     const gateCount = this.countGates(input.gatePlan);
 
@@ -106,6 +110,9 @@ export class VerifyPhaseHandler
         };
       }
 
+      // Check for cancellation before verification
+      checkAborted(signal);
+
       // Check if verification should be skipped (based on gate conditions)
       const skip = taskSpec.spec.convergence?.gates?.some(
         (g: import('../../types/index.js').Gate) => g.condition?.skipIf !== undefined
@@ -121,6 +128,9 @@ export class VerifyPhaseHandler
           skip,
         }
       );
+
+      // Check for cancellation after verification
+      checkAborted(signal);
 
       // Persist verification report
       await this.persistReport(context, report);

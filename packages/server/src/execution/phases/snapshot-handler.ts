@@ -16,6 +16,7 @@ import {
   type ValidationResult,
   Phase,
 } from './types.js';
+import { checkAborted } from '../../utils/timeout.js';
 
 /**
  * Snapshot phase handler options
@@ -74,7 +75,10 @@ export class SnapshotPhaseHandler
     input: SnapshotPhaseInput
   ): Promise<SnapshotPhaseResult> {
     const startTime = Date.now();
-    const { services, workspace, taskSpec, logger } = context;
+    const { services, workspace, taskSpec, logger, signal } = context;
+
+    // Check for early cancellation
+    checkAborted(signal);
 
     logger.info(
       {
@@ -99,6 +103,9 @@ export class SnapshotPhaseHandler
         };
       }
 
+      // Check for cancellation before snapshot capture
+      checkAborted(signal);
+
       // Capture snapshot
       const snapshot = await services.snapshotter.capture(
         workspace.rootPath,
@@ -109,6 +116,9 @@ export class SnapshotPhaseHandler
           taskPrompt: taskSpec.spec.goal.prompt,
         }
       );
+
+      // Check for cancellation after snapshot capture
+      checkAborted(signal);
 
       // Log snapshot details
       logger.info(

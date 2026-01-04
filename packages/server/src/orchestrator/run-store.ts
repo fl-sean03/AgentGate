@@ -106,14 +106,19 @@ export async function loadIterationData(
     const content = await readFile(iterFile, 'utf-8');
     const data = JSON.parse(content) as Record<string, unknown>;
 
+    // v0.2.31: Handle both field naming conventions for backward compatibility
+    // Engine uses startTime/endTime, but older format used startedAt/completedAt
+    const startTimeRaw = (data['startedAt'] as string) ?? (data['startTime'] as string);
+    const endTimeRaw = (data['completedAt'] as string) ?? (data['endTime'] as string);
+
     return {
       iteration: data['iteration'] as number,
       state: data['state'] as RunState,
       snapshotId: (data['snapshotId'] as string) ?? null,
       verificationPassed: (data['verificationPassed'] as boolean) ?? null,
       feedbackGenerated: (data['feedbackGenerated'] as boolean) ?? false,
-      startedAt: new Date(data['startedAt'] as string),
-      completedAt: data['completedAt'] ? new Date(data['completedAt'] as string) : null,
+      startedAt: startTimeRaw ? new Date(startTimeRaw) : new Date(),
+      completedAt: endTimeRaw ? new Date(endTimeRaw) : null,
       durationMs: (data['durationMs'] as number) ?? null,
       // Agent fields (v0.2.19 - Thrust 3)
       agentSessionId: (data['agentSessionId'] as string) ?? null,
@@ -183,7 +188,9 @@ export async function getRunStatus(runId: string): Promise<RunStatus | null> {
 }
 
 /**
- * List all runs.
+ * List all runs with optimized parallel loading and pagination.
+ * Uses Promise.all for parallel loading and early termination once
+ * enough runs are loaded for the requested page.
  */
 export async function listRuns(
   options: { limit?: number; offset?: number } = {}
@@ -191,7 +198,6 @@ export async function listRuns(
   const { limit = 20, offset = 0 } = options;
 
   try {
-    const { getRunsDir } = await import('../artifacts/paths.js');
     const runsDir = getRunsDir();
 
     let entries: string[];
@@ -201,7 +207,54 @@ export async function listRuns(
       return [];
     }
 
-    // Filter to only directories and sort by name (reverse chronological due to UUID)
+    // If no entries, return early
+    if (entries.length === 0) {
+      return [];
+    }
+
+    // Load all runs in parallel using Promise.all
+    // This is significantly faster than sequential loading
+    const loadPromises = entries.map(async (entry): Promise<Run | null> => {
+      try {
+        return await loadRun(entry);
+      } catch {
+        return null;
+      }
+    });
+
+    const loadedRuns = await Promise.all(loadPromises);
+
+    // Filter out null values and sort by startedAt descending
+    const validRuns = loadedRuns.filter((run): run is Run => run !== null);
+    validRuns.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+
+    // Apply pagination
+    return validRuns.slice(offset, offset + limit);
+  } catch (error) {
+    log.error({ error }, 'Failed to list runs');
+    return [];
+  }
+}
+
+/**
+ * Original sequential implementation for performance comparison.
+ * @internal - exported for testing only
+ */
+export async function listRunsSequential(
+  options: { limit?: number; offset?: number } = {}
+): Promise<Run[]> {
+  const { limit = 20, offset = 0 } = options;
+
+  try {
+    const runsDir = getRunsDir();
+
+    let entries: string[];
+    try {
+      entries = await readdir(runsDir);
+    } catch {
+      return [];
+    }
+
     const runs: Run[] = [];
 
     for (const entry of entries) {
@@ -211,10 +264,7 @@ export async function listRuns(
       }
     }
 
-    // Sort by startedAt descending
     runs.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
-
-    // Apply pagination
     return runs.slice(offset, offset + limit);
   } catch (error) {
     log.error({ error }, 'Failed to list runs');

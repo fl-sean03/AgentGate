@@ -56,6 +56,9 @@ export interface PhaseContext {
   // Optional streaming callback for real-time updates
   streamingCallback?: StreamingEventCallback;
 
+  // Optional AbortSignal for cancellation
+  signal?: AbortSignal;
+
   // Logger with context
   logger: Logger;
 }

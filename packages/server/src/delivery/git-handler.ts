@@ -30,6 +30,73 @@ import { BuildErrorType } from '../types/build-error.js';
 const log = createLogger('git-handler');
 
 // ═══════════════════════════════════════════════════════════════════════════
+// RETRY CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Retry policy for git operations.
+ * Uses 3 retries with exponential backoff for transient errors.
+ */
+export const GIT_RETRY_POLICY: RetryPolicy = {
+  maxRetries: 3,
+  backoffMs: 1000,
+  backoffMultiplier: 2,
+  maxBackoffMs: 10000,
+  retryableErrors: [
+    BuildErrorType.SYSTEM_ERROR,
+    BuildErrorType.GITHUB_ERROR,
+  ],
+  retryOnTimeout: true,
+  jitter: true,
+};
+
+/**
+ * Error patterns that indicate transient failures which should be retried.
+ */
+const TRANSIENT_ERROR_PATTERNS = [
+  /ENOENT/i,                    // File not found (temporary)
+  /ECONNRESET/i,                // Connection reset
+  /ETIMEDOUT/i,                 // Network timeout
+  /ECONNREFUSED/i,              // Connection refused
+  /network\s+timeout/i,         // Network timeout message
+  /temporary\s+lock/i,          // Git temporary lock
+  /\.lock.*exists/i,            // Git lock file exists
+  /could not lock/i,            // Could not lock ref
+  /unable to create.*lock/i,    // Unable to create lock
+  /Another git process/i,       // Another git process running
+  /fatal: Unable to create/i,   // Unable to create file
+  /Connection timed out/i,      // SSH/HTTPS timeout
+  /Could not resolve host/i,    // DNS resolution failure
+];
+
+/**
+ * Check if an error is a transient error that should be retried.
+ */
+export function isTransientGitError(error: Error): boolean {
+  const message = error.message || '';
+  return TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Extract a BuildErrorType from a git error.
+ */
+function extractGitErrorType(error: Error): BuildErrorType {
+  const message = error.message || '';
+
+  // Network-related errors
+  if (/ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|timeout|resolve host/i.test(message)) {
+    return BuildErrorType.GITHUB_ERROR;
+  }
+
+  // Lock-related errors (transient)
+  if (/lock|ENOENT/i.test(message)) {
+    return BuildErrorType.SYSTEM_ERROR;
+  }
+
+  return BuildErrorType.UNKNOWN;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CONTEXT
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -106,7 +173,8 @@ export class GitHandler {
   }
 
   /**
-   * Commit changes in the workspace
+   * Commit changes in the workspace.
+   * Retries up to 3 times on transient errors (network timeout, ENOENT, temporary lock).
    */
   async commitChanges(context: GitContext, branchName: string): Promise<CommitResult> {
     const { workspace, gitSpec, taskName, workOrderId } = context;
@@ -124,38 +192,63 @@ export class GitHandler {
       };
     }
 
-    try {
-      // Stage all changes
-      await stageAll(repoPath);
+    const retryEngine = createRetryPolicyEngine(GIT_RETRY_POLICY);
 
-      // Generate commit message
-      const message = this.generateCommitMessage(gitSpec, taskName);
+    const result = await retryEngine.execute(
+      async (): Promise<CommitResult> => {
+        // Stage all changes
+        await stageAll(repoPath);
 
-      // Commit
-      const sha = await commit(repoPath, message);
+        // Generate commit message
+        const message = this.generateCommitMessage(gitSpec, taskName);
 
-      log.info({ sha, message }, 'Committed changes');
+        // Commit
+        const sha = await commit(repoPath, message);
 
-      // Get list of files committed (simplified - just return a marker)
-      // In a real implementation, we'd use git diff --name-only HEAD~1
-      return {
-        success: true,
-        sha,
-        filesCommitted: ['(changes committed)'],
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error({ error }, 'Failed to commit changes');
-      return {
-        success: false,
-        filesCommitted: [],
-        error: errorMessage,
-      };
+        log.info({ sha, message }, 'Committed changes');
+
+        // Get list of files committed (simplified - just return a marker)
+        // In a real implementation, we'd use git diff --name-only HEAD~1
+        return {
+          success: true,
+          sha,
+          filesCommitted: ['(changes committed)'],
+        };
+      },
+      {
+        isRetryable: isTransientGitError,
+        extractErrorType: extractGitErrorType,
+        onAttempt: (attempt) => {
+          if (!attempt.success) {
+            log.warn(
+              { workOrderId, attempt: attempt.attempt, error: attempt.error?.message },
+              'Commit attempt failed, will retry if transient'
+            );
+          }
+        },
+      }
+    );
+
+    if (result.success && result.result) {
+      return result.result;
     }
+
+    // All retries exhausted
+    const errorMessage = result.finalError?.message ?? 'Unknown error during commit';
+    log.error(
+      { workOrderId, attempts: result.attempts.length, error: errorMessage },
+      'Failed to commit changes after retries'
+    );
+    return {
+      success: false,
+      filesCommitted: [],
+      error: errorMessage,
+    };
   }
 
   /**
-   * Push changes to remote
+   * Push changes to remote.
+   * Retries up to 3 times on transient errors (network timeout, ENOENT, temporary lock).
    */
   async pushChanges(context: GitContext, branchName: string): Promise<PushResultType> {
     const { workspace, workOrderId } = context;
@@ -164,34 +257,58 @@ export class GitHandler {
 
     log.debug({ workOrderId, branchName }, 'Pushing changes to remote');
 
-    try {
-      // Check if remote exists
-      const hasOrigin = await hasRemote(repoPath, remote);
-      if (!hasOrigin) {
-        return {
-          success: false,
-          error: 'No remote "origin" configured',
-        };
-      }
-
-      // Push to remote
-      const result = await push(repoPath, remote, branchName, { setUpstream: true });
-
-      log.info({ remote, branchName }, 'Pushed changes to remote');
-
-      return {
-        success: result.success,
-        remote,
-        branch: branchName,
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error({ error }, 'Failed to push changes');
+    // Check if remote exists (this is a precondition, not retryable)
+    const hasOrigin = await hasRemote(repoPath, remote);
+    if (!hasOrigin) {
       return {
         success: false,
-        error: errorMessage,
+        error: 'No remote "origin" configured',
       };
     }
+
+    const retryEngine = createRetryPolicyEngine(GIT_RETRY_POLICY);
+
+    const result = await retryEngine.execute(
+      async (): Promise<PushResultType> => {
+        // Push to remote
+        const pushResult = await push(repoPath, remote, branchName, { setUpstream: true });
+
+        log.info({ remote, branchName }, 'Pushed changes to remote');
+
+        return {
+          success: pushResult.success,
+          remote,
+          branch: branchName,
+        };
+      },
+      {
+        isRetryable: isTransientGitError,
+        extractErrorType: extractGitErrorType,
+        onAttempt: (attempt) => {
+          if (!attempt.success) {
+            log.warn(
+              { workOrderId, branchName, attempt: attempt.attempt, error: attempt.error?.message },
+              'Push attempt failed, will retry if transient'
+            );
+          }
+        },
+      }
+    );
+
+    if (result.success && result.result) {
+      return result.result;
+    }
+
+    // All retries exhausted
+    const errorMessage = result.finalError?.message ?? 'Unknown error during push';
+    log.error(
+      { workOrderId, branchName, attempts: result.attempts.length, error: errorMessage },
+      'Failed to push changes after retries'
+    );
+    return {
+      success: false,
+      error: errorMessage,
+    };
   }
 
   /**

@@ -306,7 +306,7 @@ async function checkSchema(
   const failures: string[] = [];
 
   for (const rule of schemaCheck.rules) {
-    const ruleResult = checkSchemaRule(parsed, rule);
+    const ruleResult = await checkSchemaRule(parsed, rule, workDir);
     if (!ruleResult.passed) {
       failures.push(ruleResult.message);
       ctx.diagnostics.push({
@@ -338,14 +338,15 @@ async function checkSchema(
 /**
  * Check a single schema rule against parsed content.
  */
-function checkSchemaRule(
+async function checkSchemaRule(
   parsed: unknown,
   rule:
     | { type: 'has_field'; field: string }
     | { type: 'field_type'; field: string; expectedType: string }
     | { type: 'matches_regex'; field: string; pattern: string }
-    | { type: 'json_schema'; schemaPath: string }
-): { passed: boolean; message: string } {
+    | { type: 'json_schema'; schemaPath: string },
+  workDir: string
+): Promise<{ passed: boolean; message: string }> {
   if (typeof parsed !== 'object' || parsed === null) {
     return { passed: false, message: 'Content is not an object' };
   }
@@ -395,14 +396,93 @@ function checkSchemaRule(
     }
 
     case 'json_schema': {
-      // TODO: Implement full JSON Schema validation
-      // For now, just pass if we have a schema reference
-      return { passed: true, message: '' };
+      return validateJsonSchema(parsed, rule.schemaPath, workDir);
     }
 
     default:
       return { passed: true, message: '' };
   }
+}
+
+/**
+ * Format Ajv validation errors into a human-readable message.
+ */
+function formatAjvErrors(errors: ErrorObject[] | null | undefined): string {
+  if (!errors || errors.length === 0) {
+    return 'Validation failed';
+  }
+
+  return errors
+    .map((err) => {
+      const path = err.instancePath || '/';
+      const message = err.message || 'unknown error';
+      const params = err.params ? ` (${JSON.stringify(err.params)})` : '';
+      return `${path}: ${message}${params}`;
+    })
+    .join('; ');
+}
+
+/**
+ * Validate data against a JSON Schema file.
+ * Uses caching to avoid re-parsing and re-compiling schemas.
+ */
+async function validateJsonSchema(
+  data: unknown,
+  schemaPath: string,
+  workDir: string
+): Promise<{ passed: boolean; message: string }> {
+  const absoluteSchemaPath = join(workDir, schemaPath);
+
+  // Check cache first
+  let validate = schemaCache.get(absoluteSchemaPath);
+
+  if (!validate) {
+    // Load and compile the schema
+    try {
+      await access(absoluteSchemaPath);
+    } catch {
+      return {
+        passed: false,
+        message: `JSON Schema file not found: ${schemaPath}`,
+      };
+    }
+
+    let schemaContent: string;
+    let schema: unknown;
+
+    try {
+      schemaContent = await readFile(absoluteSchemaPath, 'utf-8');
+      schema = JSON.parse(schemaContent);
+    } catch (error) {
+      return {
+        passed: false,
+        message: `Failed to parse JSON Schema file ${schemaPath}: ${String(error)}`,
+      };
+    }
+
+    try {
+      validate = ajv.compile(schema);
+      schemaCache.set(absoluteSchemaPath, validate);
+      log.debug({ schemaPath }, 'Compiled and cached JSON Schema');
+    } catch (error) {
+      return {
+        passed: false,
+        message: `Failed to compile JSON Schema ${schemaPath}: ${String(error)}`,
+      };
+    }
+  }
+
+  // Validate the data against the schema
+  const valid = validate(data);
+
+  if (valid) {
+    return { passed: true, message: '' };
+  }
+
+  return {
+    passed: false,
+    message: `JSON Schema validation failed: ${formatAjvErrors(validate.errors)}`,
+  };
 }
 
 /**

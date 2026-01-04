@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import { nanoid } from 'nanoid';
 import {
@@ -28,11 +29,36 @@ import {
 const logger = createLogger('server');
 
 /**
+ * Rate limiting configuration
+ */
+export interface RateLimitConfig {
+  /**
+   * Enable rate limiting
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Maximum requests per minute for unauthenticated clients (per IP)
+   * @default 100
+   */
+  perIpLimit?: number;
+  /**
+   * Maximum requests per minute for authenticated clients (per API key)
+   * @default 500
+   */
+  perApiKeyLimit?: number;
+}
+
+/**
  * Extended server configuration with API key and broadcaster
  */
 export interface AppConfig extends Partial<ServerConfig> {
   apiKey?: string;
   broadcaster?: EventBroadcaster;
+  /**
+   * Rate limiting configuration
+   */
+  rateLimit?: RateLimitConfig;
   /**
    * Whether to validate storage on startup (v0.2.23 Wave 1.5).
    * When enabled, validates all work order files and logs warnings for corrupted files.
@@ -59,14 +85,20 @@ export { StorageValidationResult };
 export async function createApp(
   config: AppConfig = {}
 ): Promise<FastifyInstance> {
-  // Extract apiKey, broadcaster, and storage validation options before validation (not part of ServerConfig schema)
+  // Extract apiKey, broadcaster, rate limit, and storage validation options before validation (not part of ServerConfig schema)
   const {
     apiKey,
     broadcaster: providedBroadcaster,
+    rateLimit: rateLimitConfig,
     validateStorageOnStartup = false,
     failOnCorruptedStorage = false,
     ...serverConfig
   } = config;
+
+  // Rate limiting defaults
+  const rateLimitEnabled = rateLimitConfig?.enabled ?? true;
+  const perIpLimit = rateLimitConfig?.perIpLimit ?? 100;
+  const perApiKeyLimit = rateLimitConfig?.perApiKeyLimit ?? 500;
 
   // Validate storage on startup if enabled (v0.2.23 Wave 1.5)
   if (validateStorageOnStartup) {
@@ -132,6 +164,62 @@ export async function createApp(
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
   });
+
+  // Register rate limiting plugin
+  if (rateLimitEnabled) {
+    await app.register(rateLimit, {
+      global: true,
+      timeWindow: '1 minute',
+      // Custom key generator to differentiate between IP-based and API-key-based limits
+      keyGenerator: (request: FastifyRequest) => {
+        const authHeader = request.headers.authorization;
+        if (authHeader?.startsWith('Bearer ') && apiKey) {
+          const token = authHeader.slice(7);
+          // If valid API key, use the API key as the rate limit key
+          if (token === apiKey) {
+            return `apikey:${token}`;
+          }
+        }
+        // Otherwise, use IP address
+        return request.ip;
+      },
+      // Different limits for API key vs IP
+      max: (request: FastifyRequest) => {
+        const authHeader = request.headers.authorization;
+        if (authHeader?.startsWith('Bearer ') && apiKey) {
+          const token = authHeader.slice(7);
+          if (token === apiKey) {
+            return perApiKeyLimit; // Higher limit for authenticated users
+          }
+        }
+        return perIpLimit; // Lower limit for unauthenticated users
+      },
+      // Enable X-RateLimit-* headers
+      addHeadersOnExceeding: {
+        'x-ratelimit-limit': true,
+        'x-ratelimit-remaining': true,
+        'x-ratelimit-reset': true,
+      },
+      addHeaders: {
+        'x-ratelimit-limit': true,
+        'x-ratelimit-remaining': true,
+        'x-ratelimit-reset': true,
+      },
+      // Custom error response format matching our error response structure
+      errorResponseBuilder: (request, context) => {
+        return createErrorResponse(
+          ErrorCode.TOO_MANY_REQUESTS,
+          `Rate limit exceeded. Try again in ${Math.ceil((context.ttl ?? 60000) / 1000)} seconds.`,
+          {
+            limit: context.max,
+            remaining: 0,
+            resetIn: Math.ceil((context.ttl ?? 60000) / 1000),
+          },
+          request.id
+        );
+      },
+    });
+  }
 
   // Register WebSocket plugin
   await app.register(websocket);
@@ -228,6 +316,8 @@ function mapStatusToErrorCode(status: number): ErrorCode {
       return ErrorCode.NOT_FOUND;
     case 409:
       return ErrorCode.CONFLICT;
+    case 429:
+      return ErrorCode.TOO_MANY_REQUESTS;
     case 503:
       return ErrorCode.SERVICE_UNAVAILABLE;
     default:

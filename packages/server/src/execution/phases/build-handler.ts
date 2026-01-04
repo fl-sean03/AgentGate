@@ -20,6 +20,7 @@ import {
   type ValidationResult,
   Phase,
 } from './types.js';
+import { checkAborted } from '../../utils/timeout.js';
 
 /**
  * Build phase handler options
@@ -75,7 +76,10 @@ export class BuildPhaseHandler
     input: BuildPhaseInput
   ): Promise<BuildPhaseResult> {
     const startTime = Date.now();
-    const { services, logger } = context;
+    const { services, logger, signal } = context;
+
+    // Check for early cancellation
+    checkAborted(signal);
 
     logger.info(
       {
@@ -99,6 +103,9 @@ export class BuildPhaseHandler
         );
       }
 
+      // Check for cancellation before agent execution
+      checkAborted(signal);
+
       // Construct agent request
       const request = this.buildAgentRequest(context, input);
 
@@ -107,6 +114,9 @@ export class BuildPhaseHandler
         request,
         context.streamingCallback
       );
+
+      // Check for cancellation after agent execution
+      checkAborted(signal);
 
       // Persist agent result
       await context.services.resultPersister.saveAgentResult(

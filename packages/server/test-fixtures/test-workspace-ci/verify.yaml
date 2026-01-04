@@ -1,0 +1,27 @@
+
+version: "1"
+name: Test preservation of settings
+useGitHubCI: true
+environment:
+  runtime: node
+  version: "18"
+  setup:
+    - npm ci
+contracts:
+  required_files:
+    - package.json
+    - README.md
+  forbidden_patterns:
+    - "**/.env"
+    - "**/secrets/**"
+  naming_conventions:
+    - pattern: "src/**/*.ts"
+      rule: kebab-case
+tests:
+  - name: ignored-test
+    command: echo "ignored"
+policy:
+  network: true
+  max_runtime: 300
+  disallowed_commands:
+    - rm -rf /
