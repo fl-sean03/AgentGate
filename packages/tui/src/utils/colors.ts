@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import chalk, { ChalkInstance } from 'chalk';
 
 // Theme colors
 export const colors = {
@@ -57,7 +57,7 @@ export function getStatusIndicator(
 }
 
 // Tool type to color mapping
-export function getToolColor(tool: string): chalk.Chalk {
+export function getToolColor(tool: string): ChalkInstance {
   switch (tool.toLowerCase()) {
     case 'read':
     case 'glob':
@@ -78,7 +78,7 @@ export function getToolColor(tool: string): chalk.Chalk {
 // Run status to color mapping
 export function getRunStatusColor(
   status: string
-): chalk.Chalk {
+): ChalkInstance {
   switch (status) {
     case 'succeeded':
       return colors.success;
