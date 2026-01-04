@@ -200,6 +200,7 @@ class DockerSandbox implements Sandbox {
     const cmd = [command, ...args];
 
     try {
+      // v0.2.30: Build options with only defined properties for exactOptionalPropertyTypes
       const execOptions: {
         env?: string[];
         workingDir?: string;
@@ -208,8 +209,10 @@ class DockerSandbox implements Sandbox {
       } = {
         workingDir: cwd,
         timeout,
-        signal: options?.signal,
       };
+      if (options?.signal) {
+        execOptions.signal = options.signal;
+      }
       if (envArray.length > 0) {
         execOptions.env = envArray;
       }

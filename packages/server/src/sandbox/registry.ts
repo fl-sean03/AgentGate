@@ -130,18 +130,20 @@ export class SandboxRegistry {
       workspacePath?: string;
     } = {}
   ): void {
+    // v0.2.30: Build entry with only defined optional properties
     const entry: SandboxRegistryEntry = {
       sandboxId,
       type,
       resourceId,
-      runId: options.runId,
-      workOrderId: options.workOrderId,
       createdAt: new Date().toISOString(),
       lastHeartbeat: new Date().toISOString(),
       status: 'active',
-      workspacePath: options.workspacePath,
       cleanupAttempts: 0,
     };
+    // Only add optional properties if they're defined
+    if (options.runId) entry.runId = options.runId;
+    if (options.workOrderId) entry.workOrderId = options.workOrderId;
+    if (options.workspacePath) entry.workspacePath = options.workspacePath;
 
     this.entries.set(sandboxId, entry);
     this.dirty = true;

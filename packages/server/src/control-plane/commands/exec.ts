@@ -63,6 +63,8 @@ export function createExecCommand(): Command {
       'Skip verification levels (comma-separated: L0,L1,L2,L3)',
       parseVerificationLevels
     )
+    // Harness configuration (v0.2.30 - parity with submit command)
+    .option('--harness <profile>', 'Use a named harness profile from ~/.agentgate/harnesses/')
     .option(
       '--agent <type>',
       `Agent type to use (${Object.values(AgentType).join(', ')})`,
@@ -275,6 +277,8 @@ export async function executeExec(rawOptions: Record<string, unknown>): Promise<
     gatePlanSource: options.gatePlan,
     waitForCI: options.waitForCi ?? false,
     skipVerification: options.skipVerification,
+    // v0.2.30: Add harness profile support
+    harnessProfile: options.harness,
     policies: {
       networkAllowed: options.network,
       allowedPaths: [],

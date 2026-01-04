@@ -140,20 +140,21 @@ export class ProcessTracker {
       parentPid?: number;
     } = {}
   ): void {
+    // v0.2.30: Build entry with only defined optional properties for exactOptionalPropertyTypes
     const entry: TrackedProcess = {
       pid,
       type,
       command,
       args: options.args || [],
-      cwd: options.cwd,
-      workOrderId: options.workOrderId,
-      runId: options.runId,
-      sandboxId: options.sandboxId,
       startedAt: new Date().toISOString(),
       lastHeartbeat: new Date().toISOString(),
       status: 'running',
-      parentPid: options.parentPid,
     };
+    if (options.cwd) entry.cwd = options.cwd;
+    if (options.workOrderId) entry.workOrderId = options.workOrderId;
+    if (options.runId) entry.runId = options.runId;
+    if (options.sandboxId) entry.sandboxId = options.sandboxId;
+    if (options.parentPid !== undefined) entry.parentPid = options.parentPid;
 
     this.processes.set(pid, entry);
     this.dirty = true;
@@ -202,7 +203,8 @@ export class ProcessTracker {
     if (!entry) return false;
 
     entry.status = 'killed';
-    entry.exitSignal = signal;
+    // v0.2.30: Only set exitSignal if defined for exactOptionalPropertyTypes
+    if (signal) entry.exitSignal = signal;
     this.dirty = true;
     this.stopHeartbeat(pid);
 
@@ -218,7 +220,8 @@ export class ProcessTracker {
     if (!entry) return false;
 
     entry.status = 'crashed';
-    entry.exitCode = exitCode;
+    // v0.2.30: Only set exitCode if defined for exactOptionalPropertyTypes
+    if (exitCode !== undefined) entry.exitCode = exitCode;
     this.dirty = true;
     this.stopHeartbeat(pid);
 
