@@ -15,13 +15,13 @@ export interface CorrelationContext {
   /** Request/operation correlation ID */
   correlationId: string;
   /** Work order ID if applicable */
-  workOrderId?: string;
+  workOrderId: string | undefined;
   /** Run ID if applicable */
-  runId?: string;
+  runId: string | undefined;
   /** Iteration number if applicable */
-  iteration?: number;
+  iteration: number | undefined;
   /** Additional context data */
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown> | undefined;
 }
 
 /**
@@ -98,14 +98,21 @@ export function createChildContext(
   overrides?: Partial<CorrelationContext>
 ): CorrelationContext {
   const parent = getCorrelationContext();
-  return {
+  const context: CorrelationContext = {
     correlationId: parent?.correlationId ?? generateCorrelationId(),
-    workOrderId: parent?.workOrderId,
-    runId: parent?.runId,
-    iteration: parent?.iteration,
-    metadata: { ...parent?.metadata },
-    ...overrides,
+    workOrderId: parent?.workOrderId ?? undefined,
+    runId: parent?.runId ?? undefined,
+    iteration: parent?.iteration ?? undefined,
+    metadata: parent?.metadata ? { ...parent.metadata } : undefined,
   };
+  if (overrides) {
+    if (overrides.correlationId !== undefined) context.correlationId = overrides.correlationId;
+    if (overrides.workOrderId !== undefined) context.workOrderId = overrides.workOrderId;
+    if (overrides.runId !== undefined) context.runId = overrides.runId;
+    if (overrides.iteration !== undefined) context.iteration = overrides.iteration;
+    if (overrides.metadata !== undefined) context.metadata = overrides.metadata;
+  }
+  return context;
 }
 
 /**

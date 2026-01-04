@@ -96,7 +96,7 @@ export interface DashboardEvent {
   type: string;
   message: string;
   timestamp: Date;
-  data?: Record<string, unknown>;
+  data: Record<string, unknown> | undefined;
 }
 
 /**

@@ -7,7 +7,7 @@
 
 import { createLogger } from '../utils/logger.js';
 import type { WorkOrder } from '../types/work-order.js';
-import type { GatePlan, GateCheck } from '../types/gate.js';
+import type { GateCheck } from '../types/gate.js';
 
 const log = createLogger('dry-run');
 
@@ -290,7 +290,7 @@ export class DryRun {
 
     this.record({
       type: 'gate:run',
-      details: { type: check.type, config: check.config },
+      details: { type: check.type },
     });
   }
 
@@ -488,19 +488,15 @@ export function analyzeWorkOrder(workOrder: WorkOrder): DryRunAction[] {
   actions.push({
     type: 'agent:execute',
     timestamp: now,
-    details: { task: workOrder.task.slice(0, 100) },
+    details: { task: workOrder.taskPrompt.slice(0, 100) },
   });
 
-  // Gate checks
-  if (workOrder.gate?.checks) {
-    for (const check of workOrder.gate.checks) {
-      actions.push({
-        type: 'gate:run',
-        timestamp: now,
-        details: { type: check.type },
-      });
-    }
-  }
+  // Verification gate check (based on gatePlanSource)
+  actions.push({
+    type: 'gate:run',
+    timestamp: now,
+    details: { type: 'verification', source: workOrder.gatePlanSource },
+  });
 
   // Git operations
   actions.push({
@@ -509,11 +505,12 @@ export function analyzeWorkOrder(workOrder: WorkOrder): DryRunAction[] {
     details: { message: 'Agent changes' },
   });
 
-  if (workOrder.prDelivery) {
+  // Push for git sources
+  if (workOrder.workspaceSource.type === 'git' || workOrder.workspaceSource.type === 'github') {
     actions.push({
       type: 'git:push',
       timestamp: now,
-      details: { branch: workOrder.branch ?? 'feature-branch' },
+      details: { branch: 'workspaceSource' in workOrder ? 'feature-branch' : 'main' },
     });
   }
 

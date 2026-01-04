@@ -506,21 +506,27 @@ describe('Dry Run', () => {
 
   describe('analyzeWorkOrder', () => {
     it('should analyze work order actions', () => {
-      const workOrder: WorkOrder = {
+      const workOrder = {
         id: 'wo-1',
-        task: 'Fix the bug in authentication',
-        repository: {
-          url: 'https://github.com/test/repo',
-          branch: 'main',
+        taskPrompt: 'Fix the bug in authentication',
+        workspaceSource: {
+          type: 'github' as const,
+          owner: 'test',
+          repo: 'repo',
+          ref: 'main',
         },
-        gate: {
-          checks: [
-            { type: 'verification-levels', config: { levels: ['L0'] } },
-          ],
+        agentType: 'claude-code-subscription' as const,
+        maxIterations: 3,
+        maxWallClockSeconds: 3600,
+        gatePlanSource: 'auto' as const,
+        policies: {
+          networkAllowed: false,
+          allowedPaths: [],
+          forbiddenPatterns: [],
         },
-        prDelivery: true,
-        branch: 'fix/auth-bug',
-      };
+        createdAt: new Date(),
+        status: 'pending' as const,
+      } as unknown as WorkOrder;
 
       const actions = analyzeWorkOrder(workOrder);
 
