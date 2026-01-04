@@ -1,3 +1,5 @@
+<!-- AgentGate: An orchestration platform for AI coding agents with multi-level verification gates, isolated sandbox execution, and GitHub integration -->
+
 # AgentGate
 
 [![CI](https://github.com/fl-sean03/AgentGate/actions/workflows/ci.yml/badge.svg)](https://github.com/fl-sean03/AgentGate/actions/workflows/ci.yml)
