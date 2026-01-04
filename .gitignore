@@ -64,3 +64,5 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+# Reports
+reports/
