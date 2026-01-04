@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(git -C /home/sf2/LabWork/Workspace/27-PMOS/5-CampaignBuilder/3-AgentGate log --oneline)"
+    ]
+  }
+}
