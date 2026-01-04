@@ -17,6 +17,7 @@ import { registerProfileRoutes } from './routes/profiles.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerStreamRoutes } from './routes/stream.js';
 import { registerQueueRoutes } from './routes/queue.js';
+import { registerUsageRoutes } from './routes/usage.js';
 import { registerAuthPlugin } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
@@ -294,6 +295,7 @@ export async function createApp(
   registerAuditRoutes(app);
   registerStreamRoutes(app);
   registerQueueRoutes(app);
+  await registerUsageRoutes(app);
 
   // Register WebSocket routes
   registerWebSocketRoutes(app, broadcaster);

@@ -61,20 +61,62 @@ export interface AgentResult {
   sandboxInfo?: SandboxInfo;
 }
 
-// Agent Structured Output
-export interface AgentStructuredOutput {
-  result: string;
-  session_id?: string;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
+/**
+ * Per-model usage breakdown from Claude Code
+ */
+export interface ModelUsageBreakdown {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  webSearchRequests: number;
+  costUSD: number;
+  contextWindow: number;
+}
+
+/**
+ * Full usage data from Claude Code JSON output
+ */
+export interface ClaudeCodeUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  server_tool_use?: {
+    web_search_requests: number;
+    web_fetch_requests: number;
+  };
+  service_tier?: string;
+  cache_creation?: {
+    ephemeral_1h_input_tokens?: number;
+    ephemeral_5m_input_tokens?: number;
   };
 }
 
-// Token Usage
+// Agent Structured Output (matches Claude Code --output-format json)
+export interface AgentStructuredOutput {
+  type?: string;
+  subtype?: string;
+  is_error?: boolean;
+  duration_ms?: number;
+  duration_api_ms?: number;
+  num_turns?: number;
+  result: string;
+  session_id?: string;
+  total_cost_usd?: number;
+  usage?: ClaudeCodeUsage;
+  /** Per-model usage breakdown */
+  modelUsage?: Record<string, ModelUsageBreakdown>;
+  permission_denials?: string[];
+  uuid?: string;
+}
+
+// Token Usage (extended with cache support)
 export interface TokenUsage {
   input: number;
   output: number;
+  cacheRead?: number;
+  cacheCreation?: number;
 }
 
 // Agent Constraints

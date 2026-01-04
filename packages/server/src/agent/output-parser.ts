@@ -138,10 +138,48 @@ export function extractTokenUsage(output: AgentStructuredOutput): TokenUsage | n
     return null;
   }
 
-  return {
+  const usage: TokenUsage = {
     input: output.usage.input_tokens,
     output: output.usage.output_tokens,
   };
+
+  // Include cache tokens if available
+  if (output.usage.cache_read_input_tokens) {
+    usage.cacheRead = output.usage.cache_read_input_tokens;
+  }
+  if (output.usage.cache_creation_input_tokens) {
+    usage.cacheCreation = output.usage.cache_creation_input_tokens;
+  }
+
+  return usage;
+}
+
+/**
+ * Extracts total cost from structured output
+ */
+export function extractTotalCost(output: AgentStructuredOutput): number | null {
+  return output.total_cost_usd ?? null;
+}
+
+/**
+ * Extracts per-model usage breakdown from structured output
+ */
+export function extractModelUsage(
+  output: AgentStructuredOutput
+): Record<string, { inputTokens: number; outputTokens: number; costUSD: number }> | null {
+  if (!output.modelUsage) {
+    return null;
+  }
+
+  const result: Record<string, { inputTokens: number; outputTokens: number; costUSD: number }> = {};
+  for (const [model, usage] of Object.entries(output.modelUsage)) {
+    result[model] = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      costUSD: usage.costUSD,
+    };
+  }
+  return result;
 }
 
 /**

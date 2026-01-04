@@ -18,6 +18,7 @@ import {
 } from '../types/persisted-results.js';
 import { getRunDir, ensureRunStructure } from '../artifacts/paths.js';
 import { createLogger } from '../utils/logger.js';
+import { getUsageService } from '../billing/index.js';
 
 const log = createLogger('result-persister');
 
@@ -59,6 +60,22 @@ export class ResultPersister {
     await writeFile(filePath, JSON.stringify(persisted, null, 2));
 
     log.debug({ runId, iteration, filePath }, 'Saved agent result');
+
+    // Record usage for billing (v0.2.31)
+    if (opts.recordUsage !== false && opts.workOrderId) {
+      try {
+        const usageService = getUsageService();
+        await usageService.recordExecution(opts.workOrderId, runId, iteration, result, {
+          billingMethod: opts.billingMethod,
+          userId: opts.userId,
+          sessionId: result.sessionId ?? undefined,
+        });
+      } catch (error) {
+        // Log but don't fail the save operation
+        log.warn({ error, runId, iteration }, 'Failed to record usage');
+      }
+    }
+
     return filePath;
   }
 

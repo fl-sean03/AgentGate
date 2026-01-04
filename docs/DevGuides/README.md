@@ -261,6 +261,7 @@ Before considering a DevGuide complete:
 
 | Version | Title | Status | Description |
 |---------|-------|--------|-------------|
+| [v0.2.31](./DevGuide_v0.2.31/00-index.md) | **OSS/SaaS Repository Split** | Planning | Separate public OSS repo from private SaaS infrastructure |
 | [v0.2.29](./DevGuide_v0.2.29/00-index.md) | **SaaS Website & Dashboard** | Planning | Next.js SaaS frontend with Stripe billing, GitHub OAuth, API key management |
 | [v0.2.28](./DevGuide_v0.2.28/00-index.md) | **Terminal User Interface (TUI)** | Planning | React + Ink terminal UI for task submission and monitoring |
 | [v0.2.18](./DevGuide_v0.2.18/00-index.md) | **Security Verification Refactor** | Not Started | Content-based secret detection, entropy analysis, tiered sensitivity levels, policy inheritance, audit logging |

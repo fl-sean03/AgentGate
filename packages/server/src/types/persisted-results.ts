@@ -50,6 +50,14 @@ export interface SaveAgentResultOptions {
   maxStderrBytes?: number;
   /** Whether to include tool calls (default: true) */
   includeToolCalls?: boolean;
+  /** Work order ID (for usage tracking) */
+  workOrderId?: string;
+  /** User ID (for billing) */
+  userId?: string;
+  /** Billing method */
+  billingMethod?: 'api-key' | 'subscription';
+  /** Whether to record usage (default: true) */
+  recordUsage?: boolean;
 }
 
 export const DEFAULT_SAVE_OPTIONS: SaveAgentResultOptions = {
