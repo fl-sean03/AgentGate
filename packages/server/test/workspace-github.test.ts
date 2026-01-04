@@ -37,22 +37,41 @@ describe('Workspace GitHub Integration', () => {
       }
     });
 
-    it('should reject github source without owner', () => {
+    it('should accept github source with url only', () => {
+      // v0.2.26: GitHub sources can now use URL instead of owner/repo
+      const source = {
+        type: 'github',
+        url: 'https://github.com/testowner/testrepo',
+      };
+      const result = workspaceSourceSchema.safeParse(source);
+      expect(result.success).toBe(true);
+      if (result.success && result.data.type === 'github') {
+        expect(result.data.url).toBe('https://github.com/testowner/testrepo');
+      }
+    });
+
+    it('should accept github source with partial fields (runtime validation)', () => {
+      // v0.2.26: Schema allows partial fields; validation happens at runtime
+      // This is intentional - the schema is more permissive, but createFromGitHub
+      // and extractGitHubOwnerRepo will validate at runtime
       const source = {
         type: 'github',
         repo: 'testrepo',
       };
       const result = workspaceSourceSchema.safeParse(source);
-      expect(result.success).toBe(false);
+      // Schema accepts it, but runtime will reject
+      expect(result.success).toBe(true);
     });
 
-    it('should reject github source without repo', () => {
+    it('should accept github source with owner only (runtime validation)', () => {
+      // v0.2.26: Schema allows partial fields; validation happens at runtime
       const source = {
         type: 'github',
         owner: 'testowner',
       };
       const result = workspaceSourceSchema.safeParse(source);
-      expect(result.success).toBe(false);
+      // Schema accepts it, but runtime will reject
+      expect(result.success).toBe(true);
     });
   });
 
