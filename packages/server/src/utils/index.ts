@@ -23,3 +23,4 @@ export {
   type TimeoutHandle,
   type RetryConfig,
 } from './timeout.js';
+export { add } from './math.js';
