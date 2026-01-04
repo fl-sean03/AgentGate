@@ -258,9 +258,9 @@ export interface SystemEvents {
 }
 
 /**
- * All events combined
+ * All events combined - explicitly satisfies Record<string, unknown>
  */
-export type AllEvents = WorkOrderEvents & SandboxEvents & AgentEvents & SystemEvents;
+export type AllEvents = WorkOrderEvents & SandboxEvents & AgentEvents & SystemEvents & Record<string, unknown>;
 
 /**
  * Global event bus singleton

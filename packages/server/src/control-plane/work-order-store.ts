@@ -6,7 +6,13 @@ import {
   getWorkOrderPath,
   ensureDir,
 } from '../artifacts/paths.js';
-import type { WorkOrder, WorkOrderStatus, ListFilters } from '../types/index.js';
+import type {
+  WorkOrder,
+  WorkOrderStatus,
+  ListFilters,
+  LoopStrategyMode,
+} from '../types/index.js';
+import type { VerificationLevel } from '../types/verification.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('work-order-store');
@@ -79,8 +85,8 @@ interface SerializedWorkOrder {
   waitForCI?: boolean;
   // Harness options (v0.2.30)
   harnessProfile?: string;
-  loopStrategyMode?: string;
-  skipVerification?: string[];
+  loopStrategyMode?: LoopStrategyMode;
+  skipVerification?: VerificationLevel[];
 }
 
 /**

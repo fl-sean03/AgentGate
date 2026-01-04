@@ -6,9 +6,8 @@
 import { access, readFile } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import fg from 'fast-glob';
-import _Ajv, { type ValidateFunction, type ErrorObject, type AnySchema } from 'ajv';
-// ESM/CJS interop - Ajv default export differs between module systems
-const Ajv = (_Ajv as { default?: typeof _Ajv }).default ?? _Ajv;
+import type { ValidateFunction, ErrorObject, AnySchema } from 'ajv';
+import AjvModule from 'ajv';
 import { VerificationLevel, type LevelResult, type CheckResult } from '../types/index.js';
 import type { VerifyContext } from './types.js';
 import { createLogger } from '../utils/logger.js';
@@ -29,6 +28,9 @@ const schemaCache = new Map<string, ValidateFunction>();
  * Ajv instance for JSON Schema validation.
  * Using strict mode and all errors for comprehensive validation.
  */
+// ESM/CJS interop - handle both module formats
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Ajv = (AjvModule as any).default ?? AjvModule;
 const ajv = new Ajv({
   strict: true,
   allErrors: true,
@@ -463,8 +465,9 @@ async function validateJsonSchema(
     }
 
     try {
-      validate = ajv.compile(schema);
-      schemaCache.set(absoluteSchemaPath, validate);
+      const compiled = ajv.compile(schema);
+      schemaCache.set(absoluteSchemaPath, compiled);
+      validate = compiled;
       log.debug({ schemaPath }, 'Compiled and cached JSON Schema');
     } catch (error) {
       return {
@@ -476,7 +479,10 @@ async function validateJsonSchema(
 
   // Validate the data against the schema
   // At this point validate is guaranteed to be set (either from cache or compiled)
-  const valid = validate!(data);
+  if (!validate) {
+    return { passed: false, message: 'Schema validation function not available' };
+  }
+  const valid = validate(data);
 
   if (valid) {
     return { passed: true, message: '' };
@@ -484,7 +490,7 @@ async function validateJsonSchema(
 
   return {
     passed: false,
-    message: `JSON Schema validation failed: ${formatAjvErrors(validate!.errors)}`,
+    message: `JSON Schema validation failed: ${formatAjvErrors(validate.errors)}`,
   };
 }
 

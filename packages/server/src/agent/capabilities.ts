@@ -156,13 +156,20 @@ export function createCapability(
     description?: string;
   }
 ): Capability {
-  return {
+  const capability: Capability = {
     name,
     enabled,
-    version: options?.version,
-    config: options?.config,
-    description: options?.description,
   };
+  if (options?.version !== undefined) {
+    capability.version = options.version;
+  }
+  if (options?.config !== undefined) {
+    capability.config = options.config;
+  }
+  if (options?.description !== undefined) {
+    capability.description = options.description;
+  }
+  return capability;
 }
 
 /**
@@ -180,16 +187,27 @@ export function createAgentCapabilities(
     rateLimits?: AgentCapabilities['rateLimits'];
   }
 ): AgentCapabilities {
-  return {
+  const agentCapabilities: AgentCapabilities = {
     agentId,
     agentType,
-    agentVersion: options?.agentVersion,
     capabilities,
-    maxTokens: options?.maxTokens,
-    maxFileSize: options?.maxFileSize,
-    supportedLanguages: options?.supportedLanguages,
-    rateLimits: options?.rateLimits,
   };
+  if (options?.agentVersion !== undefined) {
+    agentCapabilities.agentVersion = options.agentVersion;
+  }
+  if (options?.maxTokens !== undefined) {
+    agentCapabilities.maxTokens = options.maxTokens;
+  }
+  if (options?.maxFileSize !== undefined) {
+    agentCapabilities.maxFileSize = options.maxFileSize;
+  }
+  if (options?.supportedLanguages !== undefined) {
+    agentCapabilities.supportedLanguages = options.supportedLanguages;
+  }
+  if (options?.rateLimits !== undefined) {
+    agentCapabilities.rateLimits = options.rateLimits;
+  }
+  return agentCapabilities;
 }
 
 /**
@@ -203,12 +221,17 @@ export function requireCapability(
     config?: Record<string, unknown>;
   }
 ): CapabilityRequirement {
-  return {
+  const requirement: CapabilityRequirement = {
     name,
     required: options?.required ?? true,
-    minVersion: options?.minVersion,
-    config: options?.config,
   };
+  if (options?.minVersion !== undefined) {
+    requirement.minVersion = options.minVersion;
+  }
+  if (options?.config !== undefined) {
+    requirement.config = options.config;
+  }
+  return requirement;
 }
 
 /**

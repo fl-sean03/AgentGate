@@ -18,6 +18,17 @@ import {
 } from './types.js';
 
 /**
+ * Options for constructing AgentGate errors
+ */
+export interface AgentGateErrorOptions {
+  category?: ErrorCategory;
+  severity?: ErrorSeverity;
+  context?: Partial<ErrorContext>;
+  retryPolicy?: Partial<RetryPolicy>;
+  cause?: Error;
+}
+
+/**
  * Base error class for all AgentGate errors
  */
 export class AgentGateError extends Error {
@@ -28,17 +39,7 @@ export class AgentGateError extends Error {
   readonly retryPolicy: RetryPolicy;
   readonly originalError?: Error;
 
-  constructor(
-    message: string,
-    code: ErrorCode,
-    options: {
-      category?: ErrorCategory;
-      severity?: ErrorSeverity;
-      context?: Partial<ErrorContext>;
-      retryPolicy?: Partial<RetryPolicy>;
-      cause?: Error;
-    } = {}
-  ) {
+  constructor(message: string, code: ErrorCode, options: AgentGateErrorOptions = {}) {
     super(message);
     this.name = this.constructor.name;
 
@@ -48,7 +49,9 @@ export class AgentGateError extends Error {
     this.code = code;
     this.category = options.category ?? getCategoryForCode(code);
     this.severity = options.severity ?? getSeverityForCategory(this.category);
-    this.originalError = options.cause;
+    if (options.cause !== undefined) {
+      this.originalError = options.cause;
+    }
 
     // Build context
     this.context = {
@@ -124,7 +127,7 @@ export class AgentGateError extends Error {
     };
 
     // Include stack in development
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && this.stack !== undefined) {
       serialized.stack = this.stack;
     }
 
@@ -150,14 +153,25 @@ export class AgentGateError extends Error {
    * Create an error from serialized form
    */
   static deserialize(data: SerializedError): AgentGateError {
-    const error = new AgentGateError(data.message, data.code, {
+    const options: {
+      category: ErrorCategory;
+      severity: ErrorSeverity;
+      context?: ErrorContext;
+      retryPolicy?: RetryPolicy;
+    } = {
       category: data.category,
       severity: data.severity,
-      context: data.context,
-      retryPolicy: data.retryPolicy,
-    });
+    };
+    if (data.context !== undefined) {
+      options.context = data.context;
+    }
+    if (data.retryPolicy !== undefined) {
+      options.retryPolicy = data.retryPolicy;
+    }
 
-    if (data.stack) {
+    const error = new AgentGateError(data.message, data.code, options);
+
+    if (data.stack !== undefined) {
       error.stack = data.stack;
     }
 
@@ -256,7 +270,7 @@ export class InfrastructureError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.DOCKER_NOT_AVAILABLE,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'infrastructure' });
   }
@@ -269,7 +283,7 @@ export class AgentError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.AGENT_EXECUTION_FAILED,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'agent' });
   }
@@ -285,7 +299,7 @@ export class ValidationError extends AgentGateError {
     message: string,
     validationErrors: Array<{ path: string; message: string }> = [],
     code: ErrorCode = ErrorCode.SCHEMA_VALIDATION_FAILED,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'validation' });
     this.validationErrors = validationErrors;
@@ -293,15 +307,17 @@ export class ValidationError extends AgentGateError {
 
   serialize(): SerializedError {
     const base = super.serialize();
+    const baseContext = base.context ?? { timestamp: new Date().toISOString(), metadata: {} };
+    const context: ErrorContext = {
+      ...baseContext,
+      metadata: {
+        ...baseContext.metadata,
+        validationErrors: this.validationErrors,
+      },
+    };
     return {
       ...base,
-      context: {
-        ...base.context,
-        metadata: {
-          ...base.context?.metadata,
-          validationErrors: this.validationErrors,
-        },
-      },
+      context,
     };
   }
 }
@@ -313,7 +329,7 @@ export class ConfigurationError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.CONFIG_INVALID_VALUE,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'configuration' });
   }
@@ -326,7 +342,7 @@ export class ResourceError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.RESOURCE_EXHAUSTED,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'resource' });
   }
@@ -342,7 +358,7 @@ export class TimeoutError extends AgentGateError {
     message: string,
     timeoutMs: number,
     code: ErrorCode = ErrorCode.OPERATION_TIMEOUT,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'timeout' });
     this.timeoutMs = timeoutMs;
@@ -350,15 +366,17 @@ export class TimeoutError extends AgentGateError {
 
   serialize(): SerializedError {
     const base = super.serialize();
+    const baseContext = base.context ?? { timestamp: new Date().toISOString(), metadata: {} };
+    const context: ErrorContext = {
+      ...baseContext,
+      metadata: {
+        ...baseContext.metadata,
+        timeoutMs: this.timeoutMs,
+      },
+    };
     return {
       ...base,
-      context: {
-        ...base.context,
-        metadata: {
-          ...base.context?.metadata,
-          timeoutMs: this.timeoutMs,
-        },
-      },
+      context,
     };
   }
 }
@@ -370,7 +388,7 @@ export class ConflictError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.RESOURCE_CONFLICT,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'conflict' });
   }
@@ -379,6 +397,10 @@ export class ConflictError extends AgentGateError {
 /**
  * External service errors
  */
+export interface ExternalServiceErrorOptions extends AgentGateErrorOptions {
+  statusCode?: number;
+}
+
 export class ExternalServiceError extends AgentGateError {
   readonly service: string;
   readonly statusCode?: number;
@@ -387,25 +409,32 @@ export class ExternalServiceError extends AgentGateError {
     message: string,
     service: string,
     code: ErrorCode = ErrorCode.EXTERNAL_SERVICE_ERROR,
-    options: Parameters<typeof AgentGateError>[2] & { statusCode?: number } = {}
+    options: ExternalServiceErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'external' });
     this.service = service;
-    this.statusCode = options.statusCode;
+    if (options.statusCode !== undefined) {
+      this.statusCode = options.statusCode;
+    }
   }
 
   serialize(): SerializedError {
     const base = super.serialize();
+    const baseContext = base.context ?? { timestamp: new Date().toISOString(), metadata: {} };
+    const metadata: Record<string, unknown> = {
+      ...baseContext.metadata,
+      service: this.service,
+    };
+    if (this.statusCode !== undefined) {
+      metadata.statusCode = this.statusCode;
+    }
+    const context: ErrorContext = {
+      ...baseContext,
+      metadata,
+    };
     return {
       ...base,
-      context: {
-        ...base.context,
-        metadata: {
-          ...base.context?.metadata,
-          service: this.service,
-          statusCode: this.statusCode,
-        },
-      },
+      context,
     };
   }
 }
@@ -417,7 +446,7 @@ export class GitHubError extends ExternalServiceError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.GITHUB_API_ERROR,
-    options: Parameters<typeof ExternalServiceError>[3] = {}
+    options: ExternalServiceErrorOptions = {}
   ) {
     super(message, 'github', code, options);
   }
@@ -426,9 +455,13 @@ export class GitHubError extends ExternalServiceError {
    * Create rate limit error with retry-after
    */
   static rateLimited(retryAfterMs: number): GitHubError {
-    return new GitHubError('GitHub API rate limit exceeded', ErrorCode.GITHUB_RATE_LIMITED, {
-      retryPolicy: { retryable: true, retryAfterMs },
-    });
+    const retryPolicyOptions: ExternalServiceErrorOptions = {};
+    retryPolicyOptions.retryPolicy = { retryable: true, retryAfterMs };
+    return new GitHubError(
+      'GitHub API rate limit exceeded',
+      ErrorCode.GITHUB_RATE_LIMITED,
+      retryPolicyOptions
+    );
   }
 }
 
@@ -439,7 +472,7 @@ export class InternalError extends AgentGateError {
   constructor(
     message: string,
     code: ErrorCode = ErrorCode.INTERNAL_ERROR,
-    options: Parameters<typeof AgentGateError>[2] = {}
+    options: AgentGateErrorOptions = {}
   ) {
     super(message, code, { ...options, category: 'internal', severity: 'fatal' });
   }

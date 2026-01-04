@@ -6,8 +6,16 @@
  */
 
 import { createLogger } from '../utils/logger.js';
-import type { GatePlan, GateCheck, GateCheckType } from '../types/index.js';
+import type { GateCheck, GateCheckType } from '../types/index.js';
 import type { VerificationLevel } from '../types/verification.js';
+
+/**
+ * Output type for the gate plan builder.
+ * This is different from GatePlan (which is the internal normalized format).
+ */
+export interface GatePlanOutput {
+  checks: GateCheck[];
+}
 
 const log = createLogger('gate-builder');
 
@@ -80,16 +88,14 @@ export class GatePlanBuilder {
   addVerification(options: {
     id?: string;
     levels?: VerificationLevel[];
-    config?: Record<string, unknown>;
+    timeout?: number;
     weight?: GateWeight;
   } = {}): this {
     const id = options.id || `verification-${this.gates.size}`;
     const check: GateCheck = {
       type: 'verification-levels',
-      config: {
-        levels: options.levels || ['L0', 'L1', 'L2'],
-        ...options.config,
-      },
+      levels: (options.levels || ['L0', 'L1', 'L2']) as Array<'L0' | 'L1' | 'L2' | 'L3'>,
+      ...(options.timeout !== undefined && { timeout: options.timeout }),
     };
 
     this.gates.set(id, {
@@ -107,16 +113,14 @@ export class GatePlanBuilder {
    */
   addContract(options: {
     id?: string;
-    config?: Record<string, unknown>;
+    timeout?: number;
     weight?: GateWeight;
   } = {}): this {
     const id = options.id || `contract-${this.gates.size}`;
     const check: GateCheck = {
       type: 'verification-levels',
-      config: {
-        levels: ['L0'],
-        ...options.config,
-      },
+      levels: ['L0'],
+      timeout: options.timeout,
     };
 
     this.gates.set(id, {
@@ -134,16 +138,14 @@ export class GatePlanBuilder {
    */
   addTest(options: {
     id?: string;
-    config?: Record<string, unknown>;
+    timeout?: number;
     weight?: GateWeight;
   } = {}): this {
     const id = options.id || `test-${this.gates.size}`;
     const check: GateCheck = {
       type: 'verification-levels',
-      config: {
-        levels: ['L1'],
-        ...options.config,
-      },
+      levels: ['L1'],
+      timeout: options.timeout,
     };
 
     this.gates.set(id, {
@@ -161,17 +163,17 @@ export class GatePlanBuilder {
    */
   addGitHubActions(options: {
     id?: string;
-    workflow?: string;
-    config?: Record<string, unknown>;
+    workflows?: string[];
+    pollInterval?: string;
+    timeout?: string;
     weight?: GateWeight;
   } = {}): this {
     const id = options.id || `github-actions-${this.gates.size}`;
     const check: GateCheck = {
       type: 'github-actions',
-      config: {
-        workflow: options.workflow,
-        ...options.config,
-      },
+      workflows: options.workflows,
+      pollInterval: options.pollInterval,
+      timeout: options.timeout,
     };
 
     this.gates.set(id, {
@@ -180,7 +182,7 @@ export class GatePlanBuilder {
       dependencies: [],
     });
 
-    log.debug({ id, workflow: options.workflow }, 'Added GitHub Actions gate');
+    log.debug({ id, workflows: options.workflows }, 'Added GitHub Actions gate');
     return this;
   }
 
@@ -190,16 +192,16 @@ export class GatePlanBuilder {
   addCustomCommand(options: {
     id?: string;
     command: string;
-    config?: Record<string, unknown>;
+    expectedExit?: number;
+    timeout?: string;
     weight?: GateWeight;
   }): this {
     const id = options.id || `custom-${this.gates.size}`;
     const check: GateCheck = {
       type: 'custom',
-      config: {
-        command: options.command,
-        ...options.config,
-      },
+      command: options.command,
+      expectedExit: options.expectedExit,
+      timeout: options.timeout,
     };
 
     this.gates.set(id, {
@@ -217,13 +219,15 @@ export class GatePlanBuilder {
    */
   addConvergence(options: {
     id?: string;
-    config?: Record<string, unknown>;
+    strategy?: 'similarity' | 'fingerprint';
+    threshold?: number;
     weight?: GateWeight;
   } = {}): this {
     const id = options.id || `convergence-${this.gates.size}`;
     const check: GateCheck = {
       type: 'convergence',
-      config: options.config,
+      strategy: options.strategy || 'similarity',
+      threshold: options.threshold,
     };
 
     this.gates.set(id, {
@@ -241,17 +245,17 @@ export class GatePlanBuilder {
    */
   addApproval(options: {
     id?: string;
-    requiredApprovers?: string[];
-    config?: Record<string, unknown>;
+    approvers: string[];
+    minApprovals?: number;
+    message?: string;
     weight?: GateWeight;
-  } = {}): this {
+  }): this {
     const id = options.id || `approval-${this.gates.size}`;
     const check: GateCheck = {
       type: 'approval',
-      config: {
-        requiredApprovers: options.requiredApprovers,
-        ...options.config,
-      },
+      approvers: options.approvers,
+      minApprovals: options.minApprovals,
+      message: options.message,
     };
 
     this.gates.set(id, {
@@ -265,27 +269,22 @@ export class GatePlanBuilder {
   }
 
   /**
-   * Add a custom gate by type
+   * Add a custom gate with a pre-built check
    */
   addCustomGate(options: {
     id?: string;
-    type: GateCheckType;
-    config?: Record<string, unknown>;
+    check: GateCheck;
     weight?: GateWeight;
   }): this {
-    const id = options.id || `${options.type}-${this.gates.size}`;
-    const check: GateCheck = {
-      type: options.type,
-      config: options.config,
-    };
+    const id = options.id || `${options.check.type}-${this.gates.size}`;
 
     this.gates.set(id, {
-      check,
+      check: options.check,
       weight: options.weight || this.options.defaultWeight!,
       dependencies: [],
     });
 
-    log.debug({ id, type: options.type }, 'Added custom gate');
+    log.debug({ id, type: options.check.type }, 'Added custom gate');
     return this;
   }
 
@@ -323,7 +322,7 @@ export class GatePlanBuilder {
   /**
    * Build the gate plan
    */
-  build(): GatePlan {
+  build(): GatePlanOutput {
     // Validate no circular dependencies
     this.validateDependencies();
 
@@ -336,7 +335,7 @@ export class GatePlanBuilder {
       return entry.check;
     });
 
-    const plan: GatePlan = {
+    const plan: GatePlanOutput = {
       checks,
     };
 

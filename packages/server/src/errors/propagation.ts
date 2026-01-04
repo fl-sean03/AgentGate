@@ -224,7 +224,10 @@ export function createErrorBoundary(
 ): <T>(fn: () => T | Promise<T>) => Promise<T> {
   return async <T>(fn: () => T | Promise<T>): Promise<T> => {
     const result = await safeExecute(fn, { ...options, component, rethrow: true });
-    return result.value as T;
+    if (!result.success) {
+      throw result.error;
+    }
+    return result.value;
   };
 }
 

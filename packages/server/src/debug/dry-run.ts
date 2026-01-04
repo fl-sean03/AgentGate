@@ -439,7 +439,8 @@ export class DryRun {
 
     lines.push('', '--- Actions ---');
     for (const action of result.actions) {
-      const time = action.timestamp.toISOString().split('T')[1].split('.')[0];
+      const timePart = action.timestamp.toISOString().split('T')[1];
+      const time = timePart?.split('.')[0] ?? 'unknown';
       lines.push(`  [${time}] ${action.type}: ${JSON.stringify(action.details)}`);
     }
 

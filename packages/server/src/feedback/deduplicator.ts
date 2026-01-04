@@ -171,7 +171,7 @@ function createGroup(
   const category = determineCategory(failures);
 
   // Find common file
-  const files = failures.map(f => f.file).filter(Boolean);
+  const files = failures.map(f => f.file).filter((f): f is string => !!f);
   const uniqueFiles = new Set(files);
   const commonFile = uniqueFiles.size === 1 ? files[0] : undefined;
 
