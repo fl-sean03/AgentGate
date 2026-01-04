@@ -1,14 +1,4 @@
-import { redirect } from 'next/navigation';
-import { auth } from '@/lib/auth';
-import { LoginForm } from './login-form';
-
-export default async function LoginPage() {
-  const session = await auth();
-
-  if (session) {
-    redirect('/account');
-  }
-
+export default function LoginLoading() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
@@ -17,7 +7,7 @@ export default async function LoginPage() {
           Sign in to your AgentGate account
         </p>
       </div>
-      <LoginForm />
+      <div>Loading...</div>
     </div>
   );
 }

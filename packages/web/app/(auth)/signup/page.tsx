@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { SignupForm } from './signup-form';
@@ -23,9 +22,7 @@ export default async function SignupPage({
           Get started with AgentGate{plan ? ` on the ${plan} plan` : ''}
         </p>
       </div>
-      <Suspense fallback={<div>Loading...</div>}>
-        <SignupForm plan={plan} />
-      </Suspense>
+      <SignupForm plan={plan} />
     </div>
   );
 }

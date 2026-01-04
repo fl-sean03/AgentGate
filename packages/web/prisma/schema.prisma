@@ -84,9 +84,12 @@ model UserSettings {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Subscription
+  plan String @default("free") // free, pro, team
+
   // Preferences
-  defaultMaxIterations Int     @default(3)
-  emailOnComplete      Boolean @default(true)
+  maxIterations   Int     @default(3)
+  emailOnComplete Boolean @default(true)
 }
 
 model DeviceCode {
