@@ -4,7 +4,9 @@
 
 [![CI](https://github.com/fl-sean03/AgentGate/actions/workflows/ci.yml/badge.svg)](https://github.com/fl-sean03/AgentGate/actions/workflows/ci.yml)
 
-A contained builder with verification gate for AI coding agents. AgentGate provides a structured environment for running AI agents with iterative build-verify-feedback loops.
+**Open-source AI coding agent orchestrator** - Run AI agents with verification gates, sandbox isolation, and GitHub integration using your own Claude subscription.
+
+AgentGate provides a structured environment for running AI coding agents with iterative build-verify-feedback loops. Self-hosted and fully under your control.
 
 ## Features
 
@@ -19,6 +21,32 @@ A contained builder with verification gate for AI coding agents. AgentGate provi
 - **Feedback Generation**: Structured feedback for agent iteration
 - **Snapshot Management**: Git-based state capture and diffing
 - **Clean Room Execution**: Isolated verification environments
+
+## Quick Start (Self-Hosted)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/fl-sean03/AgentGate.git
+cd AgentGate
+
+# 2. Install dependencies
+pnpm install
+
+# 3. Build
+pnpm build
+
+# 4. Start the server
+pnpm start
+
+# 5. Submit a work order (in another terminal)
+curl -X POST http://localhost:3001/api/v1/work-orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "Create a hello.txt file with Hello World",
+    "repositoryPath": "/tmp/test-repo",
+    "verificationLevel": "L0"
+  }'
+```
 
 ## Installation
 
