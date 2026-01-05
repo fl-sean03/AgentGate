@@ -61,8 +61,8 @@ importers:
         specifier: ^0.77.0
         version: 0.77.0
       '@opencode-ai/sdk':
-        specifier: ^1.0.218
-        version: 1.0.218
+        specifier: ^1.1.2
+        version: 1.1.2
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16
@@ -498,8 +498,8 @@ packages:
     resolution: {integrity: sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@exodus/bytes@1.7.0':
-    resolution: {integrity: sha512-5i+BtvujK/vM07YCGDyz4C4AyDzLmhxHMtM5HpUyPRtJPBdFPsj290ffXW+UXY21/G7GtXeHD2nRmq0T1ShyQQ==}
+  '@exodus/bytes@1.8.0':
+    resolution: {integrity: sha512-8JPn18Bcp8Uo1T82gR8lh2guEOa5KKU/IEKvvdp0sgmi7coPBWf1Doi1EXsGZb2ehc8ym/StJCjffYV+ne7sXQ==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
     peerDependencies:
       '@exodus/crypto': ^1.0.0-rc.4
@@ -779,8 +779,8 @@ packages:
     resolution: {integrity: sha512-bvJQ4dASnZ7jgfxmseViQwdRupHxs0TwHSZFeYB0gpdOAXnWwDWdGJRCMyphLSHwExRp27JNOk7EBFVmZRBanQ==}
     engines: {node: '>=18'}
 
-  '@opencode-ai/sdk@1.0.218':
-    resolution: {integrity: sha512-c6ss6UPAMskSVQUecuhNvPLFngyVh2Os9o0kpVjoqJJ16HXhzjVSk5axgh3ueQrfP5aZfg5o6l6srmjuCTPNnQ==}
+  '@opencode-ai/sdk@1.1.2':
+    resolution: {integrity: sha512-qQRcQrE+9RDiZRA7qpNhy1jXjkwSwGy5+WfPGrCCFb3k1zwVDUn5LKTLlwT441/l+YpuenZ0sRJBz73ZRa75bA==}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -2783,8 +2783,8 @@ packages:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
 
-  webidl-conversions@8.0.0:
-    resolution: {integrity: sha512-n4W4YFyz5JzOfQeA8oN7dUYpR+MBP3PIUsn2jLjWXwK5ASUzt0Jc/A5sAUZoCYFJRGF0FBKJ+1JjN43rNdsQzA==}
+  webidl-conversions@8.0.1:
+    resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
     engines: {node: '>=20'}
 
   whatwg-mimetype@4.0.0:
@@ -3095,7 +3095,7 @@ snapshots:
 
   '@eslint/js@8.57.1': {}
 
-  '@exodus/bytes@1.7.0':
+  '@exodus/bytes@1.8.0':
     optional: true
 
   '@fastify/accept-negotiator@2.0.1': {}
@@ -3399,7 +3399,7 @@ snapshots:
 
   '@openai/codex-sdk@0.77.0': {}
 
-  '@opencode-ai/sdk@1.0.218': {}
+  '@opencode-ai/sdk@1.1.2': {}
 
   '@pinojs/redact@0.4.0': {}
 
@@ -4408,7 +4408,7 @@ snapshots:
 
   html-encoding-sniffer@6.0.0:
     dependencies:
-      '@exodus/bytes': 1.7.0
+      '@exodus/bytes': 1.8.0
     transitivePeerDependencies:
       - '@exodus/crypto'
     optional: true
@@ -4595,7 +4595,7 @@ snapshots:
     dependencies:
       '@acemir/cssom': 0.9.30
       '@asamuzakjp/dom-selector': 6.7.6
-      '@exodus/bytes': 1.7.0
+      '@exodus/bytes': 1.8.0
       cssstyle: 5.3.6
       data-urls: 6.0.0
       decimal.js: 10.6.0
@@ -4608,7 +4608,7 @@ snapshots:
       symbol-tree: 3.2.4
       tough-cookie: 6.0.0
       w3c-xmlserializer: 5.0.0
-      webidl-conversions: 8.0.0
+      webidl-conversions: 8.0.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 15.1.0
       ws: 8.18.3
@@ -5574,7 +5574,7 @@ snapshots:
       xml-name-validator: 5.0.0
     optional: true
 
-  webidl-conversions@8.0.0:
+  webidl-conversions@8.0.1:
     optional: true
 
   whatwg-mimetype@4.0.0:
@@ -5583,7 +5583,7 @@ snapshots:
   whatwg-url@15.1.0:
     dependencies:
       tr46: 6.0.0
-      webidl-conversions: 8.0.0
+      webidl-conversions: 8.0.1
     optional: true
 
   which@2.0.2:

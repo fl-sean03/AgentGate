@@ -54,7 +54,7 @@
     "@fastify/websocket": "^11.2.0",
     "@octokit/rest": "^22.0.1",
     "@openai/codex-sdk": "^0.77.0",
-    "@opencode-ai/sdk": "^1.0.218",
+    "@opencode-ai/sdk": "^1.1.2",
     "adm-zip": "^0.5.16",
     "ajv": "^8.12.0",
     "commander": "^12.0.0",
