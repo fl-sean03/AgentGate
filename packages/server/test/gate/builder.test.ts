@@ -50,7 +50,7 @@ describe('GatePlanBuilder', () => {
       builder.addVerification();
 
       const plan = builder.build();
-      expect(plan.checks[0].config?.levels).toEqual(['L0', 'L1', 'L2']);
+      expect(plan.checks[0].levels).toEqual(['L0', 'L1', 'L2']);
     });
 
     it('should accept custom id', () => {
@@ -68,7 +68,7 @@ describe('GatePlanBuilder', () => {
       builder.addContract();
 
       const plan = builder.build();
-      expect(plan.checks[0].config?.levels).toEqual(['L0']);
+      expect(plan.checks[0].levels).toEqual(['L0']);
     });
 
     it('should default to critical weight', () => {
@@ -86,7 +86,7 @@ describe('GatePlanBuilder', () => {
       builder.addTest();
 
       const plan = builder.build();
-      expect(plan.checks[0].config?.levels).toEqual(['L1']);
+      expect(plan.checks[0].levels).toEqual(['L1']);
     });
 
     it('should default to high weight', () => {
@@ -101,11 +101,11 @@ describe('GatePlanBuilder', () => {
   describe('addGitHubActions', () => {
     it('should add GitHub Actions gate', () => {
       const builder = new GatePlanBuilder();
-      builder.addGitHubActions({ workflow: 'ci.yml' });
+      builder.addGitHubActions({ workflows: ['ci.yml'] });
 
       const plan = builder.build();
       expect(plan.checks[0].type).toBe('github-actions');
-      expect(plan.checks[0].config?.workflow).toBe('ci.yml');
+      expect(plan.checks[0].workflows).toEqual(['ci.yml']);
     });
   });
 
@@ -116,7 +116,7 @@ describe('GatePlanBuilder', () => {
 
       const plan = builder.build();
       expect(plan.checks[0].type).toBe('custom');
-      expect(plan.checks[0].config?.command).toBe('npm run lint');
+      expect(plan.checks[0].command).toBe('npm run lint');
     });
   });
 
@@ -133,16 +133,16 @@ describe('GatePlanBuilder', () => {
   describe('addApproval', () => {
     it('should add approval gate', () => {
       const builder = new GatePlanBuilder();
-      builder.addApproval({ requiredApprovers: ['user1', 'user2'] });
+      builder.addApproval({ approvers: ['user1', 'user2'] });
 
       const plan = builder.build();
       expect(plan.checks[0].type).toBe('approval');
-      expect(plan.checks[0].config?.requiredApprovers).toEqual(['user1', 'user2']);
+      expect(plan.checks[0].approvers).toEqual(['user1', 'user2']);
     });
 
     it('should default to critical weight', () => {
       const builder = new GatePlanBuilder();
-      builder.addApproval();
+      builder.addApproval({ approvers: ['default-approver'] });
 
       const info = builder.getGateInfo();
       expect(info[0].weight).toBe('critical');
@@ -153,8 +153,10 @@ describe('GatePlanBuilder', () => {
     it('should add gate with arbitrary type', () => {
       const builder = new GatePlanBuilder();
       builder.addCustomGate({
-        type: 'verification-levels',
-        config: { levels: ['L3'] },
+        check: {
+          type: 'verification-levels',
+          config: { levels: ['L3'] },
+        },
       });
 
       const plan = builder.build();
