@@ -8,9 +8,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import type { Container, Exec, ContainerInfo, ContainerInspectInfo } from 'dockerode';
 
-// Mock dockerode before importing DockerClient
-vi.mock('dockerode', () => {
-  const mockContainer = {
+// Use vi.hoisted to create mock variables BEFORE the hoisted vi.mock call
+const { sharedMockContainer, sharedMockExec, sharedDockerInstance } = vi.hoisted(() => {
+  const sharedMockContainer = {
     id: 'test-container-123',
     start: vi.fn(),
     stop: vi.fn(),
@@ -20,18 +20,19 @@ vi.mock('dockerode', () => {
     exec: vi.fn(),
   };
 
-  const mockExec = {
+  const sharedMockExec = {
     start: vi.fn(),
     inspect: vi.fn(),
   };
 
-  const MockDocker = vi.fn().mockImplementation(() => ({
+  // Create shared Docker instance - ALL new Docker() calls return THIS SAME object
+  const sharedDockerInstance = {
     ping: vi.fn(),
     version: vi.fn(),
     listImages: vi.fn(),
     pull: vi.fn(),
-    createContainer: vi.fn().mockResolvedValue(mockContainer),
-    getContainer: vi.fn().mockReturnValue(mockContainer),
+    createContainer: vi.fn().mockResolvedValue(sharedMockContainer),
+    getContainer: vi.fn().mockReturnValue(sharedMockContainer),
     listContainers: vi.fn(),
     modem: {
       followProgress: vi.fn(
@@ -44,12 +45,20 @@ vi.mock('dockerode', () => {
         }
       ),
     },
-  }));
+  };
+
+  return { sharedMockContainer, sharedMockExec, sharedDockerInstance };
+});
+
+vi.mock('dockerode', () => {
+  // Return the SAME shared instance for every new Docker() call
+  const MockDocker = vi.fn().mockImplementation(() => sharedDockerInstance);
 
   return {
     default: MockDocker,
-    __mockContainer: mockContainer,
-    __mockExec: mockExec,
+    __mockContainer: sharedMockContainer,
+    __mockExec: sharedMockExec,
+    __sharedInstance: sharedDockerInstance,
   };
 });
 
