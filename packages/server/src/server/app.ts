@@ -19,6 +19,8 @@ import { registerStreamRoutes } from './routes/stream.js';
 import { registerQueueRoutes } from './routes/queue.js';
 import { registerUsageRoutes } from './routes/usage.js';
 import { registerPluginRoutes } from './routes/plugins.js';
+import { registerTemplateRoutes } from './routes/templates.js';
+import { registerWebhookRoutes } from './routes/webhooks.js';
 import { registerAuthPlugin } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
@@ -52,6 +54,41 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Progress event types for onProgress hook
+ */
+export type ProgressEventType =
+  | 'iteration_start'
+  | 'iteration_complete'
+  | 'agent_output'
+  | 'verification_start'
+  | 'verification_complete'
+  | 'tool_call'
+  | 'tool_result';
+
+/**
+ * Progress event data
+ */
+export interface ProgressEvent {
+  type: ProgressEventType;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+/**
+ * Verification result summary
+ */
+export interface VerificationResultSummary {
+  level: string;
+  passed: boolean;
+  summary: string;
+  checks?: Array<{
+    name: string;
+    passed: boolean;
+    message?: string;
+  }>;
+}
+
+/**
  * Execution lifecycle hooks for integration with billing/monitoring systems.
  * These hooks are called during work order execution.
  */
@@ -68,12 +105,28 @@ export interface ExecutionHooks {
     branch?: string;
     maxIterations: number;
     apiKey?: string;
+    /** Tenant ID for B2B2C context */
+    tenantId?: string;
+    /** Tenant user ID for B2B2C context */
+    tenantUserId?: string;
+    /** Template used for workspace */
+    template?: string;
+    /** Template variables */
+    templateVariables?: Record<string, unknown>;
     /**
      * Optional metadata from the work order request.
      * Used for B2B2C tenant context (tenant_user_id, tenant_metadata).
      */
     metadata?: Record<string, unknown>;
-  }) => Promise<{ allow: boolean; runId?: string; error?: string; organizationId?: string }>;
+  }) => Promise<{
+    allow: boolean;
+    runId?: string;
+    error?: string;
+    statusCode?: number;
+    organizationId?: string;
+    /** Custom execution context passed to onAfterExecute and onProgress */
+    executionContext?: Record<string, unknown>;
+  }>;
 
   /**
    * Called after a run completes (success or failure).
@@ -97,11 +150,31 @@ export interface ExecutionHooks {
       outputTokens: number;
       cachedInputTokens?: number;
     };
+    /** Tenant ID for B2B2C context */
+    tenantId?: string;
+    /** Tenant user ID for B2B2C context */
+    tenantUserId?: string;
+    /** Verification results from all levels */
+    verificationResults?: VerificationResultSummary[];
+    /** Custom execution context from onBeforeExecute */
+    executionContext?: Record<string, unknown>;
     /**
      * Optional metadata from the work order request.
      * Used for B2B2C tenant context (tenant_user_id, tenant_metadata).
      */
     metadata?: Record<string, unknown>;
+  }) => Promise<void>;
+
+  /**
+   * Called during execution to report progress events.
+   * Use this for real-time monitoring and webhook delivery.
+   */
+  onProgress?: (context: {
+    workOrderId: string;
+    runId: string;
+    event: ProgressEvent;
+    /** Custom execution context from onBeforeExecute */
+    executionContext?: Record<string, unknown>;
   }) => Promise<void>;
 }
 
@@ -358,6 +431,8 @@ export async function createApp(
   registerQueueRoutes(app);
   await registerUsageRoutes(app);
   registerPluginRoutes(app);
+  registerTemplateRoutes(app);
+  registerWebhookRoutes(app);
 
   // Register WebSocket routes
   registerWebSocketRoutes(app, broadcaster);

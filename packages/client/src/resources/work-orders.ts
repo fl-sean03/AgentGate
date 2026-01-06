@@ -74,6 +74,16 @@ export class WorkOrdersResource {
         workspaceSource: options.workspaceSource,
         agentType: options.agentType ?? 'claude-code-subscription',
         harness: options.harness,
+        // B2B tenant context
+        ...(options.tenant && {
+          tenantUserId: options.tenant.tenantUserId,
+          tenantMetadata: options.tenant.metadata,
+        }),
+        // Template reference
+        ...(options.template && {
+          template: options.template.templateId,
+          templateVariables: options.template.variables,
+        }),
       },
     });
   }
