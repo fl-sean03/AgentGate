@@ -201,8 +201,19 @@ export class RetryPolicyEngine {
     // Extract error type
     const errorType = options?.extractErrorType?.(error) ?? BuildErrorType.UNKNOWN;
 
-    // Check if error is retryable
-    const isRetryable = this.isRetryable(errorType, options?.isRetryable);
+    // Check if error is retryable using custom check first, then fallback to default behavior
+    let isRetryable = false;
+
+    // Custom check takes precedence if provided
+    if (options?.isRetryable) {
+      isRetryable = options.isRetryable(error);
+    }
+
+    // If no custom check or custom check returned false, use default policy
+    if (!isRetryable) {
+      isRetryable = this.isRetryable(errorType);
+    }
+
     if (!isRetryable) {
       return {
         shouldRetry: false,
@@ -325,10 +336,7 @@ export class RetryPolicyEngine {
   /**
    * Check if an error type is retryable according to the policy.
    */
-  isRetryable(
-    errorType: BuildErrorType,
-    _customCheck?: (error: Error) => boolean
-  ): boolean {
+  isRetryable(errorType: BuildErrorType): boolean {
     // Check explicit retryable errors list
     if (this.policy.retryableErrors.includes(errorType)) {
       return true;
