@@ -102,6 +102,8 @@ export class WorkOrderService {
       ...(request.loopStrategyMode && { loopStrategyMode: request.loopStrategyMode }),
       // Thrust 16 / Issue #71: Pass through waitForCI
       waitForCI: request.waitForCI ?? false,
+      // B2B2C tenant context metadata
+      ...(request.metadata && { metadata: request.metadata }),
       createdAt: now,
       status: WorkOrderStatus.QUEUED,
     };

@@ -25,21 +25,23 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 // Mock paths module
-vi.mock('../../src/artifacts/paths.js', () => ({
-  getRunDir: vi.fn((runId: string) => `/mock/runs/${runId}`),
-  getRunMetadataPath: vi.fn((runId: string) => `/mock/runs/${runId}/run.json`),
-  getRunGatePlanPath: vi.fn((runId: string) => `/mock/runs/${runId}/gate-plan.json`),
-  getRunSummaryPath: vi.fn((runId: string) => `/mock/runs/${runId}/summary.json`),
-  getIterationMetadataPath: vi.fn((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/iteration.json`),
-  getAgentLogsPath: vi.fn((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/agent-logs.txt`),
-  getVerificationReportPath: vi.fn((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/verification/report.json`),
-  getFeedbackPath: vi.fn((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/feedback.json`),
-  getVerificationLogsPath: vi.fn((runId: string, iteration: number, level: string) => `/mock/runs/${runId}/iterations/${iteration}/verification/${level.toLowerCase()}-logs.txt`),
-  getRunsDir: vi.fn(() => '/mock/runs'),
-  ensureRunStructure: vi.fn().mockResolvedValue(undefined),
-  ensureIterationStructure: vi.fn().mockResolvedValue(undefined),
-  ensureDir: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../src/artifacts/paths.js', () => {
+  return {
+    getRunDir: vi.fn().mockImplementation((runId: string) => `/mock/runs/${runId}`),
+    getRunMetadataPath: vi.fn().mockImplementation((runId: string) => `/mock/runs/${runId}/run.json`),
+    getRunGatePlanPath: vi.fn().mockImplementation((runId: string) => `/mock/runs/${runId}/gate-plan.json`),
+    getRunSummaryPath: vi.fn().mockImplementation((runId: string) => `/mock/runs/${runId}/summary.json`),
+    getIterationMetadataPath: vi.fn().mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/iteration.json`),
+    getAgentLogsPath: vi.fn().mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/agent-logs.txt`),
+    getVerificationReportPath: vi.fn().mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/verification/report.json`),
+    getFeedbackPath: vi.fn().mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/feedback.json`),
+    getVerificationLogsPath: vi.fn().mockImplementation((runId: string, iteration: number, level: string) => `/mock/runs/${runId}/iterations/${iteration}/verification/${level.toLowerCase()}-logs.txt`),
+    getRunsDir: vi.fn().mockReturnValue('/mock/runs'),
+    ensureRunStructure: vi.fn().mockResolvedValue(undefined),
+    ensureIterationStructure: vi.fn().mockResolvedValue(undefined),
+    ensureDir: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 // Mock json module
 vi.mock('../../src/artifacts/json.js', () => ({
@@ -188,13 +190,29 @@ function createMockIterationData(overrides: Partial<IterationData> = {}): Iterat
   };
 }
 
+// Import mocked modules for re-setup
+import * as pathsMock from '../../src/artifacts/paths.js';
+
 describe('Artifact Store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish mock implementations after clearAllMocks
+    vi.mocked(pathsMock.getRunDir).mockImplementation((runId: string) => `/mock/runs/${runId}`);
+    vi.mocked(pathsMock.getRunMetadataPath).mockImplementation((runId: string) => `/mock/runs/${runId}/run.json`);
+    vi.mocked(pathsMock.getRunGatePlanPath).mockImplementation((runId: string) => `/mock/runs/${runId}/gate-plan.json`);
+    vi.mocked(pathsMock.getRunSummaryPath).mockImplementation((runId: string) => `/mock/runs/${runId}/summary.json`);
+    vi.mocked(pathsMock.getIterationMetadataPath).mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/iteration.json`);
+    vi.mocked(pathsMock.getAgentLogsPath).mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/agent-logs.txt`);
+    vi.mocked(pathsMock.getVerificationReportPath).mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/verification/report.json`);
+    vi.mocked(pathsMock.getFeedbackPath).mockImplementation((runId: string, iteration: number) => `/mock/runs/${runId}/iterations/${iteration}/feedback.json`);
+    vi.mocked(pathsMock.getVerificationLogsPath).mockImplementation((runId: string, iteration: number, level: string) => `/mock/runs/${runId}/iterations/${iteration}/verification/${level.toLowerCase()}-logs.txt`);
+    vi.mocked(pathsMock.getRunsDir).mockReturnValue('/mock/runs');
+    vi.mocked(pathsMock.ensureRunStructure).mockResolvedValue(undefined);
+    vi.mocked(pathsMock.ensureIterationStructure).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('saveRunMetadata', () => {

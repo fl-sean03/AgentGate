@@ -150,6 +150,12 @@ export interface WorkOrder {
   harnessProfile?: string;
   // Loop strategy mode override (v0.2.16 - Thrust 10)
   loopStrategyMode?: LoopStrategyMode;
+  /**
+   * Optional metadata for B2B2C tenant context.
+   * Used by SaaS integrations to pass tenant user information.
+   * Common fields: tenant_user_id, tenant_metadata
+   */
+  metadata?: Record<string, unknown>;
 }
 
 // Submit Request Schema
@@ -174,6 +180,12 @@ export const submitRequestSchema = z.object({
   harnessProfile: z.string().optional(),
   // Loop strategy mode override (v0.2.16 - Thrust 10)
   loopStrategyMode: z.nativeEnum(LoopStrategyMode).optional(),
+  /**
+   * Optional metadata for B2B2C tenant context.
+   * Used by SaaS integrations to pass tenant user information.
+   * Common fields: tenant_user_id, tenant_metadata
+   */
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

@@ -4,10 +4,16 @@
 
 // Client configuration
 export interface AgentGateClientConfig {
+  /** Base URL of the AgentGate API */
   baseUrl: string;
+  /** API key (personal or organization) */
   apiKey?: string;
+  /** Request timeout in ms */
   timeout?: number;
+  /** Custom fetch implementation */
   fetch?: typeof fetch;
+  /** Organization ID (for B2B usage, extracted automatically from org API keys) */
+  organizationId?: string;
 }
 
 // Workspace source types
@@ -63,6 +69,24 @@ export interface CreateWorkOrderOptions {
       maxWallClockSeconds?: number;
       networkAllowed?: boolean;
     };
+  };
+  /**
+   * B2B tenant context (for organizations)
+   */
+  tenant?: {
+    /** Tenant user ID (your platform's user identifier) */
+    tenantUserId?: string;
+    /** Additional metadata for your platform */
+    metadata?: Record<string, unknown>;
+  };
+  /**
+   * Template reference (for custom workspace templates)
+   */
+  template?: {
+    /** Template ID */
+    templateId: string;
+    /** Template variables */
+    variables?: Record<string, string>;
   };
 }
 

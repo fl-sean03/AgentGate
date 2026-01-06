@@ -150,6 +150,11 @@ The work order will be queued and executed when resources are available.
         description: 'Maximum execution time in seconds (legacy, prefer harness.limits.maxWallClockSeconds)',
       },
       harness: { $ref: '#/components/schemas/HarnessOptions' },
+      metadata: {
+        type: 'object',
+        additionalProperties: true,
+        description: 'Optional metadata for B2B2C tenant context (tenant_user_id, tenant_metadata)',
+      },
     },
   },
   response: {

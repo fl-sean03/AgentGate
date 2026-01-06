@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { createSuccessResponse, createErrorResponse, ErrorCode } from '../types.js';
 import { apiKeyAuth } from '../middleware/auth.js';
 import {
@@ -29,8 +29,29 @@ import { resolveHarnessConfig, type ResolveOptions } from '../../harness/config-
 import { type HarnessConfig, type ResolvedHarnessConfig } from '../../types/harness-config.js';
 import { loadAuditRecord } from '../../harness/audit-trail.js';
 import { createOrchestrator } from '../../orchestrator/orchestrator.js';
+import type { ExecutionHooks } from '../app.js';
+import { getUsageService } from '../../billing/index.js';
 
 const logger = createLogger('routes:work-orders');
+
+/**
+ * Options for work order routes registration
+ */
+export interface WorkOrderRoutesOptions {
+  executionHooks?: ExecutionHooks;
+  apiKey?: string;
+}
+
+/**
+ * Extract API key from request headers
+ */
+function getApiKeyFromRequest(request: FastifyRequest): string | undefined {
+  const authHeader = request.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  return undefined;
+}
 
 /**
  * Convert internal workspace source to API format
@@ -122,7 +143,11 @@ async function getRunsForWorkOrder(workOrderId: string): Promise<Run[]> {
 /**
  * Register work order API routes
  */
-export function registerWorkOrderRoutes(app: FastifyInstance): void {
+export function registerWorkOrderRoutes(
+  app: FastifyInstance,
+  options: WorkOrderRoutesOptions = {}
+): void {
+  const { executionHooks } = options;
   /**
    * GET /api/v1/work-orders - List work orders
    */
@@ -355,6 +380,8 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           harnessProfile: harness?.profile,
           loopStrategyMode: harness?.loopStrategy?.mode,
           skipVerification,
+          // B2B2C tenant context metadata
+          metadata: body.metadata,
         };
         const order = await workOrderService.submit(submitRequest);
 
@@ -858,6 +885,69 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
           'Starting run for work order via API'
         );
 
+        // Get API key for billing context
+        const apiKey = getApiKeyFromRequest(request);
+
+        // Extract repository info from workspace source
+        let repository = '';
+        let branch: string | undefined;
+        if (order.workspaceSource.type === 'github') {
+          repository = `${order.workspaceSource.owner}/${order.workspaceSource.repo}`;
+          branch = order.workspaceSource.branch;
+        } else if (order.workspaceSource.type === 'github-new') {
+          repository = `${order.workspaceSource.owner}/${order.workspaceSource.repoName}`;
+        } else if (order.workspaceSource.type === 'local') {
+          repository = order.workspaceSource.path;
+        }
+
+        // Call onBeforeExecute hook if provided (for billing validation)
+        let billingRunId: string | undefined;
+        let executionMetadata: Record<string, unknown> | undefined;
+        if (executionHooks?.onBeforeExecute) {
+          try {
+            const hookResult = await executionHooks.onBeforeExecute({
+              workOrderId: id,
+              taskPrompt: order.taskPrompt,
+              repository,
+              branch,
+              maxIterations: order.maxIterations,
+              apiKey,
+              metadata: (order as { metadata?: Record<string, unknown> }).metadata,
+            });
+
+            if (!hookResult.allow) {
+              logger.info(
+                { workOrderId: id, error: hookResult.error },
+                'Execution blocked by onBeforeExecute hook'
+              );
+              return reply.status(402).send(
+                createErrorResponse(
+                  ErrorCode.FORBIDDEN,
+                  hookResult.error ?? 'Execution not allowed',
+                  undefined,
+                  request.id
+                )
+              );
+            }
+
+            billingRunId = hookResult.runId;
+            logger.debug({ workOrderId: id, billingRunId }, 'onBeforeExecute hook passed');
+          } catch (hookError) {
+            logger.error(
+              { workOrderId: id, err: hookError },
+              'onBeforeExecute hook threw an error'
+            );
+            return reply.status(402).send(
+              createErrorResponse(
+                ErrorCode.FORBIDDEN,
+                hookError instanceof Error ? hookError.message : 'Execution not allowed',
+                undefined,
+                request.id
+              )
+            );
+          }
+        }
+
         // Create orchestrator and execute in background
         const orchestrator = createOrchestrator();
         const startedAt = new Date();
@@ -865,24 +955,97 @@ export function registerWorkOrderRoutes(app: FastifyInstance): void {
         // Execute the work order asynchronously
         // We don't await this - it runs in the background
         orchestrator.execute(order).then(async (run) => {
+          const durationMs = Date.now() - startedAt.getTime();
+          const success = run.result === RunResult.PASSED;
+
           // Update work order status based on result
-          if (run.result === RunResult.PASSED) {
+          if (success) {
             await workOrderService.markSucceeded(id);
           } else {
             const errorMessage = run.error ?? `Run failed with result: ${run.result}`;
             await workOrderService.markFailed(id, errorMessage);
           }
+
           logger.info(
             { workOrderId: id, runId: run.id, result: run.result },
             'Run completed for work order'
           );
+
+          // Call onAfterExecute hook if provided (for billing)
+          if (executionHooks?.onAfterExecute) {
+            try {
+              // Fetch actual usage data for billing
+              let actualCostUsd: number | undefined;
+              let tokenUsage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number } | undefined;
+
+              try {
+                const usageService = getUsageService();
+                const usage = await usageService.getWorkOrderUsage(id);
+                if (usage.totalCostUsd > 0) {
+                  actualCostUsd = usage.totalCostUsd;
+                  tokenUsage = {
+                    inputTokens: usage.totalInputTokens,
+                    outputTokens: usage.totalOutputTokens,
+                    cachedInputTokens: usage.totalCachedInputTokens > 0 ? usage.totalCachedInputTokens : undefined,
+                  };
+                  logger.debug({ workOrderId: id, actualCostUsd, tokenUsage }, 'Usage data fetched for billing');
+                }
+              } catch (usageError) {
+                logger.warn({ workOrderId: id, err: usageError }, 'Failed to fetch usage data, billing will use fallback');
+              }
+
+              await executionHooks.onAfterExecute({
+                workOrderId: id,
+                runId: billingRunId ?? run.id,
+                success,
+                error: success ? undefined : (run.error ?? `Run failed with result: ${run.result}`),
+                iterations: run.iteration,
+                durationMs,
+                prUrl: run.gitHubPrUrl ?? undefined,
+                prNumber: run.gitHubPrNumber ?? undefined,
+                apiKey,
+                actualCostUsd,
+                tokenUsage,
+                metadata: (order as { metadata?: Record<string, unknown> }).metadata,
+              });
+              logger.debug({ workOrderId: id, runId: run.id }, 'onAfterExecute hook completed');
+            } catch (hookError) {
+              logger.error(
+                { workOrderId: id, runId: run.id, err: hookError },
+                'onAfterExecute hook failed'
+              );
+            }
+          }
         }).catch(async (error: unknown) => {
+          const durationMs = Date.now() - startedAt.getTime();
           const errorMessage = error instanceof Error ? error.message : String(error);
           await workOrderService.markFailed(id, errorMessage);
           logger.error(
             { workOrderId: id, err: error as Error },
             'Run failed for work order'
           );
+
+          // Call onAfterExecute hook for failures too
+          if (executionHooks?.onAfterExecute) {
+            try {
+              await executionHooks.onAfterExecute({
+                workOrderId: id,
+                runId: billingRunId ?? `error-${id}`,
+                success: false,
+                error: errorMessage,
+                iterations: 0,
+                durationMs,
+                apiKey,
+                metadata: (order as { metadata?: Record<string, unknown> }).metadata,
+              });
+              logger.debug({ workOrderId: id }, 'onAfterExecute hook completed for failure');
+            } catch (hookError) {
+              logger.error(
+                { workOrderId: id, err: hookError },
+                'onAfterExecute hook failed'
+              );
+            }
+          }
         });
 
         // Get the run ID from the most recent run (just created)

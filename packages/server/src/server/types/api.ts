@@ -145,6 +145,12 @@ export const createWorkOrderBodySchema = z.object({
   maxTime: z.number().int().min(60).max(86400).optional(),
   // New: full harness configuration options
   harness: apiHarnessOptionsSchema,
+  /**
+   * Optional metadata for B2B2C tenant context.
+   * Used by SaaS integrations to pass tenant user information.
+   * Common fields: tenant_user_id, tenant_metadata
+   */
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export type CreateWorkOrderBody = z.infer<typeof createWorkOrderBodySchema>;

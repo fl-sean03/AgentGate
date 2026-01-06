@@ -18,6 +18,7 @@ import { registerAuditRoutes } from './routes/audit.js';
 import { registerStreamRoutes } from './routes/stream.js';
 import { registerQueueRoutes } from './routes/queue.js';
 import { registerUsageRoutes } from './routes/usage.js';
+import { registerPluginRoutes } from './routes/plugins.js';
 import { registerAuthPlugin } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
@@ -51,6 +52,60 @@ export interface RateLimitConfig {
 }
 
 /**
+ * Execution lifecycle hooks for integration with billing/monitoring systems.
+ * These hooks are called during work order execution.
+ */
+export interface ExecutionHooks {
+  /**
+   * Called before a run starts execution.
+   * Return false to abort execution (e.g., insufficient credits).
+   * Throw an error to abort with a specific message.
+   */
+  onBeforeExecute?: (context: {
+    workOrderId: string;
+    taskPrompt: string;
+    repository: string;
+    branch?: string;
+    maxIterations: number;
+    apiKey?: string;
+    /**
+     * Optional metadata from the work order request.
+     * Used for B2B2C tenant context (tenant_user_id, tenant_metadata).
+     */
+    metadata?: Record<string, unknown>;
+  }) => Promise<{ allow: boolean; runId?: string; error?: string; organizationId?: string }>;
+
+  /**
+   * Called after a run completes (success or failure).
+   * Use this for billing deduction, logging, etc.
+   */
+  onAfterExecute?: (context: {
+    workOrderId: string;
+    runId: string;
+    success: boolean;
+    error?: string;
+    iterations: number;
+    durationMs: number;
+    prUrl?: string;
+    prNumber?: number;
+    apiKey?: string;
+    /** Actual cost in USD from token usage (if available) */
+    actualCostUsd?: number;
+    /** Token usage breakdown (if available) */
+    tokenUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+    };
+    /**
+     * Optional metadata from the work order request.
+     * Used for B2B2C tenant context (tenant_user_id, tenant_metadata).
+     */
+    metadata?: Record<string, unknown>;
+  }) => Promise<void>;
+}
+
+/**
  * Extended server configuration with API key and broadcaster
  */
 export interface AppConfig extends Partial<ServerConfig> {
@@ -60,6 +115,11 @@ export interface AppConfig extends Partial<ServerConfig> {
    * Rate limiting configuration
    */
   rateLimit?: RateLimitConfig;
+  /**
+   * Execution lifecycle hooks for billing/monitoring integration.
+   * These are called during work order run execution.
+   */
+  executionHooks?: ExecutionHooks;
   /**
    * Whether to validate storage on startup (v0.2.23 Wave 1.5).
    * When enabled, validates all work order files and logs warnings for corrupted files.
@@ -86,11 +146,12 @@ export { StorageValidationResult };
 export async function createApp(
   config: AppConfig = {}
 ): Promise<FastifyInstance> {
-  // Extract apiKey, broadcaster, rate limit, and storage validation options before validation (not part of ServerConfig schema)
+  // Extract apiKey, broadcaster, rate limit, execution hooks, and storage validation options before validation (not part of ServerConfig schema)
   const {
     apiKey,
     broadcaster: providedBroadcaster,
     rateLimit: rateLimitConfig,
+    executionHooks,
     validateStorageOnStartup = false,
     failOnCorruptedStorage = false,
     ...serverConfig
@@ -289,13 +350,14 @@ export async function createApp(
   registerHealthRoutes(app);
 
   // Register API routes
-  registerWorkOrderRoutes(app);
+  registerWorkOrderRoutes(app, { executionHooks, apiKey });
   registerRunRoutes(app);
   registerProfileRoutes(app);
   registerAuditRoutes(app);
   registerStreamRoutes(app);
   registerQueueRoutes(app);
   await registerUsageRoutes(app);
+  registerPluginRoutes(app);
 
   // Register WebSocket routes
   registerWebSocketRoutes(app, broadcaster);

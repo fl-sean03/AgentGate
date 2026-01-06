@@ -448,3 +448,18 @@ export {
   type NotificationResult,
   type DeliveryResult,
 } from './delivery-spec.js';
+
+// Webhook Event Types (B2B2C support)
+export {
+  WebhookEventType,
+  WebhookDeliveryStatus,
+  type WebhookEventBase,
+  type RunStartedEventData,
+  type RunCompletedEventData,
+  type RunFailedEventData,
+  type RunCancelledEventData,
+  type WorkOrderStatusChangedEventData,
+  type CreditsDeductedEventData,
+  type WebhookEvent,
+  type WebhookDeliveryRecord,
+} from './webhook-events.js';

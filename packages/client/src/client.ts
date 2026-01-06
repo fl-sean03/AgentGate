@@ -17,6 +17,9 @@ import { WorkOrdersResource } from './resources/work-orders.js';
 import { RunsResource } from './resources/runs.js';
 import { ProfilesResource } from './resources/profiles.js';
 import { AuditResource } from './resources/audit.js';
+import { TemplatesResource } from './resources/templates.js';
+import { WebhooksResource } from './resources/webhooks.js';
+import { UsageResource } from './resources/usage.js';
 
 interface ApiErrorResponse {
   code: string;
@@ -66,11 +69,29 @@ export class AgentGateClient {
   /** Audit resource */
   public readonly audit: AuditResource;
 
+  /** Templates resource (B2B) */
+  public readonly templates: TemplatesResource;
+
+  /** Webhooks resource (B2B) */
+  public readonly webhooks: WebhooksResource;
+
+  /** Usage resource (B2B) */
+  public readonly usage: UsageResource;
+
+  /** Organization ID (for B2B API keys) */
+  private organizationId?: string;
+
   constructor(config: AgentGateClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.apiKey = config.apiKey;
     this.timeout = config.timeout ?? 30000;
     this.fetchFn = config.fetch ?? fetch;
+    this.organizationId = config.organizationId;
+
+    // Detect organization API key (prefix: org_live_)
+    if (this.apiKey?.startsWith('org_live_') && !this.organizationId) {
+      // Organization ID will be extracted from API key on server
+    }
 
     // Initialize resources
     const requestFn = this.request.bind(this);
@@ -80,6 +101,23 @@ export class AgentGateClient {
     this.runs = new RunsResource(requestFn, this.baseUrl, getHeaders);
     this.profiles = new ProfilesResource(requestFn);
     this.audit = new AuditResource(requestFn);
+    this.templates = new TemplatesResource(requestFn);
+    this.webhooks = new WebhooksResource(requestFn);
+    this.usage = new UsageResource(requestFn);
+  }
+
+  /**
+   * Check if using organization API key
+   */
+  public isOrganizationKey(): boolean {
+    return !!this.apiKey?.startsWith('org_live_');
+  }
+
+  /**
+   * Get organization ID if set
+   */
+  public getOrganizationId(): string | undefined {
+    return this.organizationId;
   }
 
   /**

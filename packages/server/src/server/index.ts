@@ -39,7 +39,7 @@ export async function stopServer(server: FastifyInstance): Promise<void> {
 }
 
 // Re-export types and utilities
-export { createApp, type AppConfig } from './app.js';
+export { createApp, type AppConfig, type ExecutionHooks, type RateLimitConfig } from './app.js';
 export {
   serverConfigSchema,
   apiResponseSchema,

@@ -62,3 +62,40 @@ export type {
   ProfileValidationResult,
 } from './resources/profiles.js';
 export type { AuditSnapshotsResponse, AuditChangesResponse } from './resources/audit.js';
+
+// B2B resource types
+export type {
+  TemplateSummary,
+  TemplateDetail,
+  CreateTemplateOptions,
+  UpdateTemplateOptions,
+  TemplatesListOptions,
+  TemplateSource,
+  TemplateVariable,
+  GitTemplateSource,
+  UrlTemplateSource,
+  InlineTemplateSource,
+} from './resources/templates.js';
+export { TemplatesResource } from './resources/templates.js';
+
+export type {
+  WebhookSummary,
+  WebhookDetail,
+  WebhookDelivery,
+  CreateWebhookOptions,
+  UpdateWebhookOptions,
+  WebhooksListOptions,
+  DeliveriesListOptions,
+  WebhookEventType,
+} from './resources/webhooks.js';
+export { WebhooksResource } from './resources/webhooks.js';
+
+export type {
+  UsageSummary,
+  TenantUsage,
+  DailyUsage,
+  CreditBalance,
+  UsageQueryOptions,
+  TenantUsageQueryOptions,
+} from './resources/usage.js';
+export { UsageResource } from './resources/usage.js';
