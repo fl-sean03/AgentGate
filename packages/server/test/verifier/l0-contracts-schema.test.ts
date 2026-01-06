@@ -716,7 +716,7 @@ describe('L0 Contracts - JSON Schema Validation', () => {
       expect(result.passed).toBe(false);
       const schemaCheck = result.checks.find((c) => c.name === 'schema:data.json');
       expect(schemaCheck?.passed).toBe(false);
-      expect(schemaCheck?.details).toContain('additionalProperties');
+      expect(schemaCheck?.details?.toLowerCase()).toContain('additional properties');
     });
 
     it('should validate enum constraints', async () => {
