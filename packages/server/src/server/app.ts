@@ -21,7 +21,7 @@ import { registerUsageRoutes } from './routes/usage.js';
 import { registerPluginRoutes } from './routes/plugins.js';
 import { registerTemplateRoutes } from './routes/templates.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
-import { registerAuthPlugin } from './middleware/auth.js';
+import { registerAuthPlugin, type ExternalKeyValidator } from './middleware/auth.js';
 import { registerWebSocketRoutes } from './websocket/handler.js';
 import { EventBroadcaster } from './websocket/broadcaster.js';
 import { createLogger } from '../utils/logger.js';
@@ -194,6 +194,13 @@ export interface AppConfig extends Partial<ServerConfig> {
    */
   executionHooks?: ExecutionHooks;
   /**
+   * External API key validator for organization/user keys.
+   * Allows multi-tenant authentication via external systems (e.g., SaaS billing).
+   * When provided, org_live_*, org_test_*, user_*, and sk_* keys will be validated
+   * through this callback instead of simple string comparison.
+   */
+  keyValidator?: ExternalKeyValidator;
+  /**
    * Whether to validate storage on startup (v0.2.23 Wave 1.5).
    * When enabled, validates all work order files and logs warnings for corrupted files.
    * @default false
@@ -219,9 +226,10 @@ export { StorageValidationResult };
 export async function createApp(
   config: AppConfig = {}
 ): Promise<FastifyInstance> {
-  // Extract apiKey, broadcaster, rate limit, execution hooks, and storage validation options before validation (not part of ServerConfig schema)
+  // Extract apiKey, keyValidator, broadcaster, rate limit, execution hooks, and storage validation options before validation (not part of ServerConfig schema)
   const {
     apiKey,
+    keyValidator,
     broadcaster: providedBroadcaster,
     rateLimit: rateLimitConfig,
     executionHooks,
@@ -412,8 +420,8 @@ export async function createApp(
     );
   });
 
-  // Register auth plugin with API key
-  registerAuthPlugin(app, apiKey);
+  // Register auth plugin with API key and optional external key validator
+  registerAuthPlugin(app, apiKey, keyValidator);
 
   // Register OpenAPI/Swagger documentation (v0.2.17 - Thrust 5)
   // Must be registered before routes to capture all route schemas

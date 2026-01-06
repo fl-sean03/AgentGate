@@ -61,6 +61,12 @@ export {
 } from './types.js';
 export { registerHealthRoutes } from './routes/health.js';
 export {
+  type ExternalKeyValidator,
+  type ValidatedKeyInfo,
+  isOrganizationKey,
+  isUserKey,
+} from './middleware/auth.js';
+export {
   EventBroadcaster,
   registerWebSocketRoutes,
   WebSocketErrorCode,
