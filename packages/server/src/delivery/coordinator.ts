@@ -175,6 +175,7 @@ export class DeliveryCoordinator {
           branchName,
           taskName,
           workOrderId,
+          branding,
         });
 
         result.pr = prResult;

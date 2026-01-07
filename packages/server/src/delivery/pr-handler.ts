@@ -11,6 +11,7 @@
 
 import type { PRSpec, PRResult, AutoMergeSpec } from '../types/delivery-spec.js';
 import type { WorkspaceSpec, GitHubWorkspace, GitHubNewWorkspace } from '../types/execution-spec.js';
+import type { BrandingOptions } from './coordinator.js';
 import {
   createGitHubClient,
   getGitHubConfigFromEnv,
@@ -35,6 +36,8 @@ export interface PRContext {
   branchName: string;
   taskName: string;
   workOrderId: string;
+  /** Optional branding overrides from work order */
+  branding?: BrandingOptions;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -62,7 +65,7 @@ export class PRHandler {
    * Create a pull request based on the spec
    */
   async createPR(context: PRContext): Promise<PRResult> {
-    const { prSpec, workspaceSpec, branchName, taskName, workOrderId } = context;
+    const { prSpec, workspaceSpec, branchName, taskName, workOrderId, branding } = context;
 
     log.info({ workOrderId, branchName }, 'Creating pull request');
 
@@ -87,9 +90,9 @@ export class PRHandler {
         base = repoData.defaultBranch;
       }
 
-      // Generate title and body
-      const title = this.generateTitle(prSpec, taskName);
-      const body = this.generateBody(prSpec, taskName, workOrderId);
+      // Generate title and body (with optional branding overrides)
+      const title = this.generateTitle(prSpec, taskName, branding);
+      const body = this.generateBody(prSpec, taskName, workOrderId, branding);
 
       // Create the PR
       const pr = await createPullRequest(client, {
@@ -159,25 +162,30 @@ export class PRHandler {
   /**
    * Generate PR title
    */
-  private generateTitle(prSpec: PRSpec, taskName: string): string {
+  private generateTitle(prSpec: PRSpec, taskName: string, branding?: BrandingOptions): string {
     if (prSpec.title) {
       return prSpec.title
         .replace('{task}', taskName)
         .replace('{date}', new Date().toISOString().split('T')[0] || '');
     }
 
-    return `[AgentGate] ${taskName}`;
+    // Use branding prefix if provided, otherwise default to '[AgentGate]'
+    const prefix = branding?.prTitlePrefix || '[AgentGate]';
+    return `${prefix} ${taskName}`;
   }
 
   /**
    * Generate PR body
    */
-  private generateBody(prSpec: PRSpec, taskName: string, workOrderId: string): string {
+  private generateBody(prSpec: PRSpec, taskName: string, workOrderId: string, branding?: BrandingOptions): string {
+    // Use branding footer if provided, otherwise default
+    const footer = branding?.prBodyFooter ?? '\n---\n*This PR was created automatically by AgentGate.*';
+
     if (prSpec.body) {
       return prSpec.body
         .replace('{task}', taskName)
         .replace('{workOrderId}', workOrderId)
-        .replace('{date}', new Date().toISOString().split('T')[0] || '');
+        .replace('{date}', new Date().toISOString().split('T')[0] || '') + footer;
     }
 
     return [
@@ -185,9 +193,7 @@ export class PRHandler {
       '',
       `Task: ${taskName}`,
       `Work Order: ${workOrderId}`,
-      '',
-      '---',
-      '*This PR was created automatically by AgentGate.*',
+      footer,
     ].join('\n');
   }
 
