@@ -117,6 +117,23 @@ export const apiLimitsOptionsSchema = z.object({
 export type ApiLimitsOptions = z.infer<typeof apiLimitsOptionsSchema>;
 
 /**
+ * API Branding Options - white-label branding for commits, branches, and PRs
+ * Allows B2B partners to customize AgentGate output to appear as their own product.
+ */
+export const apiBrandingOptionsSchema = z.object({
+  /** Branch name prefix (default: 'agentgate/') */
+  branchPrefix: z.string().optional(),
+  /** Commit message prefix (default: '[AgentGate]') */
+  commitPrefix: z.string().optional(),
+  /** PR title prefix (default: '[AgentGate]') */
+  prTitlePrefix: z.string().optional(),
+  /** Footer text appended to PR body (default: '*This PR was created automatically by AgentGate.*') */
+  prBodyFooter: z.string().optional(),
+}).optional();
+
+export type ApiBrandingOptions = z.infer<typeof apiBrandingOptionsSchema>;
+
+/**
  * API Harness Options - all harness configuration options for API
  */
 export const apiHarnessOptionsSchema = z.object({
@@ -151,6 +168,11 @@ export const createWorkOrderBodySchema = z.object({
    * Common fields: tenant_user_id, tenant_metadata
    */
   metadata: z.record(z.unknown()).optional(),
+  /**
+   * Optional branding configuration for white-label deployments.
+   * Allows customizing branch prefixes, commit prefixes, and PR formatting.
+   */
+  branding: apiBrandingOptionsSchema,
 });
 
 export type CreateWorkOrderBody = z.infer<typeof createWorkOrderBodySchema>;
