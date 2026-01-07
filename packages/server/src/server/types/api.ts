@@ -129,6 +129,8 @@ export const apiBrandingOptionsSchema = z.object({
   prTitlePrefix: z.string().optional(),
   /** Footer text appended to PR body (default: '*This PR was created automatically by AgentGate.*') */
   prBodyFooter: z.string().optional(),
+  /** Agent directory name in workspace (default: '.agentgate', MatterStack uses '.matterstack') */
+  agentDirectory: z.string().regex(/^\.[a-z0-9_-]+$/i, 'Agent directory must start with a dot and contain only alphanumeric, dash, or underscore characters').optional(),
 }).optional();
 
 export type ApiBrandingOptions = z.infer<typeof apiBrandingOptionsSchema>;
