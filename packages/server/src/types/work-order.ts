@@ -156,6 +156,16 @@ export interface WorkOrder {
    * Common fields: tenant_user_id, tenant_metadata
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Optional branding configuration for white-label deployments.
+   * Allows customizing branch prefixes, commit prefixes, and PR formatting.
+   */
+  branding?: {
+    branchPrefix?: string;
+    commitPrefix?: string;
+    prTitlePrefix?: string;
+    prBodyFooter?: string;
+  };
 }
 
 // Submit Request Schema
@@ -186,6 +196,16 @@ export const submitRequestSchema = z.object({
    * Common fields: tenant_user_id, tenant_metadata
    */
   metadata: z.record(z.unknown()).optional(),
+  /**
+   * Optional branding configuration for white-label deployments.
+   * Allows customizing branch prefixes, commit prefixes, and PR formatting.
+   */
+  branding: z.object({
+    branchPrefix: z.string().optional(),
+    commitPrefix: z.string().optional(),
+    prTitlePrefix: z.string().optional(),
+    prBodyFooter: z.string().optional(),
+  }).optional(),
 });
 
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;

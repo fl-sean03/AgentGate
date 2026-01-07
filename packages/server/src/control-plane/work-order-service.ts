@@ -104,6 +104,8 @@ export class WorkOrderService {
       waitForCI: request.waitForCI ?? false,
       // B2B2C tenant context metadata
       ...(request.metadata && { metadata: request.metadata }),
+      // White-label branding (v0.2.24)
+      ...(request.branding && { branding: request.branding }),
       createdAt: now,
       status: WorkOrderStatus.QUEUED,
     };

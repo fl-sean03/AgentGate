@@ -30,6 +30,16 @@ const log = createLogger('delivery-coordinator');
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Branding options for white-label customization.
+ */
+export interface BrandingOptions {
+  branchPrefix?: string;
+  commitPrefix?: string;
+  prTitlePrefix?: string;
+  prBodyFooter?: string;
+}
+
+/**
  * Context for delivery operations
  */
 export interface DeliveryContext {
@@ -47,6 +57,8 @@ export interface DeliveryContext {
   executionSuccess: boolean;
   /** Error message if execution failed */
   executionError?: string;
+  /** Optional branding overrides from work order */
+  branding?: BrandingOptions;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,7 +83,7 @@ export class DeliveryCoordinator {
    * Execute delivery operations
    */
   async deliver(context: DeliveryContext): Promise<DeliveryResult> {
-    const { taskSpec, workOrderId, workspace, executionSuccess, executionError } = context;
+    const { taskSpec, workOrderId, workspace, executionSuccess, executionError, branding } = context;
     const deliverySpec = taskSpec.spec.delivery;
 
     log.info(
@@ -111,12 +123,13 @@ export class DeliveryCoordinator {
     let branchName = '';
 
     try {
-      // Execute git operations
+      // Execute git operations (with branding override if provided)
       const gitResult = await this.gitHandler.execute({
         workspace,
         gitSpec: deliverySpec.git,
         taskName,
         workOrderId,
+        branding,
       });
 
       branchName = gitResult.branchName;

@@ -382,6 +382,8 @@ export function registerWorkOrderRoutes(
           skipVerification,
           // B2B2C tenant context metadata
           metadata: body.metadata,
+          // White-label branding (v0.2.24)
+          branding: body.branding,
         };
         const order = await workOrderService.submit(submitRequest);
 
@@ -912,6 +914,7 @@ export function registerWorkOrderRoutes(
               branch,
               maxIterations: order.maxIterations,
               apiKey,
+              agentType: order.agentType,
               metadata: (order as { metadata?: Record<string, unknown> }).metadata,
             });
 

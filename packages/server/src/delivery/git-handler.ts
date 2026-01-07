@@ -101,6 +101,17 @@ function extractGitErrorType(error: Error): BuildErrorType {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Branding options for white-label customization of git operations.
+ * These override the defaults in gitSpec when provided.
+ */
+export interface BrandingOptions {
+  /** Branch name prefix (overrides gitSpec.branchPrefix) */
+  branchPrefix?: string;
+  /** Commit message prefix (overrides gitSpec.commitPrefix) */
+  commitPrefix?: string;
+}
+
+/**
  * Context for git operations
  */
 export interface GitContext {
@@ -108,6 +119,8 @@ export interface GitContext {
   gitSpec: GitSpec;
   taskName: string;
   workOrderId: string;
+  /** Optional branding overrides from work order */
+  branding?: BrandingOptions;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -126,13 +139,13 @@ export class GitHandler {
     push?: PushResultType;
     branchName: string;
   }> {
-    const { workspace, gitSpec, taskName, workOrderId } = context;
+    const { workspace, gitSpec, taskName, workOrderId, branding } = context;
     const repoPath = workspace.rootPath;
 
     log.info({ workOrderId, mode: gitSpec.mode }, 'Executing git operations');
 
-    // Generate branch name if needed
-    const branchName = this.generateBranchName(gitSpec, taskName);
+    // Generate branch name if needed (uses branding override if provided)
+    const branchName = this.generateBranchName(gitSpec, taskName, branding);
 
     // Check if we need to create a new branch
     const currentBranch = await getCurrentBranch(repoPath);
@@ -177,7 +190,7 @@ export class GitHandler {
    * Retries up to 3 times on transient errors (network timeout, ENOENT, temporary lock).
    */
   async commitChanges(context: GitContext, branchName: string): Promise<CommitResult> {
-    const { workspace, gitSpec, taskName, workOrderId } = context;
+    const { workspace, gitSpec, taskName, workOrderId, branding } = context;
     const repoPath = workspace.rootPath;
 
     log.debug({ workOrderId }, 'Checking for uncommitted changes');
@@ -199,8 +212,8 @@ export class GitHandler {
         // Stage all changes
         await stageAll(repoPath);
 
-        // Generate commit message
-        const message = this.generateCommitMessage(gitSpec, taskName);
+        // Generate commit message (uses branding override if provided)
+        const message = this.generateCommitMessage(gitSpec, taskName, branding);
 
         // Commit
         const sha = await commit(repoPath, message);
@@ -312,16 +325,18 @@ export class GitHandler {
   }
 
   /**
-   * Generate a branch name based on the spec
+   * Generate a branch name based on the spec and optional branding.
+   * Priority: gitSpec.branchName (explicit) > branding.branchPrefix > gitSpec.branchPrefix > default
    */
-  private generateBranchName(gitSpec: GitSpec, taskName: string): string {
+  private generateBranchName(gitSpec: GitSpec, taskName: string, branding?: BrandingOptions): string {
     // If explicit branch name provided, use it
     if (gitSpec.branchName) {
       return gitSpec.branchName;
     }
 
     // Generate from prefix and task name
-    const prefix = gitSpec.branchPrefix || 'agentgate/';
+    // Priority: branding.branchPrefix > gitSpec.branchPrefix > default
+    const prefix = branding?.branchPrefix || gitSpec.branchPrefix || 'agentgate/';
     const sanitizedName = taskName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -333,9 +348,10 @@ export class GitHandler {
   }
 
   /**
-   * Generate a commit message based on the spec
+   * Generate a commit message based on the spec and optional branding.
+   * Priority: gitSpec.commitTemplate > branding.commitPrefix > gitSpec.commitPrefix > default
    */
-  private generateCommitMessage(gitSpec: GitSpec, taskName: string): string {
+  private generateCommitMessage(gitSpec: GitSpec, taskName: string, branding?: BrandingOptions): string {
     // If template provided, use it
     if (gitSpec.commitTemplate) {
       return gitSpec.commitTemplate
@@ -344,7 +360,8 @@ export class GitHandler {
     }
 
     // Generate default message
-    const prefix = gitSpec.commitPrefix || '[AgentGate]';
+    // Priority: branding.commitPrefix > gitSpec.commitPrefix > default
+    const prefix = branding?.commitPrefix || gitSpec.commitPrefix || '[AgentGate]';
     return `${prefix} ${taskName}`;
   }
 
