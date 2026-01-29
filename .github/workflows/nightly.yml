@@ -1,8 +1,8 @@
 name: Nightly
 
 on:
-  schedule:
-    - cron: '0 4 * * *'  # 4 AM UTC daily
+  # schedule:
+  #   - cron: '0 4 * * *'  # 4 AM UTC daily - DISABLED
   workflow_dispatch:
     inputs:
       run_e2e:
