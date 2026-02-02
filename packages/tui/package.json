@@ -30,7 +30,7 @@
     "ky": "^1.7.2",
     "open": "^10.1.0",
     "react": "^18.3.1",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@types/eventsource": "^1.1.15",
